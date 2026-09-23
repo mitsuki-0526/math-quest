@@ -4,7 +4,7 @@
  * ゲーム本体とは無関係。結果は画面に出すだけで、どこにも送らない。
  */
 (function () {
-  var VERSION = 'probe v1';
+  var VERSION = 'probe v2';
   var started = Date.now();
   var BASE = document.currentScript.src.replace(/probe\.js.*$/, '');
   var out = document.getElementById('probe-out');
@@ -47,7 +47,14 @@
   }
 
   // 端末内の保存(オフライン時の控えに使う)
+  // 前回の時刻が出れば、ログアウトや再起動をはさんでも端末内のデータが残っている
   try {
+    var prev = localStorage.getItem('mathquest.probe');
+    line(
+      '前回開いたときの記録',
+      !!prev,
+      prev ? new Date(Number(prev)).toLocaleString('ja-JP') + '(残っている)' : 'なし(初めて開いた、または消えている)',
+    );
     localStorage.setItem('mathquest.probe', String(started));
     line('端末内に保存できる', localStorage.getItem('mathquest.probe') === String(started));
   } catch (e) {
