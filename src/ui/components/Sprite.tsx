@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { getAsset } from '@/assets/manifest';
+import { getAsset, assetUrl } from '@/assets/manifest';
 
 interface Props {
   id: string;
@@ -23,7 +23,7 @@ export function Sprite({ id, size, class: cls, alt }: Props) {
     return (
       <img
         class={`sprite ${cls ?? ''}`}
-        src={asset.path}
+        src={assetUrl(asset.path)}
         alt={alt ?? asset.label}
         style={style}
         onError={() => setFailed(true)}

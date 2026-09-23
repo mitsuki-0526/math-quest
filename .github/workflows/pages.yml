@@ -1,6 +1,7 @@
 # GitHub Pages への自動デプロイ(要件 §7.1 ホスティング)。
 # リポジトリの Settings → Pages → Source を "GitHub Actions" にする。
-# Settings → Secrets and variables → Actions → Variables に VITE_GAS_URL / VITE_API_TOKEN を登録する。
+# 生徒は GAS の入口ページ(学校ドメイン限定)から開き、ここで配信した本体を boot.js が読み込む。
+# サーバーの URL やトークンはビルドに埋め込まない(Pages を直接開くと「この端末だけ」の体験版になる)。
 name: Deploy to GitHub Pages
 on:
   push:
@@ -25,9 +26,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-        env:
-          VITE_GAS_URL: ${{ vars.VITE_GAS_URL }}
-          VITE_API_TOKEN: ${{ vars.VITE_API_TOKEN }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

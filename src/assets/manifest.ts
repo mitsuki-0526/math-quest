@@ -169,3 +169,16 @@ export const assetManifest: Record<string, AssetEntry> = {
 export function getAsset(id: string): AssetEntry {
   return assetManifest[id] ?? { emoji: '❔', label: id };
 }
+
+/**
+ * 素材の相対パスを URL にする。GAS の入口ページで動くときはページの URL が script.google.com 側なので、
+ * boot.js が教えてくれる配信元(GitHub Pages)を基準にする
+ */
+export function assetUrl(path: string): string {
+  const base = (typeof window !== 'undefined' && window.__MQ_BASE__) || (typeof document !== 'undefined' ? document.baseURI : '');
+  try {
+    return new URL(path, base).href;
+  } catch {
+    return path;
+  }
+}

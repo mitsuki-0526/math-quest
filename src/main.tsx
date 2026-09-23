@@ -8,4 +8,7 @@ import { installSyncHooks, loadCachedUnlock } from './engine/sync';
 loadCachedUnlock();
 installSyncHooks();
 
-render(<App />, document.getElementById('app')!);
+const root = document.getElementById('app')!;
+// GAS の入口ページは「読み込み中…」を入れて待っているので、描く前に空にする
+root.textContent = '';
+render(<App />, root);

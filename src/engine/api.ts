@@ -1,15 +1,39 @@
 import type { SaveData } from './save';
 
 /**
- * GAS Web アプリとの通信(要件 F2 F3)。
- * - POST は text/plain で送る(CORS のプリフライトを避ける。GAS は 302 → 本文 の順で返す)
- * - URL とトークンはビルド時の環境変数。未設定なら「ローカルのみ」モードで動く
+ * サーバーとの通信(要件 F2 F3)。経路は 2 つ:
+ * - 本番: GAS の入口ページの中で動いているとき、google.script.run で GAS の rpc() を呼ぶ。
+ *   学校ドメイン限定の同じ Web アプリの中の呼び出しなので、外部への通信やトークンは要らない
+ * - 開発: VITE_GAS_URL(scripts/mock-server.mjs)へ fetch。POST は text/plain で送る
+ * どちらもなければ「この端末だけ」モードで動く(GitHub Pages を直接開いたとき)
  */
 export const API_URL: string = import.meta.env.VITE_GAS_URL ?? '';
 const API_TOKEN: string = import.meta.env.VITE_API_TOKEN ?? '';
 const TIMEOUT_MS = 12000;
 
-export const hasServer = (): boolean => API_URL.length > 0;
+/** google.script.run のうち使う部分だけの型 */
+interface GasRunner {
+  withSuccessHandler(fn: (result: unknown) => void): GasRunner;
+  withFailureHandler(fn: (error: unknown) => void): GasRunner;
+  rpc(body: string): void;
+}
+
+declare global {
+  interface Window {
+    google?: { script?: { run?: GasRunner } };
+    /** boot.js が入れる、ゲーム本体の配信元(素材の相対パスの基準) */
+    __MQ_BASE__?: string;
+  }
+}
+
+function gasRunner(): GasRunner | null {
+  return (typeof window !== 'undefined' && window.google?.script?.run) || null;
+}
+
+/** GAS の入口ページの中で動いているか */
+export const inGas = (): boolean => gasRunner() !== null;
+
+export const hasServer = (): boolean => inGas() || API_URL.length > 0;
 
 export interface Identity {
   class: string;
@@ -72,12 +96,46 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
   }
 }
 
+/** GAS の rpc() を呼ぶ。引数・戻り値は JSON 文字列(google.script.run の変換の癖を避ける) */
+function gasCall<T>(runner: GasRunner, body: Record<string, unknown>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let done = false;
+    const t = setTimeout(() => {
+      done = true;
+      reject(new ApiFailure('timeout'));
+    }, TIMEOUT_MS);
+    runner
+      .withSuccessHandler((text) => {
+        if (done) return;
+        done = true;
+        clearTimeout(t);
+        try {
+          resolve(checkResult<T>(JSON.parse(String(text))));
+        } catch (e) {
+          reject(e instanceof ApiFailure ? e : new ApiFailure('bad_response'));
+        }
+      })
+      .withFailureHandler((e) => {
+        if (done) return;
+        done = true;
+        clearTimeout(t);
+        // サーバー側の例外は rpc() が JSON で返すので、ここに来るのはほぼ回線の問題
+        reject(new ApiFailure('network', e instanceof Error ? e.message : String(e)));
+      })
+      .rpc(JSON.stringify(body));
+  });
+}
+
 function get<T>(params: Record<string, string>): Promise<T> {
+  const runner = gasRunner();
+  if (runner) return gasCall<T>(runner, params);
   const q = new URLSearchParams({ ...params, token: API_TOKEN });
   return request<T>(`${API_URL}?${q}`, { method: 'GET' });
 }
 
 function post<T>(body: Record<string, unknown>): Promise<T> {
+  const runner = gasRunner();
+  if (runner) return gasCall<T>(runner, body);
   return request<T>(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -99,14 +157,23 @@ async function parse<T>(res: Response): Promise<T> {
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
     throw new ApiFailure('bad_response');
   }
+  return checkResult<T>(data);
+}
+
+function checkResult<T>(data: unknown): T {
   if (!data || typeof data !== 'object') throw new ApiFailure('bad_response');
   if ((data as ApiError).ok === false) throw new ApiFailure((data as ApiError).error, (data as ApiError).detail);
   return data as T;
 }
 
-/** ページを閉じる直前など、応答を待てないときの送信(結果は見ない) */
+/** ページを閉じる直前など、応答を待てないときの送信(結果は見ない。届かなくても端末内に残っている) */
 export function saveBeacon(id: Identity, save: SaveData): boolean {
-  if (!hasServer() || typeof navigator === 'undefined' || !navigator.sendBeacon) return false;
+  const runner = gasRunner();
+  if (runner) {
+    gasCall(runner, { action: 'save', class: id.class, number: id.number, pass: id.pass, save }).catch(() => {});
+    return true;
+  }
+  if (!API_URL || typeof navigator === 'undefined' || !navigator.sendBeacon) return false;
   const body = JSON.stringify({ action: 'save', class: id.class, number: id.number, pass: id.pass, save, token: API_TOKEN });
   return navigator.sendBeacon(API_URL, new Blob([body], { type: 'text/plain;charset=utf-8' }));
 }

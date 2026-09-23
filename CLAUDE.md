@@ -25,6 +25,8 @@ npm run build      # 型チェック + 本番ビルド(dist/)
 
 TypeScript + Vite + Preact。状態管理は `src/engine/store.ts` の最小ストア(依存なし)。画面遷移はシーンスタック(`src/engine/scenes.ts`)。数式表示は KaTeX(M1 で導入)。バックエンドは GAS + スプレッドシート(M3)。
 
+本番の構成: 生徒は **GAS の Web アプリ(学校ドメイン限定)** を開く。GAS は入口ページだけを返し、ゲーム本体は GitHub Pages の `public/boot.js` が最新の `index.html` を読んで読み込む。通信は `google.script.run` → `rpc()`(`src/engine/api.ts` が自動で切り替え。開発時は fetch でモックサーバー)。生徒のデータは GitHub に送らない。素材の URL は `assetUrl()` で配信元基準に解決する
+
 ## ディレクトリ
 
 ```

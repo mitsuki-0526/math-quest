@@ -1,11 +1,17 @@
 /**
  * MathQuest サーバー(Google Apps Script Web アプリ)。要件 F1 F2 F4 F6 F70。
  *
+ * 構成: 生徒が開くのはこの Web アプリの URL。doGet は小さな入口ページだけを返し、
+ * ゲーム本体(プログラム・画像)はブラウザが GitHub Pages から読み込む(boot.js)。
+ * セーブ・ログインは入口ページの中から google.script.run で rpc() を呼ぶ。
+ * 生徒のデータは Google の中(この GAS とスプレッドシート)だけを通り、GitHub には送らない。
+ *
  * セットアップは docs/ops.md を参照。概要:
  *   1. 新しいスプレッドシートを作り、拡張機能 → Apps Script でこのファイルを貼る
  *   2. 一度 setup() を実行(シートとヘッダー、初期設定を作る)
- *   3. デプロイ → 新しいデプロイ → 種類「ウェブアプリ」、実行ユーザー「自分」、アクセス「全員」
- *   4. 発行された URL と config シートの api_token をゲーム側(.env の VITE_GAS_URL / VITE_API_TOKEN)に設定
+ *   3. デプロイ → 新しいデプロイ → 種類「ウェブアプリ」
+ *      次のユーザーとして実行「自分」、アクセスできるユーザー「(学校名)内の全員」
+ *   4. 発行された URL を生徒に配る
  *
  * シート:
  *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at
@@ -13,12 +19,11 @@
  *   config   : key | value
  *   log      : time | action | class | number | note (エラーと主要イベントだけ)
  *
- * API(すべて JSON を返す):
- *   GET  ?action=bootstrap&class=1-1&token=...   → { ok, unlock: string[], classes: string[], config: {}, serverTime }
- *   POST { action:'login', token, class, number, pass }          → { ok, isNew, save, unlock, teacher }
- *   POST { action:'save',  token, class, number, pass, save }    → { ok, stored:boolean, save }  (サーバーの方が新しければ stored=false で返す)
- *   POST { action:'load',  token, class, number, pass }          → { ok, save }
- * POST は Content-Type: text/plain で送る(CORS のプリフライトを避ける)。
+ * rpc(JSON 文字列) → JSON 文字列:
+ *   { action:'bootstrap', class }                  → { ok, unlock: string[], classes: string[], config: {}, serverTime }
+ *   { action:'login', class, number, pass }        → { ok, isNew, save, unlock, teacher }
+ *   { action:'save',  class, number, pass, save }  → { ok, stored:boolean, save }  (サーバーの方が新しければ stored=false で返す)
+ *   { action:'load',  class, number, pass }        → { ok, save }
  */
 
 var SHEETS = {
@@ -29,6 +34,7 @@ var SHEETS = {
 };
 
 var TEACHER_CLASS = 'teacher';
+var DEFAULT_APP_BASE = 'https://mitsuki-0526.github.io/math-quest/';
 
 /** 初回セットアップ。エディタから手で実行する。 */
 function setup() {
@@ -42,7 +48,7 @@ function setup() {
   });
   var cfg = ss.getSheetByName('config');
   if (cfg.getLastRow() === 1) {
-    cfg.appendRow(['api_token', Utilities.getUuid().replace(/-/g, '')]);
+    cfg.appendRow(['app_base_url', DEFAULT_APP_BASE]); // ゲーム本体の配信元(GitHub Pages)。末尾は /
     // 先生用テストアカウントの合言葉。コードは公開されるので既定値は置かず、ランダムに作る
     cfg.appendRow(['teacher_pass', Utilities.getUuid().replace(/-/g, '').slice(0, 12)]);
     cfg.appendRow(['classes', '1-1,1-2,1-3,1-4']); // ログイン画面のクラス一覧
@@ -53,59 +59,77 @@ function setup() {
     un.appendRow(['*', true, false, false, false, false, false, false]);
     un.getRange(2, 2, 1, 7).insertCheckboxes();
   }
-  Logger.log('セットアップ完了。config シートの api_token をゲーム側に設定してください。teacher_pass は先生用の合言葉です(好きな値に変えてよい)。');
+  Logger.log('セットアップ完了。デプロイして URL を生徒に配ってください。teacher_pass は先生用の合言葉です(好きな値に変えてよい)。');
 }
 
 // ------------------------------------------------------------------ 入口
 
-function doGet(e) {
+/** 入口ページ。ゲーム本体は GitHub Pages の boot.js が読み込む */
+function doGet() {
+  var base = appBase();
+  var html =
+    '<!doctype html><html lang="ja"><head><meta charset="utf-8"></head><body>' +
+    '<div id="app"><p style="font-family:sans-serif;padding:24px">読み込み中…</p></div>' +
+    '<script src="' + base + 'boot.js"></script>' +
+    '</body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('MathQuest')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** 本体の配信元。config で変えられるが、https の URL 以外は受け付けない(任意のスクリプトを読ませないため) */
+function appBase() {
+  var v = String(readConfig().app_base_url || '').trim();
+  if (!/^https:\/\/[^\s"'<>]+\/$/.test(v)) v = DEFAULT_APP_BASE;
+  return v;
+}
+
+/**
+ * 入口ページから google.script.run で呼ばれる唯一の窓口。
+ * 引数・戻り値は JSON 文字列(google.script.run の変換の癖を避けるため)。
+ * 学校ドメイン限定で公開するので、外部から直接は呼べない。
+ */
+function rpc(text) {
+  var body = {};
   try {
-    var p = (e && e.parameter) || {};
-    if (!checkToken(p.token)) return json({ ok: false, error: 'bad_token' });
-    if (p.action === 'bootstrap') return json(bootstrap(p['class']));
-    if (p.action === 'ping') return json({ ok: true, serverTime: new Date().toISOString() });
-    return json({ ok: false, error: 'unknown_action' });
+    body = JSON.parse(String(text || '{}'));
   } catch (err) {
-    logRow('error', '', '', String(err));
-    return json({ ok: false, error: 'server_error' });
+    return JSON.stringify({ ok: false, error: 'bad_json' });
+  }
+  try {
+    return JSON.stringify(handle(body));
+  } catch (err) {
+    logRow('error', body['class'], body.number, String(err));
+    return JSON.stringify({ ok: false, error: 'server_error' });
   }
 }
 
-function doPost(e) {
-  var body = {};
-  try {
-    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-  } catch (err) {
-    return json({ ok: false, error: 'bad_json' });
-  }
-  try {
-    if (!checkToken(body.token)) return json({ ok: false, error: 'bad_token' });
-    var cls = String(body['class'] || '').trim();
-    var num = String(body.number || '').trim();
-    var pass = String(body.pass || '');
-    if (!cls || !num) return json({ ok: false, error: 'missing_identity' });
-    // クラス・番号は短い文字列だけを受け付ける(シートに書くので、長文や数式を持ち込ませない)
-    if (cls.length > 20 || num.length > 10 || pass.length > 64) return json({ ok: false, error: 'bad_identity' });
+function handle(body) {
+  if (body.action === 'bootstrap') return bootstrap(String(body['class'] || ''));
+  if (body.action === 'ping') return { ok: true, serverTime: new Date().toISOString() };
 
-    var lock = LockService.getScriptLock();
-    lock.waitLock(10000);
-    try {
-      // 合言葉の総当たり対策: 同じアカウントで続けて失敗したら、しばらく受け付けない
-      if (isLocked(cls, num)) return json({ ok: false, error: 'locked' });
-      var res;
-      if (body.action === 'login') res = login(cls, num, pass);
-      else if (body.action === 'save') res = saveGame(cls, num, pass, body.save);
-      else if (body.action === 'load') res = loadGame(cls, num, pass);
-      else return json({ ok: false, error: 'unknown_action' });
-      if (res.error === 'bad_pass') recordFailure(cls, num);
-      else if (res.ok) clearFailures(cls, num);
-      return json(res);
-    } finally {
-      lock.releaseLock();
-    }
-  } catch (err) {
-    logRow('error', body['class'], body.number, String(err));
-    return json({ ok: false, error: 'server_error' });
+  var cls = String(body['class'] || '').trim();
+  var num = String(body.number || '').trim();
+  var pass = String(body.pass || '');
+  if (!cls || !num) return { ok: false, error: 'missing_identity' };
+  // クラス・番号は短い文字列だけを受け付ける(シートに書くので、長文や数式を持ち込ませない)
+  if (cls.length > 20 || num.length > 10 || pass.length > 64) return { ok: false, error: 'bad_identity' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    // 合言葉の総当たり対策: 同じアカウントで続けて失敗したら、しばらく受け付けない
+    if (isLocked(cls, num)) return { ok: false, error: 'locked' };
+    var res;
+    if (body.action === 'login') res = login(cls, num, pass);
+    else if (body.action === 'save') res = saveGame(cls, num, pass, body.save);
+    else if (body.action === 'load') res = loadGame(cls, num, pass);
+    else return { ok: false, error: 'unknown_action' };
+    if (res.error === 'bad_pass') recordFailure(cls, num);
+    else if (res.ok) clearFailures(cls, num);
+    return res;
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -317,11 +341,6 @@ function hashPass(pass, salt) {
     .join('');
 }
 
-function checkToken(token) {
-  var expected = String(readConfig().api_token || '');
-  return !!expected && String(token || '') === expected;
-}
-
 function logRow(action, cls, num, note) {
   try {
     sheet('log').appendRow([new Date().toISOString(), action, asText(cls || ''), asText(num || ''), asText(note || '')]);
@@ -330,6 +349,3 @@ function logRow(action, cls, num, note) {
   }
 }
 
-function json(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}

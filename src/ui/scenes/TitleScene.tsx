@@ -145,6 +145,8 @@ export function TitleScene() {
         {mode === 'local' && (
           <div class="stack">
             <p class="muted">サーバー未設定: この端末だけに 保存します</p>
+            {/* GitHub Pages を直接開いたとき(本番は GAS の入口から開く) */}
+            {import.meta.env.PROD && <p class="note">これは 体験版です。授業では 先生から 配られた URL で 開いてください</p>}
             {localSave && (
               <Button primary onClick={() => continueGame() && resetScenes({ kind: 'map' })}>
                 つづきから({localSave.player.name} Lv{localSave.player.level})
