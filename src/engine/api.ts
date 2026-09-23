@@ -1,0 +1,145 @@
+import type { SaveData } from './save';
+
+/**
+ * GAS Web アプリとの通信(要件 F2 F3)。
+ * - POST は text/plain で送る(CORS のプリフライトを避ける。GAS は 302 → 本文 の順で返す)
+ * - URL とトークンはビルド時の環境変数。未設定なら「ローカルのみ」モードで動く
+ */
+export const API_URL: string = import.meta.env.VITE_GAS_URL ?? '';
+const API_TOKEN: string = import.meta.env.VITE_API_TOKEN ?? '';
+const TIMEOUT_MS = 12000;
+
+export const hasServer = (): boolean => API_URL.length > 0;
+
+export interface Identity {
+  class: string;
+  number: string;
+  pass: string;
+}
+
+export interface BootstrapResult {
+  ok: true;
+  unlock: string[];
+  classes: string[];
+  config: Record<string, unknown>;
+  serverTime: string;
+}
+export interface LoginResult {
+  ok: true;
+  isNew: boolean;
+  save: SaveData | null;
+  unlock: string[];
+  teacher: boolean;
+}
+export interface SaveResult {
+  ok: true;
+  stored: boolean;
+  save: SaveData | null;
+}
+export interface LoadResult {
+  ok: true;
+  save: SaveData | null;
+}
+export type ApiError = { ok: false; error: string; detail?: string };
+
+export class ApiFailure extends Error {
+  constructor(
+    readonly code: string,
+    readonly detail?: string,
+  ) {
+    super(code);
+  }
+}
+
+/**
+ * 通信 1 回分。タイムアウトは本文の受信まで含める(ヘッダーだけ届いて本文が止まることがあるため)。
+ * 時間切れは fetch ごと中断し、回線の問題は 'timeout' / 'network' にそろえる。
+ */
+async function request<T>(url: string, init: RequestInit): Promise<T> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...init, redirect: 'follow', signal: ctrl.signal });
+    return await parse<T>(res);
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new ApiFailure('timeout');
+    if (e instanceof ApiFailure) throw e;
+    // fetch の失敗(オフライン・DNS など)は TypeError になる。ブラウザごとに文言が違うのでまとめる
+    if (e instanceof TypeError) throw new ApiFailure('network', e.message);
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function get<T>(params: Record<string, string>): Promise<T> {
+  const q = new URLSearchParams({ ...params, token: API_TOKEN });
+  return request<T>(`${API_URL}?${q}`, { method: 'GET' });
+}
+
+function post<T>(body: Record<string, unknown>): Promise<T> {
+  return request<T>(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ ...body, token: API_TOKEN }),
+  });
+}
+
+/** 回線の問題(=サーバーに届かなかった)か。合言葉ちがいなどサーバーが答えた失敗とは区別する */
+export function isNetworkError(e: unknown): boolean {
+  return e instanceof ApiFailure && (e.code === 'timeout' || e.code === 'network' || e.code.startsWith('http_5'));
+}
+
+async function parse<T>(res: Response): Promise<T> {
+  if (!res.ok) throw new ApiFailure(`http_${res.status}`);
+  let data: T | ApiError;
+  try {
+    data = (await res.json()) as T | ApiError;
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    throw new ApiFailure('bad_response');
+  }
+  if (!data || typeof data !== 'object') throw new ApiFailure('bad_response');
+  if ((data as ApiError).ok === false) throw new ApiFailure((data as ApiError).error, (data as ApiError).detail);
+  return data as T;
+}
+
+/** ページを閉じる直前など、応答を待てないときの送信(結果は見ない) */
+export function saveBeacon(id: Identity, save: SaveData): boolean {
+  if (!hasServer() || typeof navigator === 'undefined' || !navigator.sendBeacon) return false;
+  const body = JSON.stringify({ action: 'save', class: id.class, number: id.number, pass: id.pass, save, token: API_TOKEN });
+  return navigator.sendBeacon(API_URL, new Blob([body], { type: 'text/plain;charset=utf-8' }));
+}
+
+export const api = {
+  bootstrap: (cls: string) => get<BootstrapResult>({ action: 'bootstrap', class: cls }),
+  login: (id: Identity) => post<LoginResult>({ action: 'login', class: id.class, number: id.number, pass: id.pass }),
+  save: (id: Identity, save: SaveData) => post<SaveResult>({ action: 'save', class: id.class, number: id.number, pass: id.pass, save }),
+  load: (id: Identity) => post<LoadResult>({ action: 'load', class: id.class, number: id.number, pass: id.pass }),
+};
+
+/** ユーザー向けの短い説明 */
+export function describeError(e: unknown): string {
+  const code = e instanceof ApiFailure ? e.code : e instanceof Error ? e.message : String(e);
+  switch (code) {
+    case 'bad_pass':
+      return '合言葉が ちがいます。忘れたときは 先生に 聞いてください';
+    case 'missing_pass':
+      return '合言葉を 決めて 入れてください';
+    case 'bad_token':
+      return 'サーバーの設定が 合っていません(先生に 連絡)';
+    case 'locked':
+      return '合言葉の まちがいが 続いたので、10分ほど 待ってから もう一度 入ってください';
+    case 'bad_identity':
+      return 'クラス・出席番号・合言葉が 長すぎます';
+    case 'server_error':
+      return 'サーバーで エラーが 起きました。少し 待って もう一度(続くときは 先生に 連絡)';
+    case 'timeout':
+    case 'network':
+      return 'サーバーに つながりません。通信を 確認してください';
+    case 'save_too_large':
+      return 'セーブデータが 大きすぎます(先生に 連絡)';
+    default:
+      return `エラー: ${code}`;
+  }
+}

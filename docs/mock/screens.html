@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MathQuest 画面モック</title>
+<style>
+  :root{--bg:#1b1f2a;--panel:#2a3040;--line:#4a5570;--txt:#eef1f8;--sub:#a8b2cc;--acc:#f5c542;--ok:#5fd68a;--ng:#f26d6d;--lock:#666e80;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;font-size:15px}
+  header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  header h1{font-size:16px;margin:0 12px 0 0;color:var(--acc)}
+  .tab{padding:6px 12px;border:1px solid var(--line);border-radius:6px;cursor:pointer;background:var(--panel)}
+  .tab.on{background:var(--acc);color:#222;font-weight:bold}
+  .screen{display:none;padding:16px;max-width:1100px;margin:0 auto}
+  .screen.on{display:block}
+  .note{background:#3a3320;border-left:4px solid var(--acc);padding:8px 12px;margin:0 0 12px;color:#ffe9a8;font-size:13px}
+  .frame{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .col{flex:1;min-width:260px}
+  .ph{border:2px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--sub);text-align:center;padding:8px}
+  .bar{height:10px;background:#111;border-radius:5px;overflow:hidden}
+  .bar>i{display:block;height:100%}
+  button{font:inherit;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:#3a4258;color:var(--txt);cursor:pointer}
+  button.pri{background:var(--acc);color:#222;font-weight:bold}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  td,th{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+  small{color:var(--sub)}
+  .node{cursor:pointer}
+  .node text{fill:#fff;font-size:11px;text-anchor:middle}
+  .keypad{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+  .keypad button{padding:12px 0;font-size:16px}
+  .cmd{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .log{background:#111;border-radius:6px;padding:8px;font-size:13px;height:90px;overflow:auto;color:#cfd6e8}
+  .stage{position:relative;height:300px;border-radius:8px;background:linear-gradient(#3b5a8a,#2b3a55);overflow:hidden}
+  .actor{position:absolute;bottom:0;width:180px;height:240px;background:rgba(0,0,0,.25);border:2px dashed #fff5;border-bottom:none;border-radius:90px 90px 0 0;display:flex;align-items:center;justify-content:center;font-size:64px}
+  .msg{background:#0b0e16ee;border:2px solid var(--acc);border-radius:8px;padding:12px;margin-top:-40px;position:relative;min-height:90px}
+  .name{position:absolute;top:-14px;left:12px;background:var(--acc);color:#222;padding:2px 10px;border-radius:4px;font-weight:bold;font-size:13px}
+  .choices{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  input,select{font:inherit;padding:8px;border-radius:6px;border:1px solid var(--line);background:#111;color:var(--txt)}
+</style>
+</head>
+<body>
+<header>
+  <h1>MathQuest 画面モック</h1>
+  <span class="tab on" data-t="s0">0 ログイン</span>
+  <span class="tab" data-t="s1">1 ワールドマップ</span>
+  <span class="tab" data-t="s2">2 バトル</span>
+  <span class="tab" data-t="s3">3 会話・街</span>
+  <span class="tab" data-t="s4">4 ステータス・成績</span>
+  <span class="tab" data-t="s5">S シナリオ構成案</span>
+</header>
+
+<!-- ===== 0 ログイン ===== -->
+<section class="screen on" id="s0">
+  <p class="note">目的: ログイン不要・入力3つで開始できるか。合言葉は生徒が初回に自分で決める。同じ端末なら次回は自動入力。</p>
+  <div class="frame" style="max-width:420px;margin:auto;text-align:center">
+    <div class="ph" style="height:120px;font-size:22px">タイトルロゴ<br><small>(AI生成 / 1年版: 「はじまりの国 プリマ」)</small></div>
+    <div style="display:grid;gap:10px;margin-top:14px;text-align:left">
+      <label>クラス <select><option>1年1組</option><option>1年2組</option></select></label>
+      <label>出席番号 <input type="number" value="12" style="width:80px"></label>
+      <label>合言葉 <input type="text" value="りんご123"> <small>初回は自分で決める・忘れたら先生に聞く</small></label>
+      <button class="pri">ぼうけんをはじめる</button>
+      <small>※ 前回のデータがサーバーにあれば「つづきから」。通信できない時はこの端末の保存データで遊び、復帰時に同期。</small>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 1 ワールドマップ ===== -->
+<section class="screen" id="s1">
+  <p class="note">目的: ノード式マップの見え方。1章=1単元=1エリア。1ノード=1回のプレイ(約5分)。先生が解放していない章は鍵つき。</p>
+  <div class="row">
+    <div class="col frame" style="flex:2">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <b>第1章 符号の森 <small>(正負の数)</small></b>
+        <span><button>◀ 前の章</button> <button>次の章 ▶ 🔒</button></span>
+      </div>
+      <svg viewBox="0 0 640 300" style="width:100%;background:#243350;border-radius:8px">
+        <path d="M70 230 L170 200 L270 230 L370 160 L470 190 L560 90" stroke="#9ab" stroke-width="4" fill="none" stroke-dasharray="6 6"/>
+        <path d="M270 230 L300 110 L370 160" stroke="#9ab" stroke-width="4" fill="none" stroke-dasharray="6 6"/>
+        <g class="node"><circle cx="70" cy="230" r="22" fill="#5fd68a"/><text x="70" y="237" font-size="20">🏘️</text><text x="70" y="270">はじまりの村 ✔</text></g>
+        <g class="node"><circle cx="170" cy="200" r="20" fill="#5fd68a"/><text x="170" y="206" font-size="18">⚔️</text><text x="170" y="240">森の小道 ✔</text></g>
+        <g class="node"><circle cx="270" cy="230" r="22" fill="#f5c542" stroke="#fff" stroke-width="3"/><text x="270" y="237" font-size="20">⚔️</text><text x="270" y="270">符号の湿地 ◀いまここ</text></g>
+        <g class="node"><circle cx="300" cy="110" r="20" fill="#7d8bb0"/><text x="300" y="116" font-size="18">💎</text><text x="300" y="85">? 隠し洞窟(寄り道)</text></g>
+        <g class="node"><circle cx="370" cy="160" r="20" fill="#7d8bb0"/><text x="370" y="166" font-size="18">📖</text><text x="370" y="200">イベント: 絶対値の碑</text></g>
+        <g class="node"><circle cx="470" cy="190" r="20" fill="#7d8bb0"/><text x="470" y="196" font-size="18">⚔️</text><text x="470" y="230">乗除の谷</text></g>
+        <g class="node"><circle cx="560" cy="90" r="26" fill="#a04a4a"/><text x="560" y="98" font-size="24">👑</text><text x="560" y="135">BOSS: 符号王 ネガ</text></g>
+      </svg>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="pri">▶ 符号の湿地 に出発(戦闘3回・約5分)</button>
+        <button>🏘️ 村へもどる(店・宿・会話)</button>
+        <button>📚 復習の泉(苦手問題)</button>
+      </div>
+      <small>凡例: 緑=クリア済 / 黄=現在地 / 青灰=未到達 / 赤=ボス / 🔒=先生が未解放</small>
+    </div>
+    <div class="col frame">
+      <b>パーティ</b>
+      <table style="margin:6px 0 12px">
+        <tr><td>🧑 ユウ Lv7</td><td>HP <div class="bar"><i style="width:80%;background:var(--ok)"></i></div></td></tr>
+        <tr><td>🦉 ピタ Lv7</td><td>ヒント残 3</td></tr>
+      </table>
+      <b>章の進み</b>
+      <table style="margin:6px 0 12px">
+        <tr><th>章</th><th>単元</th><th>状態</th></tr>
+        <tr><td>1</td><td>正負の数</td><td>進行中 3/7</td></tr>
+        <tr><td>2</td><td>文字と式</td><td>解放済み</td></tr>
+        <tr><td>3</td><td>方程式</td><td>🔒</td></tr>
+        <tr><td>4</td><td>比例と反比例</td><td>🔒</td></tr>
+        <tr><td>5</td><td>平面図形</td><td>🔒</td></tr>
+        <tr><td>6</td><td>空間図形</td><td>🔒</td></tr>
+        <tr><td>7</td><td>データの活用</td><td>🔒</td></tr>
+      </table>
+      <b>今日のクエスト</b>
+      <div class="ph" style="height:60px">「正負の数」の問題を10問正解する<br><small>(毎日変わる小目標。報酬はゴールド)</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 2 バトル ===== -->
+<section class="screen" id="s2">
+  <p class="note">目的: バトル画面の要素配置。問題→入力→判定→演出、の1ターンが10〜20秒で回ること。キーボードでもマウスでも入力できること。</p>
+  <div class="row">
+    <div class="col frame" style="flex:2">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end">
+        <div>
+          <b>マイナススライム Lv3</b> <small>×2</small>
+          <div class="bar" style="width:220px"><i style="width:60%;background:var(--ng)"></i></div>
+        </div>
+        <small>ターン 4 &nbsp;|&nbsp; 連続正解 ×3 🔥</small>
+      </div>
+      <div class="ph" style="height:170px;margin:10px 0;font-size:56px;background:linear-gradient(#2b4a3a,#1c2e26)">👾 👾<br><small style="font-size:13px">敵の立ち絵(AI生成・静止画)。被弾時は揺れ/点滅をCSSで</small></div>
+
+      <div style="background:#0b0e16;border:2px solid var(--acc);border-radius:8px;padding:12px">
+        <div style="display:flex;justify-content:space-between"><small>問題 (正負の数・乗除 / 難易度 ★★☆)</small><small>⏱ 残り 18秒</small></div>
+        <div class="bar" style="margin:4px 0 10px"><i style="width:70%;background:var(--acc)"></i></div>
+        <div style="font-size:26px;text-align:center;margin:6px 0">(−3) × (−4) ÷ 2 = <span style="border-bottom:2px solid #fff;padding:0 24px">6</span></div>
+        <div class="keypad" style="margin-top:8px">
+          <button>7</button><button>8</button><button>9</button><button>−</button><button>/</button><button>⌫</button>
+          <button>4</button><button>5</button><button>6</button><button>x</button><button>²</button><button>√</button>
+          <button>1</button><button>2</button><button>3</button><button>y</button><button>(</button><button>)</button>
+          <button>0</button><button>.</button><button>,</button><button>+</button><button style="grid-column:span 2" class="pri">こうげき (Enter)</button>
+        </div>
+        <small>※ 問題タイプによって使えるキーだけ有効化。「,」は複数解 (x=2, y=−1)。選択式のときはここが4つのボタンになる。</small>
+      </div>
+
+      <div class="cmd" style="margin-top:10px">
+        <button class="pri">⚔️ たたかう</button>
+        <button>💡 ヒント (ピタ) 残3</button>
+        <button>🧪 アイテム</button>
+        <button>🏃 にげる</button>
+      </div>
+      <div class="log" style="margin-top:8px">
+        ▶ マイナススライムが あらわれた！<br>
+        ▶ ユウの こうげき！ 正解！ 24のダメージ (連続正解ボーナス ×1.5)<br>
+        ▶ 不正解… マイナススライムの こうげき！ ユウに 8のダメージ<br>
+        &nbsp;&nbsp;&nbsp;💬 ピタ「マイナス×マイナスは プラスだよ！」(解説を表示: 途中式つき)
+      </div>
+    </div>
+    <div class="col frame">
+      <b>パーティ</b>
+      <table style="margin:6px 0 12px">
+        <tr><td>🧑 ユウ</td><td>HP 64/80<div class="bar"><i style="width:80%;background:var(--ok)"></i></div></td></tr>
+        <tr><td></td><td>必殺ゲージ<div class="bar"><i style="width:45%;background:#7ab8ff"></i></div><small>連続正解でたまる→「必殺: 全体攻撃」</small></td></tr>
+        <tr><td>🦉 ピタ</td><td>サポート: ヒント/回復</td></tr>
+      </table>
+      <b>ボス戦のときだけ</b>
+      <div class="ph" style="height:140px;margin-top:6px;flex-direction:column">
+        <svg viewBox="0 0 160 100" width="150"><line x1="10" y1="90" x2="150" y2="90" stroke="#fff"/><line x1="20" y1="95" x2="20" y2="5" stroke="#fff"/><line x1="20" y1="90" x2="140" y2="20" stroke="#f5c542" stroke-width="2"/><text x="120" y="15" fill="#fff" font-size="10">y=ax</text></svg>
+        <small>図形・グラフ問題(SVGで描画)</small>
+      </div>
+      <small>間違えたときの解説は問題欄の上にオーバーレイ表示。「次へ」で戦闘再開。</small>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 3 会話・街 ===== -->
+<section class="screen" id="s3">
+  <p class="note">目的: ストーリー会話の見え方と街メニュー。会話はクリック/Enterで送り、選択肢で少し分岐。全部スキップ可(復習で遊ぶ生徒向け)。</p>
+  <div class="frame">
+    <div class="stage">
+      <div class="ph" style="position:absolute;inset:8px;border-color:#fff4;color:#fffa">背景: はじまりの村(AI生成・静止画)</div>
+      <div class="actor" style="left:40px">🧑</div>
+      <div class="actor" style="right:40px">🦉</div>
+      <div style="position:absolute;top:8px;right:8px"><button>⏩ スキップ</button> <button>📜 ログ</button></div>
+    </div>
+    <div class="msg">
+      <span class="name">ピタ</span>
+      ユウ、見て！ 橋の看板に「長さ −12m」って書いてある…。<br>
+      数が「歪み」に飲まれてるんだ。このままじゃ村の人たちは 橋を渡れない。
+      <div class="choices">
+        <button class="pri">「直しに行こう」</button>
+        <button>「−12mってどういうこと？」(解説ルート)</button>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <b>街メニュー(村ノードを選んだとき)</b>
+      <div class="row" style="margin-top:6px">
+        <div class="col ph" style="height:80px">🛒 道具屋<br><small>回復薬・ヒントの羽根</small></div>
+        <div class="col ph" style="height:80px">⚒️ 武具屋<br><small>剣=与ダメ↑ 盾=被ダメ↓</small></div>
+        <div class="col ph" style="height:80px">🛏️ 宿屋<br><small>HP全回復(無料)</small></div>
+        <div class="col ph" style="height:80px">💬 村人と話す<br><small>サブクエスト・小ネタ</small></div>
+        <div class="col ph" style="height:80px">📚 復習の泉<br><small>苦手問題に挑戦</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 4 ステータス・成績 ===== -->
+<section class="screen" id="s4">
+  <p class="note">目的: 生徒自身が見る成績画面。先生は同じ内容をスプレッドシートで全員分見る(集計はwant)。</p>
+  <div class="row">
+    <div class="col frame">
+      <b>🧑 ユウ Lv7</b> <small>1年1組 12番</small>
+      <table style="margin-top:6px">
+        <tr><td>HP</td><td>80</td><td>こうげき</td><td>12 (木の剣 +4)</td></tr>
+        <tr><td>ぼうぎょ</td><td>6 (布の服 +2)</td><td>ゴールド</td><td>340 G</td></tr>
+        <tr><td>次のLvまで</td><td colspan="3"><div class="bar"><i style="width:35%;background:#7ab8ff"></i></div> 正解1問 = 経験値 10〜30</td></tr>
+      </table>
+      <b style="display:block;margin-top:12px">スキル</b>
+      <small>Lv5 連続正解ボーナス / Lv10 必殺技「二刀流」(次の問題が2問連続→大ダメージ) / Lv15 …</small>
+      <b style="display:block;margin-top:12px">称号・図鑑</b>
+      <small>倒した敵の図鑑(単元ごとのモンスター)、称号「符号マスター」など</small>
+    </div>
+    <div class="col frame">
+      <b>📊 単元べつ 正答率</b>
+      <table style="margin-top:6px">
+        <tr><th>単元</th><th>問題数</th><th>正答率</th><th>苦手タイプ</th></tr>
+        <tr><td>正負の数 加減</td><td>42</td><td>88%</td><td>—</td></tr>
+        <tr><td>正負の数 乗除</td><td>20</td><td>65%</td><td>負×負の符号</td></tr>
+        <tr><td>絶対値</td><td>8</td><td>100%</td><td>—</td></tr>
+        <tr><td>文字と式</td><td>0</td><td>—</td><td></td></tr>
+      </table>
+      <div class="ph" style="height:60px;margin-top:10px">「苦手タイプ」は間違えた問題テンプレートを集計。復習の泉ではここから優先出題。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== S シナリオ構成案 ===== -->
+<section class="screen" id="s5">
+  <p class="note">お任せいただいた「3学年のつなぎ方」の提案です。詳細は docs/scenario.md に書きます。ここは骨格だけ。</p>
+  <div class="frame">
+    <h3 style="margin-top:0">提案: 同一主人公の三部作 + どの学年からでも始められる設計</h3>
+    <p>主人公(名前はプレイヤー入力)は3年かけて成長する一本の物語。ただし<b>各学年版は単体で開始でき</b>、前学年のセーブがあれば「レベル・仲間・称号」を引き継いでボーナスをもらえる(なければ「これまでのあらすじ」から標準ステータスで開始)。転入生や2年から使い始めるクラスでも困らない。</p>
+    <table>
+      <tr><th style="width:90px">学年</th><th>舞台</th><th>テーマ</th><th>あらすじ</th><th>単元との対応(例)</th></tr>
+      <tr><td>1年<br><small>「はじまりの国 プリマ」</small></td><td>東の辺境。村・森・湖・山</td><td><b>「数の秩序」</b>を取り戻す</td><td>世界に「歪み」が広がり、数が嘘をつき始める(橋の長さが −12m、商人の計算が合わない)。村の少年/少女ユウは、知恵フクロウのピタと出会い、各地の「理(ことわり)の碑」を修復する旅に出る。ラストで歪みは自然災害ではなく「誰か」が起こしていると知る。</td><td>正負の数=符号の森 / 文字と式=名もなき者の平原 / 方程式=未知の洞窟(敵「X」) / 比例反比例=天秤の湖 / 平面図形=円の遺跡 / 空間図形=立体の山 / データ=記録の塔</td></tr>
+      <tr><td>2年<br><small>「王国 セクンダ」</small></td><td>大陸中央。王都・城下・街道</td><td><b>「変化と関係」</b>を読み解く</td><td>王都に召喚されたユウは、騎士見習いのレナ(仲間2)と組む。歪みの黒幕は元・王国大賢者ゼノン。「争いは損得の計算から生まれる。ならば数を世界から消す」が動機。二人の力を合わせる(連立)、変化を予測する(一次関数)、偶然を読む(確率)ことで王都を守り、ゼノンの居城「北の塔」の存在を知る。</td><td>式の計算=錬金術師の工房 / 連立方程式=双子の門 / 一次関数=時計塔 / 平行と合同=鏡の回廊 / 三角形と四角形=城壁 / 確率=道化師のカジノ / 箱ひげ図=王立記録院</td></tr>
+      <tr><td>3年<br><small>「天空の塔 テルティア」</small></td><td>北の塔。塔は登るほど「根源」に近づく</td><td><b>「根源と形」</b>にたどり着く</td><td>塔を登る最終章。ピタの正体は古代の学者ピュタゴラスの使い魔で、三平方の定理の章で真の力を解放する。最上階でゼノンと対峙。倒すのではなく「理は人を縛るものではなく、分かり合うための言葉」だと証明して救う。エンディングで主人公は新しい「理の書」(=中学数学の全体像)を書き上げる。</td><td>展開因数分解=分解の間 / 平方根=根の泉 / 二次方程式=二つの答えの扉 / y=ax²=放物線の橋 / 相似=巨人の間 / 円周角=円環の回廊 / 三平方=ピタの真実 / 標本調査=最終試練</td></tr>
+    </table>
+    <h4>共通ルール</h4>
+    <ul>
+      <li><b>1章 = 1単元 = 1エリア</b>。教科書の単元順に並べ、先生がシートで解放。各章のボスはその単元の「象徴」となる敵(符号王ネガ、未知なる影X、双子の門番…)。</li>
+      <li><b>雑魚敵 = 問題テンプレート</b>。「マイナススライム(負の数の加減)」のように、敵の種類=出題タイプ。図鑑が単元の一覧表になる。</li>
+      <li><b>ボス戦のみ図形・グラフ問題</b>(SVG描画)を混ぜて「特別感」を出す。</li>
+      <li><b>仲間の役割 = 学習サポート</b>。ピタ=ヒント、レナ=かばう(誤答ダメージ軽減)、3年の仲間=難易度調整…のように、RPGのスキルと学習支援を一致させる。</li>
+      <li><b>伏線</b>: 1年の「碑文に刻まれた三角形」→3年で三平方。1年の商人の「損得」の話→2年のゼノンの動機。</li>
+    </ul>
+  </div>
+</section>
+
+<script>
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');document.getElementById(t.dataset.t).classList.add('on');
+}));
+</script>
+</body>
+</html>

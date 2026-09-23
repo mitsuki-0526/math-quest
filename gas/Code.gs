@@ -1,0 +1,335 @@
+/**
+ * MathQuest サーバー(Google Apps Script Web アプリ)。要件 F1 F2 F4 F6 F70。
+ *
+ * セットアップは docs/ops.md を参照。概要:
+ *   1. 新しいスプレッドシートを作り、拡張機能 → Apps Script でこのファイルを貼る
+ *   2. 一度 setup() を実行(シートとヘッダー、初期設定を作る)
+ *   3. デプロイ → 新しいデプロイ → 種類「ウェブアプリ」、実行ユーザー「自分」、アクセス「全員」
+ *   4. 発行された URL と config シートの api_token をゲーム側(.env の VITE_GAS_URL / VITE_API_TOKEN)に設定
+ *
+ * シート:
+ *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at
+ *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
+ *   config   : key | value
+ *   log      : time | action | class | number | note (エラーと主要イベントだけ)
+ *
+ * API(すべて JSON を返す):
+ *   GET  ?action=bootstrap&class=1-1&token=...   → { ok, unlock: string[], classes: string[], config: {}, serverTime }
+ *   POST { action:'login', token, class, number, pass }          → { ok, isNew, save, unlock, teacher }
+ *   POST { action:'save',  token, class, number, pass, save }    → { ok, stored:boolean, save }  (サーバーの方が新しければ stored=false で返す)
+ *   POST { action:'load',  token, class, number, pass }          → { ok, save }
+ * POST は Content-Type: text/plain で送る(CORS のプリフライトを避ける)。
+ */
+
+var SHEETS = {
+  students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at'],
+  unlock: ['class', 'g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'],
+  config: ['key', 'value'],
+  log: ['time', 'action', 'class', 'number', 'note'],
+};
+
+var TEACHER_CLASS = 'teacher';
+
+/** 初回セットアップ。エディタから手で実行する。 */
+function setup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  Object.keys(SHEETS).forEach(function (name) {
+    var sh = ss.getSheetByName(name) || ss.insertSheet(name);
+    if (sh.getLastRow() === 0) {
+      sh.appendRow(SHEETS[name]);
+      sh.setFrozenRows(1);
+    }
+  });
+  var cfg = ss.getSheetByName('config');
+  if (cfg.getLastRow() === 1) {
+    cfg.appendRow(['api_token', Utilities.getUuid().replace(/-/g, '')]);
+    // 先生用テストアカウントの合言葉。コードは公開されるので既定値は置かず、ランダムに作る
+    cfg.appendRow(['teacher_pass', Utilities.getUuid().replace(/-/g, '').slice(0, 12)]);
+    cfg.appendRow(['classes', '1-1,1-2,1-3,1-4']); // ログイン画面のクラス一覧
+    cfg.appendRow(['note', '数値の調整値(battle.baseDamage など)を key=値 で追加するとゲーム側の config を上書きします']);
+  }
+  var un = ss.getSheetByName('unlock');
+  if (un.getLastRow() === 1) {
+    un.appendRow(['*', true, false, false, false, false, false, false]);
+    un.getRange(2, 2, 1, 7).insertCheckboxes();
+  }
+  Logger.log('セットアップ完了。config シートの api_token をゲーム側に設定してください。teacher_pass は先生用の合言葉です(好きな値に変えてよい)。');
+}
+
+// ------------------------------------------------------------------ 入口
+
+function doGet(e) {
+  try {
+    var p = (e && e.parameter) || {};
+    if (!checkToken(p.token)) return json({ ok: false, error: 'bad_token' });
+    if (p.action === 'bootstrap') return json(bootstrap(p['class']));
+    if (p.action === 'ping') return json({ ok: true, serverTime: new Date().toISOString() });
+    return json({ ok: false, error: 'unknown_action' });
+  } catch (err) {
+    logRow('error', '', '', String(err));
+    return json({ ok: false, error: 'server_error' });
+  }
+}
+
+function doPost(e) {
+  var body = {};
+  try {
+    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return json({ ok: false, error: 'bad_json' });
+  }
+  try {
+    if (!checkToken(body.token)) return json({ ok: false, error: 'bad_token' });
+    var cls = String(body['class'] || '').trim();
+    var num = String(body.number || '').trim();
+    var pass = String(body.pass || '');
+    if (!cls || !num) return json({ ok: false, error: 'missing_identity' });
+    // クラス・番号は短い文字列だけを受け付ける(シートに書くので、長文や数式を持ち込ませない)
+    if (cls.length > 20 || num.length > 10 || pass.length > 64) return json({ ok: false, error: 'bad_identity' });
+
+    var lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      // 合言葉の総当たり対策: 同じアカウントで続けて失敗したら、しばらく受け付けない
+      if (isLocked(cls, num)) return json({ ok: false, error: 'locked' });
+      var res;
+      if (body.action === 'login') res = login(cls, num, pass);
+      else if (body.action === 'save') res = saveGame(cls, num, pass, body.save);
+      else if (body.action === 'load') res = loadGame(cls, num, pass);
+      else return json({ ok: false, error: 'unknown_action' });
+      if (res.error === 'bad_pass') recordFailure(cls, num);
+      else if (res.ok) clearFailures(cls, num);
+      return json(res);
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (err) {
+    logRow('error', body['class'], body.number, String(err));
+    return json({ ok: false, error: 'server_error' });
+  }
+}
+
+// ------------------------------------------------------------------ 処理
+
+function bootstrap(cls) {
+  var cfg = readConfig();
+  return {
+    ok: true,
+    unlock: unlockFor(cls),
+    classes: String(cfg.classes || '')
+      .split(',')
+      .map(function (s) {
+        return s.trim();
+      })
+      .filter(Boolean),
+    config: gameConfigOverrides(cfg),
+    serverTime: new Date().toISOString(),
+  };
+}
+
+function login(cls, num, pass) {
+  var cfg = readConfig();
+  // 先生用テストアカウント: 全章解放、セーブはサーバーに残す(生徒と同じ扱い)
+  var teacher = cls === TEACHER_CLASS && pass === String(cfg.teacher_pass || '');
+  if (cls === TEACHER_CLASS && !teacher) return { ok: false, error: 'bad_pass' };
+
+  var row = findStudent(cls, num);
+  var now = new Date().toISOString();
+  if (!row) {
+    if (!pass) return { ok: false, error: 'missing_pass' };
+    var salt = Utilities.getUuid();
+    var sh = sheet('students');
+    sh.appendRow([asText(key(cls, num)), asText(cls), asText(num), hashPass(pass, salt), salt, '', '', '', now, now]);
+    logRow('register', cls, num, '');
+    return { ok: true, isNew: true, save: null, unlock: unlockFor(cls, teacher), teacher: teacher };
+  }
+  // 合言葉が空(先生がリセット)なら、今回の入力を新しい合言葉にする
+  if (!row.pass_hash) {
+    if (!pass) return { ok: false, error: 'missing_pass' };
+    var salt2 = Utilities.getUuid();
+    setCell(row.rowIndex, 'pass_hash', hashPass(pass, salt2));
+    setCell(row.rowIndex, 'salt', salt2);
+    logRow('reset_pass', cls, num, '');
+  } else if (!teacher && hashPass(pass, row.salt) !== row.pass_hash) {
+    return { ok: false, error: 'bad_pass' };
+  }
+  setCell(row.rowIndex, 'last_seen', now);
+  var save = row.save_json ? JSON.parse(row.save_json) : null;
+  return { ok: true, isNew: false, save: save, unlock: unlockFor(cls, teacher), teacher: teacher };
+}
+
+function saveGame(cls, num, pass, save) {
+  var row = findStudent(cls, num);
+  if (!row) return { ok: false, error: 'not_found' };
+  if (!authorize(row, cls, pass)) return { ok: false, error: 'bad_pass' };
+  if (!save || typeof save !== 'object') return { ok: false, error: 'bad_save' };
+  var incoming = String(save.updatedAt || '');
+  if (incoming && !/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(incoming)) return { ok: false, error: 'bad_save' };
+  var stored = String(row.updated_at || '');
+  // 競合: サーバーの方が新しければ上書きせず、サーバー側を返す(要件 F3「新しい方を採用」)
+  if (stored && incoming && incoming < stored) {
+    return { ok: true, stored: false, save: row.save_json ? JSON.parse(row.save_json) : null };
+  }
+  var text = JSON.stringify(save);
+  if (text.length > 45000) return { ok: false, error: 'save_too_large' }; // セルの上限は 50,000 文字
+  setCell(row.rowIndex, 'save_json', asText(text));
+  // 日時の文字列はシートが自動で日付型に変えてしまい、文字列比較が壊れるので ' を付けて文字列のまま保存する
+  setCell(row.rowIndex, 'updated_at', "'" + (incoming || new Date().toISOString()));
+  setCell(row.rowIndex, 'player_name', asText(String((save.player && save.player.name) || '').slice(0, 20)));
+  setCell(row.rowIndex, 'last_seen', new Date().toISOString());
+  return { ok: true, stored: true, save: null };
+}
+
+function loadGame(cls, num, pass) {
+  var row = findStudent(cls, num);
+  if (!row) return { ok: false, error: 'not_found' };
+  if (!authorize(row, cls, pass)) return { ok: false, error: 'bad_pass' };
+  return { ok: true, save: row.save_json ? JSON.parse(row.save_json) : null };
+}
+
+function authorize(row, cls, pass) {
+  if (cls === TEACHER_CLASS) return pass === String(readConfig().teacher_pass || '');
+  if (!row.pass_hash) return false;
+  return hashPass(pass, row.salt) === row.pass_hash;
+}
+
+// ------------------------------------------------------------------ 総当たり対策
+
+var MAX_FAILURES = 8; // 打ちまちがいは許しつつ、総当たりは現実的でなくする
+var LOCK_SECONDS = 600;
+
+/** 先生用アカウントは番号を変えて試せるので、クラス単位でまとめて数える */
+function failureKey(cls, num) {
+  return 'fail:' + (cls === TEACHER_CLASS ? TEACHER_CLASS : key(cls, num));
+}
+
+function isLocked(cls, num) {
+  return Number(CacheService.getScriptCache().get(failureKey(cls, num)) || 0) >= MAX_FAILURES;
+}
+
+function recordFailure(cls, num) {
+  var cache = CacheService.getScriptCache();
+  var k = failureKey(cls, num);
+  var n = Number(cache.get(k) || 0) + 1;
+  cache.put(k, String(n), LOCK_SECONDS);
+  if (n === MAX_FAILURES) logRow('locked', cls, num, '合言葉の失敗が続いたため ' + LOCK_SECONDS / 60 + ' 分ロック');
+}
+
+function clearFailures(cls, num) {
+  // 先生用はクラス単位で数えているので、成功しても消さない(ほかの番号の失敗を帳消しにしない)
+  if (cls === TEACHER_CLASS) return;
+  CacheService.getScriptCache().remove(failureKey(cls, num));
+}
+
+// ------------------------------------------------------------------ 解放・設定
+
+/** クラスの解放章。class の行がなければ "*" の行を使う。先生は全解放 */
+function unlockFor(cls, teacher) {
+  var sh = sheet('unlock');
+  var values = sh.getDataRange().getValues();
+  var header = values[0];
+  if (teacher) return header.slice(1).map(String);
+  var pick = null;
+  var fallback = null;
+  for (var i = 1; i < values.length; i++) {
+    var c = String(values[i][0]).trim();
+    if (c === cls) pick = values[i];
+    if (c === '*') fallback = values[i];
+  }
+  var row = pick || fallback;
+  if (!row) return ['g1c1'];
+  var out = [];
+  for (var j = 1; j < header.length; j++) if (row[j] === true || String(row[j]).toUpperCase() === 'TRUE') out.push(String(header[j]));
+  return out;
+}
+
+function readConfig() {
+  var values = sheet('config').getDataRange().getValues();
+  var cfg = {};
+  for (var i = 1; i < values.length; i++) if (values[i][0]) cfg[String(values[i][0]).trim()] = values[i][1];
+  return cfg;
+}
+
+/** config シートのうち "battle.xxx" のようにドットを含むキーをゲームの調整値として返す */
+function gameConfigOverrides(cfg) {
+  var out = {};
+  Object.keys(cfg).forEach(function (k) {
+    if (k.indexOf('.') > 0) {
+      var v = cfg[k];
+      out[k] = typeof v === 'number' ? v : isNaN(Number(v)) ? v : Number(v);
+    }
+  });
+  return out;
+}
+
+// ------------------------------------------------------------------ シート操作
+
+function sheet(name) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (!sh) throw new Error('シートがありません: ' + name + '(setup() を実行してください)');
+  return sh;
+}
+
+function key(cls, num) {
+  return cls + '|' + num;
+}
+
+function findStudent(cls, num) {
+  var sh = sheet('students');
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var keys = sh.getRange(2, 1, last - 1, 1).getValues();
+  var k = key(cls, num);
+  for (var i = 0; i < keys.length; i++) {
+    if (String(keys[i][0]) === k) {
+      var values = sh.getRange(i + 2, 1, 1, SHEETS.students.length).getValues()[0];
+      var row = { rowIndex: i + 2 };
+      SHEETS.students.forEach(function (h, j) {
+        row[h] = values[j];
+      });
+      return row;
+    }
+  }
+  return null;
+}
+
+function setCell(rowIndex, column, value) {
+  var col = SHEETS.students.indexOf(column) + 1;
+  sheet('students').getRange(rowIndex, col).setValue(value);
+}
+
+/**
+ * 利用者が入力した値をセルに書くときに通す。= + - @ で始まる値は数式として解釈され、
+ * 先生がシートを開いたときに実行されうる(CSV/数式インジェクション)。先頭に ' を付けて文字列に固定する。
+ */
+function asText(value) {
+  var s = String(value == null ? '' : value);
+  return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+}
+
+function hashPass(pass, salt) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pass, Utilities.Charset.UTF_8);
+  return bytes
+    .map(function (b) {
+      var s = (b < 0 ? b + 256 : b).toString(16);
+      return s.length === 1 ? '0' + s : s;
+    })
+    .join('');
+}
+
+function checkToken(token) {
+  var expected = String(readConfig().api_token || '');
+  return !!expected && String(token || '') === expected;
+}
+
+function logRow(action, cls, num, note) {
+  try {
+    sheet('log').appendRow([new Date().toISOString(), action, asText(cls || ''), asText(num || ''), asText(note || '')]);
+  } catch (e) {
+    /* ログに失敗しても本処理は止めない */
+  }
+}
+
+function json(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
