@@ -1508,6 +1508,20 @@ img.sprite {
   color: var(--parchment);
   background: none;
 }
+.town-bg.has-image {
+  justify-content: flex-start;
+  padding-top: 18px;
+  background-size: cover;
+  background-position: center 40%;
+  image-rendering: pixelated;
+}
+/* 町の名前は絵の上に乗るので、下地を敷いて読めるようにする */
+.town-bg.has-image h2 {
+  position: relative;
+  padding: 2px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 12, 24, 0.55);
+}
 .town-bg-emoji {
   font-size: 84px;
   opacity: 0.35;

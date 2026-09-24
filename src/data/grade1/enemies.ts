@@ -388,7 +388,7 @@ export const enemies: Record<string, EnemyDef> = {
   king_nega: {
     id: 'king_nega',
     name: '符号王ネガ',
-    template: 'g1.sign.addsub',
+    template: 'g1.sign.addsub_big',
     sprite: 'enemy_king_nega',
     hp: 320, // 試遊前の調整: 240 では 6〜8 問で倒れ、ボスとして短かった(Lv5〜6 で 10 問前後に)
     attack: 10,
@@ -396,7 +396,8 @@ export const enemies: Record<string, EnemyDef> = {
     gold: 80,
     boss: true,
     phases: [
-      { untilHpRatio: 1, templates: ['g1.sign.addsub'], line: '符号王ネガ「まずは 足し引きからなのだ。マイナスはいつだって マイナス!」' },
+      // 第1段は 2 けたの数の加減(雑魚のマイナススライムより 1 段むずかしく。ボス専用)
+      { untilHpRatio: 1, templates: ['g1.sign.addsub_big'], line: '符号王ネガ「まずは 足し引きからなのだ。マイナスはいつだって マイナス!」' },
       { untilHpRatio: 0.66, templates: ['g1.sign.muldiv'], line: '符号王ネガ「ぐぬ…。ならば かけ算だ! マイナスとマイナスを かけたとて、マイナスなのだ!」' },
       { untilHpRatio: 0.33, templates: ['g1.sign.numberline', 'g1.sign.mixed'], line: '符号王ネガ「余の目盛りを 読めるものなら 読んでみよ! 数直線ごと 飲みこんでやるのだ!」' },
     ],

@@ -152,7 +152,7 @@ describe('battle engine', () => {
   it('ボスはフェーズで出題テンプレートが変わる', () => {
     const c = ctx({ encounters: [['king_nega']], isBoss: true, pickDifficulty: () => 3 });
     let s = createBattle(c);
-    expect(s.problem!.templateId).toBe('g1.sign.addsub');
+    expect(s.problem!.templateId).toBe('g1.sign.addsub_big');
     // HP を直接 削って フェーズ3 相当に
     s = { ...s, enemies: [{ ...s.enemies[0], hp: 40 }] };
     const seen = new Set<string>();

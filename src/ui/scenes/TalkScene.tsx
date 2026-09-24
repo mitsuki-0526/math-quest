@@ -5,6 +5,7 @@ import { useStore } from '@/engine/store';
 import { ScriptRunner, getScene, type ScriptEffect, type Step } from '@/engine/script';
 import { addItem, equip, clearChapter } from '@/engine/player';
 import { characters, playerSprite, type CharacterId } from '@/data/characters';
+import { enemies } from '@/data/grade1/enemies';
 import type { FigureSpec } from '@/math/figure';
 import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button } from '@/ui/components/Ui';
@@ -187,11 +188,12 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
       const raw = who.slice(4);
       return save!.renames?.[raw] ?? raw;
     }
-    return who === 'player' ? save!.player.name : (characters[who as CharacterId]?.name ?? who);
+    // ボスは敵データの名前で話す(台本の話者 ID が敵 ID のとき。例: king_nega → 符号王ネガ)
+    return who === 'player' ? save!.player.name : (characters[who as CharacterId]?.name ?? enemies[who]?.name ?? who);
   };
   const render = (t: string) => t.replaceAll('{player}', save!.player.name);
   const actorSprite = (who: string) =>
-    who === 'player' ? playerSprite(save!.player.look) : ((characters[who as CharacterId] as { sprite?: string } | undefined)?.sprite ?? `char_${who}`);
+    who === 'player' ? playerSprite(save!.player.look) : ((characters[who as CharacterId] as { sprite?: string } | undefined)?.sprite ?? enemies[who]?.sprite ?? `char_${who}`);
   const speaker = step?.type === 'say' ? step.who : null;
   const [left, right] = pickActors(scene.actors, speaker);
   const bgAsset = getAsset(bg ?? scene.bg ?? 'bg_village_square');

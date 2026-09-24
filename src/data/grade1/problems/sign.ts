@@ -2,11 +2,12 @@ import { registerTemplate, type Difficulty, type Problem, type ProblemTemplate }
 import type { Rng } from '@/math/rng';
 import { rat, add, sub, mul, div, pow, neg, abs as rabs, toTex, toNumber } from '@/math/rational';
 import { paren, plainMinus, text } from '@/math/format';
-import { primeFactors, factorsToTex, isPrime } from '@/math/factorization';
+import { primeFactors, factorsToTex } from '@/math/factorization';
 
 /**
  * 第1章「正の数と負の数」のテンプレート(台本 01_sign_forest.md の敵に対応)。
  *   g1.sign.addsub      マイナススライム   加減
+ *   g1.sign.addsub_big  符号王ネガ         大きな数の加減(ボス専用)
  *   g1.sign.muldiv      プラマイコウモリ   乗除
  *   g1.sign.abs         ゼッタイチ・ゴーレム 絶対値・大小
  *   g1.sign.mixed       クロスバッタ       四則混合・累乗
@@ -17,20 +18,27 @@ const UNIT = '正の数と負の数';
 
 // ---------------------------------------------------------------- 加減
 
-function genAddSub(rng: Rng, d: Difficulty): Problem {
-  const count = d === 1 ? 2 : d === 2 ? 3 : rng.pick([3, 4]);
-  const max = d === 1 ? 10 : d === 2 ? 20 : 50;
-  const terms: number[] = [];
-  const ops: ('+' | '-')[] = [];
-  for (let i = 0; i < count; i++) {
-    terms.push(rng.nonZero(max));
-    if (i > 0) ops.push(rng.pick(['+', '-']));
-  }
-  // ★1 は必ず負の数を含める(符号の練習にならないため)
-  if (d === 1 && terms.every((t) => t > 0)) terms[rng.int(0, 1)] *= -1;
+/**
+ * 加減の数の選び方。雑魚(マイナススライム)は符号の練習が目的なので、★が上がっても項の数と式の形で難しくし、
+ * 2 けたの数は 1 問に 1 つまでにする(試遊で「★3 が 2 けただらけで難しすぎる」と先生の指摘)。
+ * 2 けたの数ばかりの計算は、ボス(符号王ネガ)専用の addsub_big で出す
+ */
+function addSubTerms(rng: Rng, d: Difficulty, big: boolean): number[] {
+  if (big) return Array.from({ length: d === 1 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(50));
+  if (d === 1) return [rng.nonZero(10), rng.nonZero(10)];
+  const terms = Array.from({ length: d === 2 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(9));
+  terms[rng.int(0, terms.length - 1)] = rng.nonZero(d === 2 ? 15 : 20);
+  return terms;
+}
 
-  // ★3 の半分は「項だけの式」(-3 + 7 - 5)で出す
-  const termForm = d === 3 && rng.bool();
+function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
+  const terms = addSubTerms(rng, d, big);
+  const ops: ('+' | '-')[] = terms.slice(1).map(() => rng.pick(['+', '-']));
+  // 必ず負の数を含める(正の数だけでは符号の練習にならないため)
+  if (terms.every((t) => t > 0)) terms[rng.int(0, terms.length - 1)] *= -1;
+
+  // ★3(ボスは ★2 から)の半分は「項だけの式」(-3 + 7 - 5)で出す
+  const termForm = (d === 3 || (big && d >= 2)) && rng.bool();
   let tex: string;
   let plain: string;
   if (termForm) {
@@ -63,7 +71,7 @@ function genAddSub(rng: Rng, d: Difficulty): Problem {
 
   const verifyExpr = terms.map((t, i) => (i === 0 ? `(${t})` : ` ${ops[i - 1]} (${t})`)).join('');
   return {
-    templateId: 'g1.sign.addsub',
+    templateId: big ? 'g1.sign.addsub_big' : 'g1.sign.addsub',
     difficulty: d,
     prompt: `${tex} = ?`,
     promptText: `${plain} = ?`,
@@ -71,7 +79,7 @@ function genAddSub(rng: Rng, d: Difficulty): Problem {
     hint: termForm ? '正の項どうし、負の項どうしを 先に まとめてみよう' : 'まず かっこを はずして、項だけの式に してみよう。−(−3) は +3',
     explanation,
     tags,
-    key: `addsub:${tex}`,
+    key: `${big ? 'addsub_big' : 'addsub'}:${tex}`,
     verify: verifyExpr,
   };
 }
@@ -360,28 +368,35 @@ function sup(e: number): string {
 
 // ---------------------------------------------------------------- 素因数分解
 
+/**
+ * 素因数分解の数の選び方。教科書の練習問題(60, 84, 126, 180 など)に合わせ、使う素数は 2・3・5・7 が中心。
+ * 大きい素数(11, 13)は ★3 でたまに 1 つだけ入れる。100〜999 の数を無作為に選んでいたときは
+ * 「割れる素数を探す」だけで時間が尽きたので、素数の積から作る(先生の試遊での指摘)
+ */
 const SMALL_PRIMES = [2, 3, 5, 7];
-const MID_PRIMES = [2, 3, 5, 7, 11, 13];
+
+function productOf(rng: Rng, count: number, extra: number[] = []): number {
+  let n = 1;
+  for (let i = 0; i < count; i++) n *= rng.pick(SMALL_PRIMES);
+  for (const p of extra) n *= p;
+  return n;
+}
 
 function genPrimeFactor(rng: Rng, d: Difficulty): Problem {
   let n: number;
   if (d === 1) {
-    // 2〜3個の小さな素数の積(≤ 50)
-    do {
-      const k = rng.pick([2, 3]);
-      n = 1;
-      for (let i = 0; i < k; i++) n *= rng.pick(SMALL_PRIMES);
-    } while (n > 50 || isPrime(n));
+    // 2〜3個の素数の積(12〜50)。例: 12, 18, 30, 42(4 や 6 は分解する手順の練習にならない)
+    do n = productOf(rng, rng.pick([2, 3]));
+    while (n > 50 || n < 12);
   } else if (d === 2) {
-    do {
-      const k = rng.pick([3, 4]);
-      n = 1;
-      for (let i = 0; i < k; i++) n *= rng.pick(MID_PRIMES);
-    } while (n > 200 || isPrime(n));
+    // 3〜4個の積(≤ 120)。例: 60, 72, 84, 90
+    do n = productOf(rng, rng.pick([3, 4]));
+    while (n > 120 || n < 24);
   } else {
-    do {
-      n = rng.int(100, 999);
-    } while (isPrime(n) || primeFactors(n).length < 3);
+    // 4〜5個の積(≤ 300)。5 回に 1 回は 11 か 13 を 1 つ混ぜる。例: 126, 180, 252, 132
+    const extra = rng.bool(0.2) ? [rng.pick([11, 13])] : [];
+    do n = productOf(rng, rng.pick([4, 5]) - extra.length, extra);
+    while (n > 300 || n < 60);
   }
   const factors = primeFactors(n);
   // 解説: 小さい素数で 順に 割る
@@ -409,7 +424,8 @@ function genPrimeFactor(rng: Rng, d: Difficulty): Problem {
 // ---------------------------------------------------------------- 登録
 
 const templates: ProblemTemplate[] = [
-  { id: 'g1.sign.addsub', unit: UNIT, title: '正負の数の加減', timeLimit: { 1: 40, 2: 45, 3: 60 }, generate: genAddSub },
+  { id: 'g1.sign.addsub', unit: UNIT, title: '正負の数の加減', timeLimit: { 1: 40, 2: 45, 3: 60 }, generate: (rng, d) => genAddSub(rng, d) },
+  { id: 'g1.sign.addsub_big', unit: UNIT, title: '大きな数の加減', timeLimit: { 1: 60, 2: 75, 3: 90 }, generate: (rng, d) => genAddSub(rng, d, true) },
   { id: 'g1.sign.muldiv', unit: UNIT, title: '正負の数の乗除', timeLimit: { 1: 30, 2: 40, 3: 60 }, generate: genMulDiv },
   { id: 'g1.sign.abs', unit: UNIT, title: '絶対値と大小', timeLimit: { 1: 25, 2: 40, 3: 60 }, generate: genAbs },
   { id: 'g1.sign.mixed', unit: UNIT, title: '四則混合と累乗', timeLimit: { 1: 40, 2: 50, 3: 75 }, generate: genMixed },

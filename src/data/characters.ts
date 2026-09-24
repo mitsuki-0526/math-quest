@@ -21,6 +21,9 @@ export const characters = {
   zenon: { name: 'ゼノン', emoji: '🧙‍♂️' },
   mei: { name: 'メイ', emoji: '👧' },
   cat_x: { name: 'エックス', emoji: '🐈‍⬛' },
+  // 第4章のボス「湖の双子竜」は 1 体の敵だが、会話では 2 頭が別々に話す
+  narabi: { name: 'ナラビ', sprite: 'enemy_twin_dragons', emoji: '🐉' },
+  sakasa: { name: 'サカサ', sprite: 'enemy_twin_dragons', emoji: '🐲' },
   narrator: { name: '', emoji: '' },
 } as const satisfies Record<string, Character>;
 

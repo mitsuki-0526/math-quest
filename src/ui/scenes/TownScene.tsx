@@ -5,7 +5,7 @@ import { useStore } from '@/engine/store';
 import { addItem, equip, playerStats } from '@/engine/player';
 import { getTown } from '@/data/grade1/town';
 import { getItem } from '@/data/grade1/items';
-import { getAsset } from '@/assets/manifest';
+import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
 import { practiceTemplates } from '@/engine/practice';
@@ -78,10 +78,17 @@ export function TownScene({ townId }: { townId: string }) {
   return (
     <div class="scene scene-town">
       <div class="town-stage">
-        <div class="town-bg">
-          <span class="town-bg-emoji">{bg.emoji}</span>
-          <h2>{town.name}</h2>
-        </div>
+        {bg.path ? (
+          <div class="town-bg has-image" style={{ backgroundImage: `url(${assetUrl(bg.path)})` }}>
+            {bg.tint && <div class="talk-bg-tint" style={{ background: bg.tint }} />}
+            <h2>{town.name}</h2>
+          </div>
+        ) : (
+          <div class="town-bg">
+            <span class="town-bg-emoji">{bg.emoji}</span>
+            <h2>{town.name}</h2>
+          </div>
+        )}
         <div class="rpg-window town-msg">
           <p>▶ {msg}</p>
         </div>
