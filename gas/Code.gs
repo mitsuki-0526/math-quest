@@ -13,21 +13,32 @@
  *      次のユーザーとして実行「自分」、アクセスできるユーザー「(学校名)内の全員」
  *   4. 発行された URL を生徒に配る
  *
+ * 本人確認:
+ *   - 学校アカウント方式(標準): Session.getActiveUser() で開いた人のアカウントが分かる。
+ *     アカウント → クラス・番号 は先生が roster シートに書いた名簿で決まる(生徒は番号を選ばない。
+ *     まちがい・なりすまし登録を起こさないため)。名簿にない人は入れない。合言葉は要らない。
+ *     先生 = スクリプトの持ち主 + config の teachers
+ *   - 合言葉方式(予備): アカウントが取れない環境では、クラス・番号・合言葉で入る
+ *
  * シート:
  *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at
+ *   roster   : email | class | number | memo (先生が貼る名簿。memo は自由記入でプログラムは読まない)
  *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
  *   config   : key | value
  *   log      : time | action | class | number | note (エラーと主要イベントだけ)
  *
  * rpc(JSON 文字列) → JSON 文字列:
- *   { action:'bootstrap', class }                  → { ok, unlock: string[], classes: string[], config: {}, serverTime }
- *   { action:'login', class, number, pass }        → { ok, isNew, save, unlock, teacher }
+ *   { action:'bootstrap', class }                  → { ok, unlock, classes, config, serverTime, account }
+ *        account = { mode:'google', teacher, registered: {class, number} | null(名簿にない), player: {name, level} | null, error? } または { mode:'pass' }
+ *   { action:'login', class, number, pass }        → { ok, isNew, save, unlock, teacher, account? }
+ *        学校アカウント方式では送られた class/number/pass は見ない(名簿で決まる)
  *   { action:'save',  class, number, pass, save }  → { ok, stored:boolean, save }  (サーバーの方が新しければ stored=false で返す)
  *   { action:'load',  class, number, pass }        → { ok, save }
  */
 
 var SHEETS = {
   students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at'],
+  roster: ['email', 'class', 'number', 'memo'],
   unlock: ['class', 'g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'],
   config: ['key', 'value'],
   log: ['time', 'action', 'class', 'number', 'note'],
@@ -52,8 +63,14 @@ function setup() {
     // 先生用テストアカウントの合言葉。コードは公開されるので既定値は置かず、ランダムに作る
     cfg.appendRow(['teacher_pass', Utilities.getUuid().replace(/-/g, '').slice(0, 12)]);
     cfg.appendRow(['classes', '1-1,1-2,1-3,1-4']); // ログイン画面のクラス一覧
+    cfg.appendRow(['teachers', '']); // 先生として扱う学校アカウント(カンマ区切り)。スクリプトの持ち主は書かなくても先生
     cfg.appendRow(['note', '数値の調整値(battle.baseDamage など)を key=値 で追加するとゲーム側の config を上書きします']);
   }
+  var roster = ss.getSheetByName('roster');
+  // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
+  roster.getRange('B:C').setNumberFormat('@');
+  ss.getSheetByName('unlock').getRange('A:A').setNumberFormat('@');
+  if (roster.getLastRow() === 1) roster.getRange(1, 5).setValue('← 生徒の学校アカウント・クラス・出席番号を 1 人 1 行で貼る(memo は自由。氏名は書かなくてよい)');
   var un = ss.getSheetByName('unlock');
   if (un.getLastRow() === 1) {
     un.appendRow(['*', true, false, false, false, false, false, false]);
@@ -108,6 +125,10 @@ function handle(body) {
   if (body.action === 'bootstrap') return bootstrap(String(body['class'] || ''));
   if (body.action === 'ping') return { ok: true, serverTime: new Date().toISOString() };
 
+  var email = currentEmail();
+  if (email) return handleAccount(email, body);
+
+  // ここから合言葉方式(アカウントが取れない環境のための予備)
   var cls = String(body['class'] || '').trim();
   var num = String(body.number || '').trim();
   var pass = String(body.pass || '');
@@ -148,6 +169,7 @@ function bootstrap(cls) {
       .filter(Boolean),
     config: gameConfigOverrides(cfg),
     serverTime: new Date().toISOString(),
+    account: accountInfo(),
   };
 }
 
@@ -163,7 +185,7 @@ function login(cls, num, pass) {
     if (!pass) return { ok: false, error: 'missing_pass' };
     var salt = Utilities.getUuid();
     var sh = sheet('students');
-    sh.appendRow([asText(key(cls, num)), asText(cls), asText(num), hashPass(pass, salt), salt, '', '', '', now, now]);
+    sh.appendRow([literal(key(cls, num)), literal(cls), literal(num), hashPass(pass, salt), salt, '', '', '', now, now]);
     logRow('register', cls, num, '');
     return { ok: true, isNew: true, save: null, unlock: unlockFor(cls, teacher), teacher: teacher };
   }
@@ -186,13 +208,18 @@ function saveGame(cls, num, pass, save) {
   var row = findStudent(cls, num);
   if (!row) return { ok: false, error: 'not_found' };
   if (!authorize(row, cls, pass)) return { ok: false, error: 'bad_pass' };
+  return storeSave(row, save);
+}
+
+/** 行にセーブを書く。サーバーの方が新しければ書かずにそちらを返す */
+function storeSave(row, save) {
   if (!save || typeof save !== 'object') return { ok: false, error: 'bad_save' };
   var incoming = String(save.updatedAt || '');
   if (incoming && !/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(incoming)) return { ok: false, error: 'bad_save' };
   var stored = String(row.updated_at || '');
   // 競合: サーバーの方が新しければ上書きせず、サーバー側を返す(要件 F3「新しい方を採用」)
   if (stored && incoming && incoming < stored) {
-    return { ok: true, stored: false, save: row.save_json ? JSON.parse(row.save_json) : null };
+    return { ok: true, stored: false, save: parseSave(row) };
   }
   var text = JSON.stringify(save);
   if (text.length > 45000) return { ok: false, error: 'save_too_large' }; // セルの上限は 50,000 文字
@@ -208,7 +235,118 @@ function loadGame(cls, num, pass) {
   var row = findStudent(cls, num);
   if (!row) return { ok: false, error: 'not_found' };
   if (!authorize(row, cls, pass)) return { ok: false, error: 'bad_pass' };
-  return { ok: true, save: row.save_json ? JSON.parse(row.save_json) : null };
+  return { ok: true, save: parseSave(row) };
+}
+
+function parseSave(row) {
+  return row.save_json ? JSON.parse(row.save_json) : null;
+}
+
+// ------------------------------------------------------------------ 学校アカウント方式
+
+/** 開いている人の学校アカウント。取れなければ ''(合言葉方式になる) */
+function currentEmail() {
+  try {
+    return String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  } catch (e) {
+    return '';
+  }
+}
+
+/** 先生か: スクリプトの持ち主(この Web アプリを作った先生)か、config の teachers に書かれた人 */
+function isTeacherEmail(email) {
+  var owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  if (email === owner) return true;
+  var list = String(readConfig().teachers || '')
+    .toLowerCase()
+    .split(',')
+    .map(function (s) {
+      return s.trim();
+    });
+  return list.indexOf(email) >= 0;
+}
+
+/**
+ * 名簿からクラス・番号を引く。
+ * 名簿のまちがい(同じアカウントが2行・同じクラス番号に2人)は、別の人のデータに触れてしまうので入れずに知らせる
+ * 戻り値: { class, number } / { error: 'not_in_roster' | 'roster_conflict' }
+ */
+function rosterEntry(email) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('roster');
+  if (!sh || sh.getLastRow() < 2) return { error: 'not_in_roster' };
+  var values = sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues();
+  var mine = [];
+  var byKey = {};
+  for (var i = 0; i < values.length; i++) {
+    var e = cellText(values[i][0]).toLowerCase();
+    var c = cellText(values[i][1]);
+    var n = cellText(values[i][2]);
+    if (!e || !c || !n) continue;
+    if (/^\d+$/.test(n)) n = String(Number(n)); // "07" → "7"
+    var k = key(c, n);
+    byKey[k] = (byKey[k] || 0) + 1;
+    if (e === email) mine.push({ class: c, number: n });
+  }
+  if (mine.length === 0) return { error: 'not_in_roster' };
+  if (mine.length > 1 || byKey[key(mine[0]['class'], mine[0].number)] > 1) {
+    logRow('roster_conflict', mine[0]['class'], mine[0].number, '名簿に重複があります');
+    return { error: 'roster_conflict' };
+  }
+  return mine[0];
+}
+
+/** 先生の行のクラス・番号(番号は選ばないので、アカウントから決まる短い記号にする) */
+function teacherEntry(email) {
+  return { class: TEACHER_CLASS, number: 't' + hashPass(email, 'teacher').slice(0, 6) };
+}
+
+/** タイトル画面に「だれとして入るか」を知らせる(名前とレベルも出して、他人の端末で気づけるように) */
+function accountInfo() {
+  var email = currentEmail();
+  if (!email) return { mode: 'pass' };
+  var teacher = isTeacherEmail(email);
+  var entry = teacher ? teacherEntry(email) : rosterEntry(email);
+  if (entry.error) return { mode: 'google', teacher: false, registered: null, player: null, error: entry.error };
+  var row = findStudent(entry['class'], entry.number);
+  var save = row ? parseSave(row) : null;
+  return {
+    mode: 'google',
+    teacher: teacher,
+    registered: { class: entry['class'], number: entry.number },
+    player: save && save.player ? { name: String(save.player.name || ''), level: Number(save.player.level || 1) } : null,
+  };
+}
+
+/** 保存・読み込みは、送られてきたクラス・番号ではなく、アカウントと名簿で行を決める(ほかの人の行には触れない) */
+function handleAccount(email, body) {
+  var teacher = isTeacherEmail(email);
+  var entry = teacher ? teacherEntry(email) : rosterEntry(email);
+  if (entry.error) return { ok: false, error: entry.error };
+  var cls = entry['class'];
+  var num = entry.number;
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var row = findStudent(cls, num);
+    var now = new Date().toISOString();
+    var account = { class: cls, number: num };
+    if (body.action === 'login') {
+      if (!row) {
+        sheet('students').appendRow([literal(key(cls, num)), literal(cls), literal(num), '', '', '', '', '', now, now]);
+        logRow('register', cls, num, '');
+        return { ok: true, isNew: true, save: null, unlock: unlockFor(cls, teacher), teacher: teacher, account: account };
+      }
+      setCell(row.rowIndex, 'last_seen', now);
+      return { ok: true, isNew: !row.save_json, save: parseSave(row), unlock: unlockFor(cls, teacher), teacher: teacher, account: account };
+    }
+    if (!row) return { ok: false, error: 'not_registered' };
+    if (body.action === 'save') return storeSave(row, body.save);
+    if (body.action === 'load') return { ok: true, save: parseSave(row) };
+    return { ok: false, error: 'unknown_action' };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function authorize(row, cls, pass) {
@@ -256,7 +394,7 @@ function unlockFor(cls, teacher) {
   var pick = null;
   var fallback = null;
   for (var i = 1; i < values.length; i++) {
-    var c = String(values[i][0]).trim();
+    var c = cellText(values[i][0]);
     if (c === cls) pick = values[i];
     if (c === '*') fallback = values[i];
   }
@@ -326,6 +464,20 @@ function setCell(rowIndex, column, value) {
  * 利用者が入力した値をセルに書くときに通す。= + - @ で始まる値は数式として解釈され、
  * 先生がシートを開いたときに実行されうる(CSV/数式インジェクション)。先頭に ' を付けて文字列に固定する。
  */
+/**
+ * セルの値を文字列として読む。シートは「1-2」と打つと 1月2日 の日付に変えてしまうので、日付なら「月-日」に戻す
+ * (クラス名が日付に化けても照合できるように)
+ */
+function cellText(v) {
+  if (v instanceof Date) return v.getMonth() + 1 + '-' + v.getDate();
+  return String(v == null ? '' : v).trim();
+}
+
+/** クラス・番号をシートに書くときは ' を付けて文字列に固定する(「1-2」が日付に、「07」が 7 に変わらないように) */
+function literal(v) {
+  return "'" + String(v);
+}
+
 function asText(value) {
   var s = String(value == null ? '' : value);
   return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;

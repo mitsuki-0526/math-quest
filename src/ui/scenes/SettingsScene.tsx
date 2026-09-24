@@ -51,16 +51,20 @@ export function SettingsScene() {
               {sync.lastError && <p class="warn">{sync.lastError}</p>}
               <div class="row">
                 <Button onClick={() => void flush()}>いま同期する</Button>
-                <Button
-                  onClick={() => {
-                    // 先にタイトルへ戻してから消す(セーブが空になった画面を描かないように)。未送信分は logout が送る
-                    resetScenes({ kind: 'title' });
-                    void logout();
-                  }}
-                >
-                  ログアウト(別の人に代わる)
-                </Button>
+                {!sync.googleAccount && (
+                  <Button
+                    onClick={() => {
+                      // 先にタイトルへ戻してから消す(セーブが空になった画面を描かないように)。未送信分は logout が送る
+                      resetScenes({ kind: 'title' });
+                      void logout();
+                    }}
+                  >
+                    ログアウト(別の人に代わる)
+                  </Button>
+                )}
               </div>
+              {/* 学校アカウントで入っているときは、Chromebook のアカウントがそのまま本人。交代は Chromebook 側で */}
+              {sync.googleAccount && <p class="muted">別の人に 代わるときは、Chromebook から ログアウトしてください</p>}
             </>
           ) : (
             <p class="muted">保存先: この端末(サーバー未設定)</p>

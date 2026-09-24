@@ -41,12 +41,31 @@ export interface Identity {
   pass: string;
 }
 
+/**
+ * だれとして入るか。
+ * - google: 学校アカウントで本人確認できた(合言葉なし)。クラス・番号は先生の名簿で決まる。
+ *   registered = 名簿のクラス・番号(先生は class='teacher'。名簿にないときは null)、player = 前回までの主人公(他人の端末で気づけるように表示する)、
+ *   error = 名簿にない・名簿に重複がある
+ * - pass: アカウントが取れない環境。クラス・番号・合言葉で入る
+ */
+export type AccountInfo =
+  | {
+      mode: 'google';
+      teacher: boolean;
+      registered: { class: string; number: string } | null;
+      player: { name: string; level: number } | null;
+      error?: string;
+    }
+  | { mode: 'pass' };
+
 export interface BootstrapResult {
   ok: true;
   unlock: string[];
   classes: string[];
   config: Record<string, unknown>;
   serverTime: string;
+  /** 古いサーバー(開発用モックなど)は返さない → 合言葉方式として扱う */
+  account?: AccountInfo;
 }
 export interface LoginResult {
   ok: true;
@@ -54,6 +73,8 @@ export interface LoginResult {
   save: SaveData | null;
   unlock: string[];
   teacher: boolean;
+  /** 学校アカウント方式: 名簿で決まったクラス・番号(送ったものではなくこちらが正) */
+  account?: { class: string; number: string };
 }
 export interface SaveResult {
   ok: true;
@@ -195,6 +216,12 @@ export function describeError(e: unknown): string {
       return '合言葉を 決めて 入れてください';
     case 'bad_token':
       return 'サーバーの設定が 合っていません(先生に 連絡)';
+    case 'not_in_roster':
+      return 'この アカウントは 名簿に ありません。先生に 知らせてください';
+    case 'roster_conflict':
+      return '名簿に まちがいが あるため 入れません。先生に 知らせてください';
+    case 'not_registered':
+      return 'まだ 登録が すんでいません。タイトルに もどって 入り直してください';
     case 'locked':
       return '合言葉の まちがいが 続いたので、10分ほど 待ってから もう一度 入ってください';
     case 'bad_identity':

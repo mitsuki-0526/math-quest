@@ -1,5 +1,5 @@
 import { createStore } from './store';
-import { api, hasServer, saveBeacon, ApiFailure, type Identity } from './api';
+import { api, hasServer, saveBeacon, ApiFailure, type AccountInfo, type Identity } from './api';
 import { saveStore, writeLocalSave, saveChangedHooks, setSaveOwner, type SaveData } from './save';
 import { unlockedChapters } from './progress';
 import { applyConfigOverrides } from '@/data/config';
@@ -18,6 +18,8 @@ export interface SyncState {
   lastSyncAt?: string;
   lastError?: string;
   teacher: boolean;
+  /** 学校アカウントで入っているか(ログアウトは Chromebook 側で行うので、画面には出さない) */
+  googleAccount?: boolean;
 }
 
 export const syncStore = createStore<SyncState>({ status: hasServer() ? 'pending' : 'local', teacher: false });
@@ -26,7 +28,7 @@ const IDENTITY_KEY = 'mathquest.identity';
 const UNLOCK_CACHE_KEY = 'mathquest.unlock';
 
 /** 再送しても直らない失敗(合言葉ちがい・ロック中など)。送り続けるとロックを延ばすだけなので止める */
-const FATAL_CODES = new Set(['bad_pass', 'locked', 'not_found', 'bad_token', 'bad_save', 'save_too_large', 'bad_identity']);
+const FATAL_CODES = new Set(['bad_pass', 'locked', 'not_found', 'bad_token', 'bad_save', 'save_too_large', 'bad_identity', 'not_registered', 'not_in_roster', 'roster_conflict']);
 
 let identity: Identity | null = loadIdentity();
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -95,13 +97,13 @@ function clearTimer(): void {
 }
 
 /** 起動時: 解放状態と調整値をサーバーから取る。失敗したらキャッシュで続行 */
-export async function bootstrap(cls: string): Promise<{ classes: string[] } | null> {
+export async function bootstrap(cls: string): Promise<{ classes: string[]; account: AccountInfo } | null> {
   if (!hasServer()) return null;
   try {
     const r = await api.bootstrap(cls);
     applyUnlock(r.unlock);
     applyConfigOverrides(r.config);
-    return { classes: r.classes };
+    return { classes: r.classes, account: r.account ?? { mode: 'pass' } };
   } catch (e) {
     setStatus({ status: 'offline', lastError: String(e) });
     loadCachedUnlock();
@@ -119,9 +121,12 @@ export async function login(id: Identity, local: SaveData | null): Promise<{ sav
   generation++;
   clearTimer();
   dirty = false;
-  setIdentity(id);
+  // 学校アカウント方式では、クラス・番号は名簿で決まったものを使う(合言葉は持たない)
+  const who: Identity = r.account ? { class: r.account.class, number: r.account.number, pass: '' } : id;
+  if (r.account && ownerKey(who) !== ownerKey(id)) local = null; // 別の番号の端末セーブは候補にしない
+  setIdentity(who);
   applyUnlock(r.unlock);
-  setStatus({ status: 'synced', lastSyncAt: new Date().toISOString(), teacher: r.teacher, lastError: undefined });
+  setStatus({ status: 'synced', lastSyncAt: new Date().toISOString(), teacher: r.teacher, lastError: undefined, googleAccount: !!r.account });
   const server = r.save;
   // ローカルセーブがサーバーより新しければローカルを採用して押し上げる
   if (local && (!server || local.updatedAt > server.updatedAt)) {
@@ -138,7 +143,8 @@ export async function login(id: Identity, local: SaveData | null): Promise<{ sav
 export function resumeOffline(): void {
   generation++;
   clearTimer();
-  setStatus({ status: 'offline', lastError: undefined });
+  // 合言葉を持たない = 学校アカウント方式で入った人
+  setStatus({ status: 'offline', lastError: undefined, googleAccount: identity?.pass === '' });
   dirty = true;
 }
 
@@ -156,7 +162,7 @@ export async function logout(): Promise<void> {
   dirty = false;
   setIdentity(null);
   saveStore.set(null);
-  setStatus({ status: hasServer() ? 'pending' : 'local', teacher: false, lastError: undefined });
+  setStatus({ status: hasServer() ? 'pending' : 'local', teacher: false, lastError: undefined, googleAccount: false });
   if (!hasServer() || !id || !save || !needSend) return;
   try {
     await api.save(id, save);

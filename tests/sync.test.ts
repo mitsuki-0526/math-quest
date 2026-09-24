@@ -29,7 +29,7 @@ vi.stubGlobal('localStorage', {
 });
 
 const { createNewSave, saveStore, loadLocalSave, writeLocalSave } = await import('@/engine/save');
-const { login, logout, flush, scheduleSync, ownerKey, setIdentity } = await import('@/engine/sync');
+const { login, logout, flush, scheduleSync, ownerKey, setIdentity, getIdentity, syncStore } = await import('@/engine/sync');
 
 const A = { class: '1-1', number: '1', pass: 'aaa' };
 const B = { class: '1-1', number: '2', pass: 'bbb' };
@@ -80,6 +80,16 @@ describe('sync: アカウントの分離', () => {
     await sending;
     expect(saveStore.get()?.player.name).toBe('Bさん');
     expect(loadLocalSave(ownerKey(B))).toBeNull(); // B の端末セーブを A の内容で上書きしていない
+  });
+
+  it('学校アカウント方式では、サーバーが決めたクラス・番号で入り、合言葉は持たない', async () => {
+    // 登録済みの人は、画面で何を送っても登録されているクラス・番号になる
+    mock.login.mockResolvedValueOnce({ ok: true, isNew: false, save: saveOf('Cさん', '2026-09-23T01:00:00.000Z'), unlock: ['g1c1'], teacher: false, account: { class: '1-2', number: '9' } });
+    await login({ class: '1-2', number: '9', pass: '' }, null);
+    expect(getIdentity()).toEqual({ class: '1-2', number: '9', pass: '' });
+    expect(syncStore.get().googleAccount).toBe(true);
+    writeLocalSave(saveOf('Cさん', '2026-09-23T01:00:00.000Z'));
+    expect(loadLocalSave(ownerKey({ class: '1-2', number: '9', pass: '' }))?.player.name).toBe('Cさん');
   });
 
   it('競合の応答より、送信中にこの端末で進めた分が新しければ、そちらを残す', async () => {
