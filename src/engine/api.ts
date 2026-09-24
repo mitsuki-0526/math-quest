@@ -58,6 +58,15 @@ export type AccountInfo =
     }
   | { mode: 'pass' };
 
+/** 授業の状態(サーバーの応答すべてに付く)。open=受付中か、epoch=先生が「全員をタイトルに戻す」を押した時刻 */
+export interface SessionInfo {
+  open: boolean;
+  epoch: string;
+}
+
+/** サーバーの応答を受け取るたびに呼ばれる(授業の状態を見張る session.ts が登録する)。api.ts が上位に依存しないための口 */
+export const responseHooks: ((data: { session?: SessionInfo }) => void)[] = [];
+
 export interface BootstrapResult {
   ok: true;
   unlock: string[];
@@ -183,6 +192,8 @@ async function parse<T>(res: Response): Promise<T> {
 
 function checkResult<T>(data: unknown): T {
   if (!data || typeof data !== 'object') throw new ApiFailure('bad_response');
+  // 失敗の応答にも授業の状態は付いてくる(受付停止など)ので、判定より先に知らせる
+  for (const h of responseHooks) h(data as { session?: SessionInfo });
   if ((data as ApiError).ok === false) throw new ApiFailure((data as ApiError).error, (data as ApiError).detail);
   return data as T;
 }
@@ -201,6 +212,8 @@ export function saveBeacon(id: Identity, save: SaveData): boolean {
 
 export const api = {
   bootstrap: (cls: string) => get<BootstrapResult>({ action: 'bootstrap', class: cls }),
+  /** 授業の状態を確かめるだけ(遊んでいる間、ときどき呼ぶ) */
+  ping: () => get<{ ok: true; serverTime: string }>({ action: 'ping' }),
   login: (id: Identity) => post<LoginResult>({ action: 'login', class: id.class, number: id.number, pass: id.pass }),
   save: (id: Identity, save: SaveData) => post<SaveResult>({ action: 'save', class: id.class, number: id.number, pass: id.pass, save }),
   load: (id: Identity) => post<LoadResult>({ action: 'load', class: id.class, number: id.number, pass: id.pass }),
@@ -216,6 +229,8 @@ export function describeError(e: unknown): string {
       return '合言葉を 決めて 入れてください';
     case 'bad_token':
       return 'サーバーの設定が 合っていません(先生に 連絡)';
+    case 'closed':
+      return 'いまは 遊べない 時間です。先生の 合図を 待ってください';
     case 'not_in_roster':
       return 'この アカウントは 名簿に ありません。先生に 知らせてください';
     case 'roster_conflict':

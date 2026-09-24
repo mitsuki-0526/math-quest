@@ -28,7 +28,7 @@ const IDENTITY_KEY = 'mathquest.identity';
 const UNLOCK_CACHE_KEY = 'mathquest.unlock';
 
 /** 再送しても直らない失敗(合言葉ちがい・ロック中など)。送り続けるとロックを延ばすだけなので止める */
-const FATAL_CODES = new Set(['bad_pass', 'locked', 'not_found', 'bad_token', 'bad_save', 'save_too_large', 'bad_identity', 'not_registered', 'not_in_roster', 'roster_conflict']);
+const FATAL_CODES = new Set(['bad_pass', 'locked', 'not_found', 'bad_token', 'bad_save', 'save_too_large', 'bad_identity', 'not_registered', 'not_in_roster', 'roster_conflict', 'closed']);
 
 let identity: Identity | null = loadIdentity();
 let timer: ReturnType<typeof setTimeout> | null = null;

@@ -8,6 +8,7 @@
  * 学校アカウント方式の再現: MOCK_EMAIL=s1@school.example で起動すると、その人が開いている扱いになる
  * (リクエストに __email を付けると、その回だけ別の人になる。テスト用)。
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
+ * 授業の管理(先生のメニューの代わり): GET ?action=__admin&op=reset|close|open&token=dev-token
  */
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
@@ -36,10 +37,18 @@ const ROSTER = new Map(
 const students = new Map();
 const hash = (pass, salt) => createHash('sha256').update(`${salt}:${pass}`).digest('hex');
 const key = (c, n) => `${c}|${n}`;
+/** 授業の状態(本物は config の open / session_epoch) */
+const session = { open: true, epoch: '' };
 
 function handle(action, p) {
   if (p.token !== TOKEN) return { ok: false, error: 'bad_token' };
   if (action === 'ping') return { ok: true, serverTime: new Date().toISOString() };
+  if (action === '__admin') {
+    if (p.op === 'reset') session.epoch = new Date().toISOString();
+    if (p.op === 'close') session.open = false;
+    if (p.op === 'open') session.open = true;
+    return { ok: true };
+  }
   const email = String(p.__email ?? MOCK_EMAIL).toLowerCase();
   if (action === 'bootstrap') {
     let account = { mode: 'pass' };
@@ -52,11 +61,15 @@ function handle(action, p) {
     }
     return { ok: true, unlock: UNLOCK, classes: CLASSES, config: { 'battle.hintsPerNode': 3 }, serverTime: new Date().toISOString(), account };
   }
-  if (email) return handleAccount(action, p, email);
+  if (email) {
+    if (!TEACHERS.includes(email) && !session.open) return { ok: false, error: 'closed' };
+    return handleAccount(action, p, email);
+  }
   const cls = String(p.class ?? '').trim();
   const num = String(p.number ?? '').trim();
   const pass = String(p.pass ?? '');
   if (!cls || !num) return { ok: false, error: 'missing_identity' };
+  if (cls !== 'teacher' && !session.open) return { ok: false, error: 'closed' };
   const teacher = cls === 'teacher' && pass === TEACHER_PASS;
   if (cls === 'teacher' && !teacher) return { ok: false, error: 'bad_pass' };
   const k = key(cls, num);
@@ -120,9 +133,10 @@ const server = createServer((req, res) => {
   const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Content-Type': 'application/json' };
   if (req.method === 'OPTIONS') return res.writeHead(204, cors).end();
   const url = new URL(req.url, `http://${req.headers.host}`);
+  // 本物と同じく、どの応答にも授業の状態を付ける
   const reply = (obj) => {
     res.writeHead(200, cors);
-    res.end(JSON.stringify(obj));
+    res.end(JSON.stringify({ ...obj, session }));
   };
   if (req.method === 'GET') {
     const p = Object.fromEntries(url.searchParams.entries());

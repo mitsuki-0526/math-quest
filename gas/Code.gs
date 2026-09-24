@@ -27,7 +27,12 @@
  *   config   : key | value
  *   log      : time | action | class | number | note (エラーと主要イベントだけ)
  *
- * rpc(JSON 文字列) → JSON 文字列:
+ * 授業の管理(スプレッドシートの「MathQuest」メニュー):
+ *   - 全員をタイトルに戻す: config の session_epoch を今の時刻にする。開いているゲームは保存してタイトルに戻る
+ *   - 受付を停止/再開: config の open。停止中は生徒のログイン・保存を断る(先生は対象外)
+ *   - open_days(例: 月火水木金)・open_hours(例: 08:30-15:40)を書くと、その曜日・時間だけ受付中になる
+ *
+ * rpc(JSON 文字列) → JSON 文字列(どの応答にも session: { open, epoch } が付く):
  *   { action:'bootstrap', class }                  → { ok, unlock, classes, config, serverTime, account }
  *        account = { mode:'google', teacher, registered: {class, number} | null(名簿にない), player: {name, level} | null, error? } または { mode:'pass' }
  *   { action:'login', class, number, pass }        → { ok, isNew, save, unlock, teacher, account? }
@@ -66,6 +71,12 @@ function setup() {
     cfg.appendRow(['teachers', '']); // 先生として扱う学校アカウント(カンマ区切り)。スクリプトの持ち主は書かなくても先生
     cfg.appendRow(['note', '数値の調整値(battle.baseDamage など)を key=値 で追加するとゲーム側の config を上書きします']);
   }
+  // 後の版で足した設定。すでにあるキーは変えない
+  ensureConfig('teachers', '');
+  ensureConfig('open', true); // FALSE にすると生徒は入れない(メニューの「受付を停止する」)
+  ensureConfig('open_days', ''); // 受付する曜日(例: 月火水木金)。空なら毎日
+  ensureConfig('open_hours', ''); // 受付する時間(例: 08:30-12:30,13:20-15:40)。空なら一日中
+  ensureConfig('session_epoch', ''); // メニューの「全員をタイトルに戻す」で書き換わる
   var roster = ss.getSheetByName('roster');
   // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
   roster.getRange('B:C').setNumberFormat('@');
@@ -77,6 +88,83 @@ function setup() {
     un.getRange(2, 2, 1, 7).insertCheckboxes();
   }
   Logger.log('セットアップ完了。デプロイして URL を生徒に配ってください。teacher_pass は先生用の合言葉です(好きな値に変えてよい)。');
+}
+
+// ------------------------------------------------------------------ 授業の管理(先生のメニュー)
+
+/** スプレッドシートを開いたときに「MathQuest」メニューを出す */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('MathQuest')
+    .addItem('全員をタイトルに戻す', 'menuResetSessions')
+    .addSeparator()
+    .addItem('受付を停止する(生徒は入れない)', 'menuClose')
+    .addItem('受付を再開する', 'menuOpen')
+    .addToUi();
+}
+
+function menuResetSessions() {
+  setConfig('session_epoch', literal(new Date().toISOString()));
+  logRow('reset_sessions', '', '', '');
+  SpreadsheetApp.getActiveSpreadsheet().toast('開いているゲームは 2分以内に 保存して タイトルに 戻ります', 'MathQuest');
+}
+
+function menuClose() {
+  setConfig('open', false);
+  logRow('close', '', '', '');
+  SpreadsheetApp.getActiveSpreadsheet().toast('受付を停止しました。開いているゲームは 2分以内に タイトルに 戻ります(先生は入れます)', 'MathQuest');
+}
+
+function menuOpen() {
+  setConfig('open', true);
+  logRow('open', '', '', '');
+  var note = isOpenNow(readConfig()) ? '' : '(ただし open_days / open_hours の時間外なので、まだ入れません)';
+  SpreadsheetApp.getActiveSpreadsheet().toast('受付を再開しました' + note, 'MathQuest');
+}
+
+/** いま生徒を受け付けるか(open と、曜日・時間の設定) */
+function isOpenNow(cfg) {
+  if (cfg.open === false || String(cfg.open).trim().toUpperCase() === 'FALSE') return false;
+  var tz = Session.getScriptTimeZone();
+  var now = new Date();
+  var days = String(cfg.open_days || '').trim();
+  if (days) {
+    var d = Number(Utilities.formatDate(now, tz, 'u')); // 1=月 … 7=日
+    if (days.indexOf('月火水木金土日'.charAt(d - 1)) < 0) return false;
+  }
+  var ranges = parseHours(cfg.open_hours);
+  // 書き方をまちがえた範囲は無視する(打ちまちがいで一日中閉まらないように)
+  if (ranges.length) {
+    var hm = Utilities.formatDate(now, tz, 'HH:mm');
+    var inside = ranges.some(function (r) {
+      return hm >= r[0] && hm < r[1];
+    });
+    if (!inside) return false;
+  }
+  return true;
+}
+
+/** "08:30-12:30,13:20-15:40" → [['08:30','12:30'], ['13:20','15:40']] */
+function parseHours(v) {
+  var out = [];
+  String(v || '')
+    .split(/[,、]/)
+    .forEach(function (part) {
+      var m = part.trim().match(/^(\d{1,2}):(\d{2})\s*[-~〜ー]\s*(\d{1,2}):(\d{2})$/);
+      if (!m) return;
+      var pad = function (h) {
+        return (h.length === 1 ? '0' : '') + h;
+      };
+      out.push([pad(m[1]) + ':' + m[2], pad(m[3]) + ':' + m[4]]);
+    });
+  return out;
+}
+
+/** ゲームに知らせる授業の状態。epoch が変わったら、開いているゲームはタイトルに戻る */
+function sessionInfo() {
+  var cfg = readConfig();
+  var e = cfg.session_epoch;
+  return { open: isOpenNow(cfg), epoch: e instanceof Date ? e.toISOString() : String(e || '') };
 }
 
 // ------------------------------------------------------------------ 入口
@@ -114,7 +202,9 @@ function rpc(text) {
     return JSON.stringify({ ok: false, error: 'bad_json' });
   }
   try {
-    return JSON.stringify(handle(body));
+    var res = handle(body);
+    res.session = sessionInfo();
+    return JSON.stringify(res);
   } catch (err) {
     logRow('error', body['class'], body.number, String(err));
     return JSON.stringify({ ok: false, error: 'server_error' });
@@ -126,7 +216,10 @@ function handle(body) {
   if (body.action === 'ping') return { ok: true, serverTime: new Date().toISOString() };
 
   var email = currentEmail();
-  if (email) return handleAccount(email, body);
+  if (email) {
+    if (!isTeacherEmail(email) && !isOpenNow(readConfig())) return { ok: false, error: 'closed' };
+    return handleAccount(email, body);
+  }
 
   // ここから合言葉方式(アカウントが取れない環境のための予備)
   var cls = String(body['class'] || '').trim();
@@ -135,6 +228,7 @@ function handle(body) {
   if (!cls || !num) return { ok: false, error: 'missing_identity' };
   // クラス・番号は短い文字列だけを受け付ける(シートに書くので、長文や数式を持ち込ませない)
   if (cls.length > 20 || num.length > 10 || pass.length > 64) return { ok: false, error: 'bad_identity' };
+  if (cls !== TEACHER_CLASS && !isOpenNow(readConfig())) return { ok: false, error: 'closed' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -405,11 +499,35 @@ function unlockFor(cls, teacher) {
   return out;
 }
 
+/** 1 回の実行(= 1 回の通信)の中では設定を読み直さない。シートの読み取りは遅いので */
+var configCache = null;
+
 function readConfig() {
+  if (configCache) return configCache;
   var values = sheet('config').getDataRange().getValues();
   var cfg = {};
   for (var i = 1; i < values.length; i++) if (values[i][0]) cfg[String(values[i][0]).trim()] = values[i][1];
+  configCache = cfg;
   return cfg;
+}
+
+/** 設定を書く(キーがなければ行を足す) */
+function setConfig(k, v) {
+  var sh = sheet('config');
+  var keys = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
+  configCache = null;
+  for (var i = 1; i < keys.length; i++) {
+    if (String(keys[i][0]).trim() === k) {
+      sh.getRange(i + 1, 2).setValue(v);
+      return;
+    }
+  }
+  sh.appendRow([k, v]);
+}
+
+/** 設定のキーがなければ既定値で足す */
+function ensureConfig(k, v) {
+  if (!(k in readConfig())) setConfig(k, v);
 }
 
 /** config シートのうち "battle.xxx" のようにドットを含むキーをゲームの調整値として返す */

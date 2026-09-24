@@ -5,6 +5,8 @@ import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, t
 import { pushScene, resetScenes } from '@/engine/scenes';
 import { hasServer, describeError, isNetworkError, ApiFailure, type AccountInfo, type Identity } from '@/engine/api';
 import { bootstrap, getIdentity, login, ownerKey, resumeOffline, scheduleSync } from '@/engine/sync';
+import { markEntered, sessionStore } from '@/engine/session';
+import { useStore } from '@/engine/store';
 import { DEFAULT_PLAYER_NAME, PLAYER_NAME_MAX, playerLooks } from '@/data/characters';
 import type { PlayerLook } from '@/engine/save';
 
@@ -23,6 +25,9 @@ type Stage = 'loading' | 'google' | 'login' | 'offline' | 'name' | 'local';
 
 export function TitleScene() {
   const remembered = getIdentity();
+  const session = useStore(sessionStore);
+  // 受付停止中(先生はそれでも入れるので、先生と分かっているときは止めない)
+  const closed = session.info?.open === false;
   const [stage, setStage] = useState<Stage>(hasServer() ? 'loading' : 'local');
   const [account, setAccount] = useState<Extract<AccountInfo, { mode: 'google' }> | null>(null);
   const [classes, setClasses] = useState<string[]>([]);
@@ -69,12 +74,14 @@ export function TitleScene() {
   const nameOk = trimmedName.length > 0 && trimmedName.length <= PLAYER_NAME_MAX;
 
   function enterGame(save: SaveData) {
+    markEntered();
     saveStore.set(save);
     writeLocalSave(save);
     resetScenes({ kind: 'map' });
   }
 
   function startPrologue(playerName: string) {
+    markEntered();
     startNewGame(playerName, look);
     scheduleSync(0);
     resetScenes({ kind: 'map' });
@@ -138,6 +145,15 @@ export function TitleScene() {
           <p class="sub">はじまりの国 プリマ</p>
         </div>
 
+        {session.notice && <p class="note">{session.notice}</p>}
+        {closed &&
+          stage !== 'local' &&
+          (account?.teacher ? (
+            <p class="note">受付停止中です(生徒は 入れません。先生は 入れます)</p>
+          ) : (
+            <p class="warn">いまは 受付停止中です(遊べない 時間)。先生の 合図を 待ってください</p>
+          ))}
+
         {stage === 'loading' && <p class="muted">つないでいます…</p>}
 
         {stage === 'google' && account && (
@@ -151,9 +167,13 @@ export function TitleScene() {
                 </p>
                 {!account.teacher && <p class="muted">自分では ない ときは、押さずに 先生に 知らせてください</p>}
                 {error && <p class="warn">{error}</p>}
-                <Button primary autoFocus disabled={busy} onClick={onAccountLogin}>
-                  {busy ? 'つないでいます…' : 'ぼうけんへ'}
-                </Button>
+                {closed && !account.teacher ? (
+                  <Button onClick={() => void connect()}>もう一度 つなぐ</Button>
+                ) : (
+                  <Button primary autoFocus disabled={busy} onClick={onAccountLogin}>
+                    {busy ? 'つないでいます…' : 'ぼうけんへ'}
+                  </Button>
+                )}
               </>
             ) : (
               <>
