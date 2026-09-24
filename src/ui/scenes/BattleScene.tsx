@@ -26,7 +26,7 @@ import { config } from '@/data/config';
 import { grade1 } from '@/data/grade1/chapters';
 import { getEnemy } from '@/data/grade1/enemies';
 import { getItem } from '@/data/grade1/items';
-import { getAsset } from '@/assets/manifest';
+import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
 import '@/data/grade1/problems';
@@ -67,7 +67,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   const [menu, setMenu] = useState<'none' | 'item'>('none');
   const [hintText, setHintText] = useState<string | null>(null);
   const [explain, setExplain] = useState<{ problem: Problem; note?: string; timeout: boolean } | null>(null);
-  const [result, setResult] = useState<{ exp: number; gold: number; levelUps: number; item?: string; goldLost?: number; perks?: Perk[]; next?: Perk; quest?: { done: boolean; exp: number; gold: number } } | null>(null);
+  const [result, setResult] = useState<{ exp: number; gold: number; levelUps: number; overflowGold?: number; cap?: number; item?: string; goldLost?: number; perks?: Perk[]; next?: Perk; quest?: { done: boolean; exp: number; gold: number } } | null>(null);
   const [tutorialSaid, setTutorialSaid] = useState<{ correct: boolean; wrong: boolean }>({ correct: false, wrong: false });
   const askedAt = useRef<number>(Date.now());
   /** タイマーから呼ぶ時間切れ処理。毎回の描画で最新のものに差し替える */
@@ -233,6 +233,8 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     const exp = Math.round(final.totals.exp * (review ? config.review.expMul * ps.practiceMul : 1));
     const gold = Math.round(final.totals.gold * (review ? config.review.goldMul : ps.goldMul));
     let levelUps = 0;
+    let overflowGold = 0;
+    let cap = Infinity;
     let firstClear = false;
     let perksGained: Perk[] = [];
     let quest: { done: boolean; exp: number; gold: number } | undefined;
@@ -245,7 +247,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
         quest = { done: true, exp: config.daily.rewardExp, gold: config.daily.rewardGold };
         d.player.gold += quest.gold;
       }
-      levelUps = gainExp(d, exp + (quest?.exp ?? 0));
+      ({ levelUps, overflowGold, cap } = gainExp(d, exp + (quest?.exp ?? 0)));
       perksGained = perksGainedBetween(before, d.player.level);
       d.player.gold += gold;
       firstClear = !tutorial && !review && !d.progress.clearedNodes.includes(nodeId);
@@ -255,7 +257,19 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     });
     setState(final);
     const after = saveStore.get()!;
-    setResult({ exp, gold, levelUps, item: firstClear ? node?.reward?.item : undefined, perks: perksGained, next: nextPerk(after.player.level), quest });
+    const next = nextPerk(after.player.level);
+    setResult({
+      exp,
+      gold,
+      levelUps,
+      overflowGold,
+      cap,
+      item: firstClear ? node?.reward?.item : undefined,
+      perks: perksGained,
+      // 上限より先の力は、今は取れないので出さない(代わりに上限の案内を出す)
+      next: next && next.level <= cap ? next : undefined,
+      quest,
+    });
   }
 
   function leaveAfterResult() {
@@ -321,9 +335,18 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   return (
     <div class="scene rpg-battle">
       <div class={`battlefield ${shake ? 'shake' : ''}`} key={`field-${shake}`}>
-        <div class="battlefield-bg" aria-hidden="true">
-          <span class="battlefield-bg-emoji">{bg.emoji}</span>
-        </div>
+        {bg.path ? (
+          // 道中の背景画像。少し暗くして、敵と窓を目立たせる
+          <div
+            class="battlefield-bg has-image"
+            aria-hidden="true"
+            style={{ backgroundImage: `linear-gradient(180deg, rgba(8, 10, 20, 0.2), rgba(8, 10, 20, 0.55)), url(${assetUrl(bg.path)})` }}
+          />
+        ) : (
+          <div class="battlefield-bg" aria-hidden="true">
+            <span class="battlefield-bg-emoji">{bg.emoji}</span>
+          </div>
+        )}
 
         <div class="rpg-window msg-window" aria-live="polite">
           {state.log.slice(-3).map((line, i, arr) => (
@@ -544,6 +567,11 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                 {result.levelUps > 0 && (
                   <p class="levelup">
                     ✨ レベルが {result.levelUps} 上がって Lv{save.player.level} になった! HP が 全回復した
+                  </p>
+                )}
+                {!!result.overflowGold && (
+                  <p class="muted">
+                    この章の レベル上限(Lv{result.cap})に 達しているので、けいけんちは <b>{result.overflowGold}</b> G に なった。先の章が 開くと、もっと 強くなれる
                   </p>
                 )}
                 {result.perks?.map((pk) => (

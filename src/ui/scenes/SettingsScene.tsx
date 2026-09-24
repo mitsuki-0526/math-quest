@@ -1,4 +1,4 @@
-import { popScene, resetScenes } from '@/engine/scenes';
+import { popScene, pushScene, resetScenes } from '@/engine/scenes';
 import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { Button, Panel } from '@/ui/components/Ui';
@@ -72,6 +72,7 @@ export function SettingsScene() {
         </div>
         <div class="row">
           <Button onClick={popScene}>◀ もどる</Button>
+          {hasServer() && <Button onClick={() => pushScene({ kind: 'feedback' })}>✉ 感想を 送る</Button>}
           <Button onClick={() => resetScenes({ kind: 'title' })}>タイトルへ</Button>
         </div>
       </Panel>

@@ -1,8 +1,10 @@
 /**
  * 素材マニフェスト(要件 F91)。素材ID → 画像パス と、画像がないときのプレースホルダ(絵文字)。
- * 画像は public/assets/ 以下に置き、ここに path を足すだけで差し替わる。
+ * 画像は scripts/process_assets.py が public/assets/ に書き出し、paths.json(ID → パス)に載せる。
+ * ここに path を書かなくても、paths.json にあれば差し替わる。
  * path が未設定/読み込み失敗なら <Sprite> が emoji を描く。
  */
+import generatedPaths from './paths.json';
 export interface AssetEntry {
   /** 画像の相対パス(base からの相対)。未設定ならプレースホルダ */
   path?: string;
@@ -10,6 +12,10 @@ export interface AssetEntry {
   emoji: string;
   /** 表示上の説明(デバッグ用) */
   label: string;
+  /** 自分の画像がないときに使う、別の素材 ID の画像(背景の使い回し。docs/assets.md §5.3) */
+  alias?: string;
+  /** 画像の上に重ねる色(夕方など。CSS の色) */
+  tint?: string;
 }
 
 export const assetManifest: Record<string, AssetEntry> = {
@@ -77,85 +83,86 @@ export const assetManifest: Record<string, AssetEntry> = {
   enemy_apostle: { emoji: '🕯️', label: '歪みの使徒' },
 
   // --- 背景 ---
+  // alias = 自分の絵がないときに使う絵。背景は章ごとに 3 枚(拠点・道中・碑)だけ作って使い回す(docs/assets.md §5.3)
   bg_title: { emoji: '🏰', label: 'タイトル' },
   bg_village_square: { emoji: '🏘️', label: 'はじまりの村' },
-  bg_village_shop: { emoji: '🛒', label: 'テオ商店' },
-  bg_village_bridge: { emoji: '🌉', label: '村はずれの橋' },
-  bg_village_elder: { emoji: '🏠', label: '村長の家' },
-  bg_forest_entrance: { emoji: '🌲', label: '森の入口' },
+  bg_village_shop: { emoji: '🛒', label: 'テオ商店', alias: 'bg_village_square' },
+  bg_village_bridge: { emoji: '🌉', label: '村はずれの橋', alias: 'bg_village_square' },
+  bg_village_elder: { emoji: '🏠', label: '村長の家', alias: 'bg_village_square' },
+  bg_forest_entrance: { emoji: '🌲', label: '森の入口', alias: 'bg_forest_road' },
   bg_forest_road: { emoji: '🌳', label: '森の小道' },
-  bg_forest_marsh: { emoji: '🌿', label: '符号の湿地' },
-  bg_forest_cave: { emoji: '🕳️', label: '隠し洞窟' },
-  bg_forest_stone: { emoji: '🪨', label: '絶対値の碑' },
-  bg_forest_valley: { emoji: '🏞️', label: '乗除の谷' },
-  bg_forest_cliff: { emoji: '⛰️', label: '累乗の崖' },
+  bg_forest_marsh: { emoji: '🌿', label: '符号の湿地', alias: 'bg_forest_road' },
+  bg_forest_cave: { emoji: '🕳️', label: '隠し洞窟', alias: 'bg_forest_road' },
+  bg_forest_stone: { emoji: '🪨', label: '絶対値の碑', alias: 'bg_forest_shrine' },
+  bg_forest_valley: { emoji: '🏞️', label: '乗除の谷', alias: 'bg_forest_road' },
+  bg_forest_cliff: { emoji: '⛰️', label: '累乗の崖', alias: 'bg_forest_road' },
   bg_forest_shrine: { emoji: '🗿', label: '符号の碑' },
 
   // --- 第2章の背景 ---
-  bg_plain_gate: { emoji: '🚪', label: '平原の関所' },
+  bg_plain_gate: { emoji: '🚪', label: '平原の関所', alias: 'bg_plain_village' },
   bg_plain_village: { emoji: '🏡', label: '羊飼いの集落' },
-  bg_plain_windmill: { emoji: '🌬️', label: '風車の丘' },
-  bg_plain_sheepfold: { emoji: '🐑', label: '羊の囲い' },
+  bg_plain_windmill: { emoji: '🌬️', label: '風車の丘', alias: 'bg_plain_road' },
+  bg_plain_sheepfold: { emoji: '🐑', label: '羊の囲い', alias: 'bg_plain_village' },
   bg_plain_road: { emoji: '🌾', label: '草原の道' },
-  bg_plain_well: { emoji: '🪣', label: '古い井戸' },
-  bg_plain_stonewall: { emoji: '🧱', label: '石垣' },
+  bg_plain_well: { emoji: '🪣', label: '古い井戸', alias: 'bg_plain_village' },
+  bg_plain_stonewall: { emoji: '🧱', label: '石垣', alias: 'bg_plain_road' },
   bg_plain_shrine: { emoji: '📜', label: '平原の碑' },
 
   // --- 第3章の背景 ---
-  bg_cave_gate: { emoji: '🕳️', label: '洞窟の入口' },
+  bg_cave_gate: { emoji: '🕳️', label: '洞窟の入口', alias: 'bg_cave_camp' },
   bg_cave_camp: { emoji: '🏕️', label: '野営地' },
-  bg_cave_entrance: { emoji: '🔦', label: '洞窟の入口' },
-  bg_cave_balance: { emoji: '⚖️', label: '第一の天秤' },
+  bg_cave_entrance: { emoji: '🔦', label: '洞窟の入口', alias: 'bg_cave_corridor' },
+  bg_cave_balance: { emoji: '⚖️', label: '第一の天秤', alias: 'bg_cave_corridor' },
   bg_cave_corridor: { emoji: '🚇', label: '移項の回廊' },
-  bg_cave_room: { emoji: '🏛️', label: 'かっこの部屋' },
-  bg_cave_spring: { emoji: '💧', label: '分数の泉' },
-  bg_cave_bridge: { emoji: '🌉', label: '比の橋' },
+  bg_cave_room: { emoji: '🏛️', label: 'かっこの部屋', alias: 'bg_cave_corridor' },
+  bg_cave_spring: { emoji: '💧', label: '分数の泉', alias: 'bg_cave_corridor' },
+  bg_cave_bridge: { emoji: '🌉', label: '比の橋', alias: 'bg_cave_corridor' },
   bg_cave_shrine: { emoji: '🗿', label: '洞窟の碑' },
 
   // --- 第4章の背景 ---
-  bg_lake_gate: { emoji: '⛰️', label: '湖への峠' },
+  bg_lake_gate: { emoji: '⛰️', label: '湖への峠', alias: 'bg_lake_town' },
   bg_lake_town: { emoji: '🏘️', label: '湖畔の町' },
-  bg_lake_pier: { emoji: '🛶', label: '水位計の桟橋' },
+  bg_lake_pier: { emoji: '🛶', label: '水位計の桟橋', alias: 'bg_lake_town' },
   bg_lake_islands: { emoji: '🏝️', label: '座標の浮島' },
-  bg_lake_mill: { emoji: '🎡', label: '水車小屋' },
-  bg_lake_fog: { emoji: '🌫️', label: '霧の沖' },
-  bg_lake_cape: { emoji: '🌊', label: '竜の岬' },
+  bg_lake_mill: { emoji: '🎡', label: '水車小屋', alias: 'bg_lake_town' },
+  bg_lake_fog: { emoji: '🌫️', label: '霧の沖', alias: 'bg_lake_islands' },
+  bg_lake_cape: { emoji: '🌊', label: '竜の岬', alias: 'bg_lake_islands' },
   bg_lake_shrine: { emoji: '🗿', label: '湖の碑' },
 
   // --- 第5章の背景 ---
-  bg_ruins_gate: { emoji: '🏛️', label: '遺跡の門前' },
+  bg_ruins_gate: { emoji: '🏛️', label: '遺跡の門前', alias: 'bg_ruins_camp' },
   bg_ruins_camp: { emoji: '⛺', label: '発掘隊のキャンプ' },
-  bg_ruins_door: { emoji: '🚪', label: '遺跡の門' },
-  bg_ruins_mural: { emoji: '🖼️', label: '壁画の間' },
+  bg_ruins_door: { emoji: '🚪', label: '遺跡の門', alias: 'bg_ruins_corridor' },
+  bg_ruins_mural: { emoji: '🖼️', label: '壁画の間', alias: 'bg_ruins_corridor' },
   bg_ruins_corridor: { emoji: '🪞', label: '対称の回廊' },
-  bg_ruins_plaza: { emoji: '⭕', label: 'おうぎ形の広場' },
-  bg_ruins_altar: { emoji: '📐', label: '作図の祭壇' },
-  bg_ruins_shrine_door: { emoji: '🔘', label: '遺跡の扉' },
+  bg_ruins_plaza: { emoji: '⭕', label: 'おうぎ形の広場', alias: 'bg_ruins_corridor' },
+  bg_ruins_altar: { emoji: '📐', label: '作図の祭壇', alias: 'bg_ruins_corridor' },
+  bg_ruins_shrine_door: { emoji: '🔘', label: '遺跡の扉', alias: 'bg_ruins_shrine' },
   bg_ruins_shrine: { emoji: '🗿', label: '遺跡の碑' },
 
   // --- 第6章の背景 ---
-  bg_mountain_gate: { emoji: '🏔️', label: '山の入口' },
+  bg_mountain_gate: { emoji: '🏔️', label: '山の入口', alias: 'bg_mountain_village' },
   bg_mountain_village: { emoji: '🏚️', label: '石切り場の村' },
-  bg_mountain_foot: { emoji: '🪨', label: '山の麓' },
-  bg_mountain_cave: { emoji: '📦', label: '展開図の洞' },
+  bg_mountain_foot: { emoji: '🪨', label: '山の麓', alias: 'bg_mountain_village' },
+  bg_mountain_cave: { emoji: '📦', label: '展開図の洞', alias: 'bg_mountain_ridge' },
   bg_mountain_ridge: { emoji: '🗻', label: '角柱の尾根' },
-  bg_mountain_peak: { emoji: '⛰️', label: '円錐の峰' },
-  bg_mountain_sphere: { emoji: '⛩️', label: '球の祠' },
-  bg_mountain_rocks: { emoji: '🪨', label: '投影図の岩場' },
+  bg_mountain_peak: { emoji: '⛰️', label: '円錐の峰', alias: 'bg_mountain_ridge' },
+  bg_mountain_sphere: { emoji: '⛩️', label: '球の祠', alias: 'bg_mountain_ridge' },
+  bg_mountain_rocks: { emoji: '🪨', label: '投影図の岩場', alias: 'bg_mountain_ridge' },
   bg_mountain_summit: { emoji: '🏔️', label: '山頂の碑' },
 
   // --- 第7章の背景 ---
-  bg_tower_gate: { emoji: '🗼', label: '記録の塔の門' },
+  bg_tower_gate: { emoji: '🗼', label: '記録の塔の門', alias: 'bg_tower_inn' },
   bg_tower_inn: { emoji: '🏨', label: '塔守の宿' },
-  bg_tower_entrance: { emoji: '🚪', label: '塔の入口' },
+  bg_tower_entrance: { emoji: '🚪', label: '塔の入口', alias: 'bg_tower_records' },
   bg_tower_records: { emoji: '📚', label: '記録の間' },
-  bg_tower_stairs: { emoji: '🌀', label: '度数の階段' },
-  bg_tower_archive: { emoji: '📜', label: '古文書の間' },
-  bg_tower_corridor: { emoji: '🕯️', label: '代表値の回廊' },
-  bg_tower_window: { emoji: '🪟', label: '近似値の窓' },
+  bg_tower_stairs: { emoji: '🌀', label: '度数の階段', alias: 'bg_tower_records' },
+  bg_tower_archive: { emoji: '📜', label: '古文書の間', alias: 'bg_tower_records' },
+  bg_tower_corridor: { emoji: '🕯️', label: '代表値の回廊', alias: 'bg_tower_records' },
+  bg_tower_window: { emoji: '🪟', label: '近似値の窓', alias: 'bg_tower_records' },
   bg_tower_top: { emoji: '🌌', label: '塔の最上階' },
   bg_black: { emoji: '⬛', label: '暗転' },
-  bg_village_square_evening: { emoji: '🌇', label: 'はじまりの村(夕方)' },
+  bg_village_square_evening: { emoji: '🌇', label: 'はじまりの村(夕方)', alias: 'bg_village_square', tint: 'rgba(255, 120, 60, 0.28)' },
 
   // --- アイコン ---
   icon_node_town: { emoji: '🏘️', label: '村' },
@@ -166,8 +173,21 @@ export const assetManifest: Record<string, AssetEntry> = {
   icon_locked: { emoji: '🔒', label: '未解放' },
 };
 
+const paths: Record<string, string> = generatedPaths;
+
+/** 素材 ID の画像パス(自分の絵 → 使い回し先の絵の順に探す) */
+function pathOf(id: string, entry: AssetEntry | undefined): string | undefined {
+  if (!entry) return undefined;
+  const own = entry.path ?? paths[id];
+  if (own || !entry.alias) return own;
+  const target = assetManifest[entry.alias];
+  return target?.path ?? paths[entry.alias];
+}
+
 export function getAsset(id: string): AssetEntry {
-  return assetManifest[id] ?? { emoji: '❔', label: id };
+  const entry = assetManifest[id] ?? { emoji: '❔', label: id };
+  const path = pathOf(id, entry);
+  return path ? { ...entry, path } : entry;
 }
 
 /**

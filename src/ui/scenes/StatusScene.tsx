@@ -1,7 +1,7 @@
 import { popScene } from '@/engine/scenes';
 import { saveStore } from '@/engine/save';
 import { useStore } from '@/engine/store';
-import { playerStats } from '@/engine/player';
+import { playerStats, levelCap } from '@/engine/player';
 import { expToNext } from '@/data/config';
 import { getItem } from '@/data/grade1/items';
 import { perks } from '@/data/skills';
@@ -43,6 +43,7 @@ export function StatusScene() {
   const p = save.player;
   const st = playerStats(save);
   const next = expToNext(p.level);
+  const cap = levelCap();
   const templates = allTemplates();
   const rows = templates
     .map((t) => ({ t, s: save.stats[t.id] }))
@@ -94,7 +95,13 @@ export function StatusScene() {
               <tr>
                 <td>次のLvまで</td>
                 <td colSpan={3}>
-                  <Bar value={p.exp} max={next} color="var(--sky)" label="経験値" /> {p.exp}/{next}
+                  {p.level >= cap ? (
+                    <span class="muted">レベル上限(Lv{cap})。先の章が 開くと 上がる</span>
+                  ) : (
+                    <>
+                      <Bar value={p.exp} max={next} color="var(--sky)" label="経験値" /> {p.exp}/{next}
+                    </>
+                  )}
                 </td>
               </tr>
             </tbody>

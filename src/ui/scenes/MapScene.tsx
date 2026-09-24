@@ -13,6 +13,7 @@ import { syncStore } from '@/engine/sync';
 import { practiceTemplates } from '@/engine/practice';
 import { ensureDailyQuest } from '@/engine/adaptive';
 import { nextPerk } from '@/data/skills';
+import { levelCap } from '@/engine/player';
 import '@/data/grade1/problems';
 import { getTemplate } from '@/math/template';
 
@@ -59,9 +60,19 @@ export function MapScene() {
     if (sceneStack.get().at(-1)?.kind !== 'map') return;
     pushScene({ kind: 'talk', scriptIds: [chapter.intro], then: { type: 'pop' }, doneFlag: flag });
   }, [chapterId, save?.flags]);
+  // 章をクリアしたのに次の章がまだ開いていなければ、「体験版はここまで」を 1 回だけ出す
+  useEffect(() => {
+    if (!chapter || !save) return;
+    if (save.flags[`chapterEnd:${chapter.id}`] || !save.progress.clearedChapters.includes(chapter.id)) return;
+    if (chapter.nextChapter && isChapterUnlocked(chapter.nextChapter)) return;
+    if (sceneStack.get().at(-1)?.kind !== 'map') return;
+    pushScene({ kind: 'trialEnd', chapterId: chapter.id });
+  }, [chapterId, save?.flags, save?.progress.clearedChapters.length]);
   if (!save || !chapter) return null;
   const daily = save.daily;
-  const perk = nextPerk(save.player.level);
+  // レベル上限より先の力は今は取れないので出さない(戦闘の結果画面と同じ扱い)
+  const perkNext = nextPerk(save.player.level);
+  const perk = perkNext && perkNext.level <= levelCap() ? perkNext : undefined;
 
   const selectedNode = chapter.nodes.find((n) => n.id === selected) ?? null;
   const selectedState = selectedNode ? nodeState(chapter, selectedNode, save) : null;

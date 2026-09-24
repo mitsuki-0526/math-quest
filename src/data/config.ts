@@ -40,6 +40,8 @@ export const config = {
     hpPerLevel: 8,
     attackPerLevel: 2,
     defensePerLevel: 1,
+    /** レベル上限に達したあとの経験値を、この割合でゴールドに変える */
+    overCapGoldRate: 0.5,
   },
   review: {
     /** 修練の泉の経験値倍率(練習を後押しするので 1.0。ゴールドだけ半分) */
@@ -52,6 +54,13 @@ export const config = {
     /** 達成報酬 */
     rewardExp: 60,
     rewardGold: 40,
+  },
+  game: {
+    /**
+     * 1 = 体験版(章クリア後に「体験版は ここまで」)。0 = 本番(「次の章は先生が開くまで」)。
+     * スプレッドシートの config に game.trialMode = 0 と書けば切り替わる
+     */
+    trialMode: 1,
   },
   adaptive: {
     /** 直近何問で判定するか */

@@ -35,20 +35,47 @@ export function playerStats(save: SaveData): PlayerStats & { hintBonus: number; 
   return { name: p.name, hp: p.hp, maxHp: p.maxHp, attack, defense, timeBonus, expMul, hintBonus, goldMul, practiceMul };
 }
 
-/** 経験値を加え、レベルアップを処理する。上がったレベル数を返す */
-export function gainExp(d: SaveData, exp: number): number {
+/**
+ * いまのレベル上限。解放されている章の中で一番高い上限(先生が章を開くと上がる)。
+ * 上限のある章が 1 つも解放されていなければ上限なし
+ */
+export function levelCap(): number {
+  const unlocked = new Set(unlockedChapters.get());
+  let cap = 0;
+  for (const c of grade1.chapters) if (unlocked.has(c.id) && c.levelCap) cap = Math.max(cap, c.levelCap);
+  return cap || Infinity;
+}
+
+export interface ExpResult {
+  /** 上がったレベル数 */
+  levelUps: number;
+  /** 上限に達していたので、ゴールドに変えた量 */
+  overflowGold: number;
+  /** いまのレベル上限 */
+  cap: number;
+}
+
+/** 経験値を加え、レベルアップを処理する。上限に達したら、超えた分はゴールドに変える */
+export function gainExp(d: SaveData, exp: number, cap: number = levelCap()): ExpResult {
   d.player.exp += exp;
-  let ups = 0;
-  while (d.player.exp >= expToNext(d.player.level)) {
+  let levelUps = 0;
+  while (d.player.level < cap && d.player.exp >= expToNext(d.player.level)) {
     d.player.exp -= expToNext(d.player.level);
     d.player.level += 1;
     d.player.maxHp += config.level.hpPerLevel;
     d.player.attack += config.level.attackPerLevel;
     d.player.defense += config.level.defensePerLevel;
     d.player.hp = d.player.maxHp; // レベルアップで全回復(ごほうび)
-    ups++;
+    levelUps++;
   }
-  return ups;
+  let overflowGold = 0;
+  if (d.player.level >= cap) {
+    // 上限では経験値をためない(先の章が開いたときに一気に上がらないように)。練習した分はゴールドで報いる
+    overflowGold = Math.floor(d.player.exp * config.level.overCapGoldRate);
+    d.player.gold += overflowGold;
+    d.player.exp = 0;
+  }
+  return { levelUps, overflowGold, cap };
 }
 
 export function addItem(d: SaveData, id: string, count = 1): void {

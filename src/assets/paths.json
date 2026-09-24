@@ -1,0 +1,18 @@
+{
+  "enemy_abs_golem": "assets/enemies/enemy_abs_golem.png",
+  "enemy_cross_hopper": "assets/enemies/enemy_cross_hopper.png",
+  "enemy_king_nega": "assets/enemies/enemy_king_nega.png",
+  "enemy_minus_slime": "assets/enemies/enemy_minus_slime.png",
+  "enemy_plusminus_bat": "assets/enemies/enemy_plusminus_bat.png",
+  "enemy_prime_bee": "assets/enemies/enemy_prime_bee.png",
+  "char_elder": "assets/characters/char_elder.png",
+  "char_pita": "assets/characters/char_pita.png",
+  "char_player": "assets/characters/char_player.png",
+  "char_player_boy": "assets/characters/char_player_boy.png",
+  "char_player_girl": "assets/characters/char_player_girl.png",
+  "char_teo": "assets/characters/char_teo.png",
+  "bg_forest_road": "assets/backgrounds/bg_forest_road.png",
+  "bg_forest_shrine": "assets/backgrounds/bg_forest_shrine.png",
+  "bg_title": "assets/backgrounds/bg_title.png",
+  "bg_village_square": "assets/backgrounds/bg_village_square.png"
+}

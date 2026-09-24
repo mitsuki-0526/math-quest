@@ -45,6 +45,11 @@ export interface ChapterDef {
   intro?: string;
   /** 章クリア時に解放候補となる次章ID */
   nextChapter?: string;
+  /**
+   * この章が解放されているときのレベル上限。上限は「解放されている章の中で一番高い値」。
+   * 1 つの章でレベルを上げすぎて、先の章で解く問題が少なくなる(敵がすぐ倒れる)のを防ぐ
+   */
+  levelCap?: number;
 }
 
 export interface GradeDef {

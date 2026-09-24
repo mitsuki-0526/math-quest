@@ -6,7 +6,7 @@ import { ScriptRunner, getScene, type ScriptEffect, type Step } from '@/engine/s
 import { addItem, equip, clearChapter } from '@/engine/player';
 import { characters, playerSprite, type CharacterId } from '@/data/characters';
 import type { FigureSpec } from '@/math/figure';
-import { getAsset } from '@/assets/manifest';
+import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 import { Figure } from '@/ui/components/Figure';
@@ -199,10 +199,18 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
   return (
     <div class="scene scene-talk" onClick={advance}>
       <div class="talk-stage">
-        <div class="talk-bg" style={{ opacity: 1 }}>
-          <span class="talk-bg-emoji">{bgAsset.emoji}</span>
-          <small>{bgAsset.label}</small>
-        </div>
+        {bgAsset.path ? (
+          // 背景画像: 全面に敷き、場所の名前は左上に小さく出す
+          <div class="talk-bg has-image" style={{ backgroundImage: `url(${assetUrl(bgAsset.path)})` }}>
+            {bgAsset.tint && <div class="talk-bg-tint" style={{ background: bgAsset.tint }} />}
+            <span class="talk-place">{bgAsset.label}</span>
+          </div>
+        ) : (
+          <div class="talk-bg" style={{ opacity: 1 }}>
+            <span class="talk-bg-emoji">{bgAsset.emoji}</span>
+            <small>{bgAsset.label}</small>
+          </div>
+        )}
         {figure && (
           <div class="talk-figure" onClick={(e) => e.stopPropagation()}>
             <Figure spec={figure} />

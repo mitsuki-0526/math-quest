@@ -23,7 +23,10 @@ export type Scene =
   /** doneFlag: 会話を最後まで見たときに立てるフラグ(途中で閉じたら次にまた見せる) */
   | { kind: 'talk'; scriptIds: string[]; then?: TalkThen; doneFlag?: string }
   | { kind: 'status' }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  /** 章をクリアしたが次の章がまだ開いていないとき(体験版の終わり) */
+  | { kind: 'trialEnd'; chapterId: string }
+  | { kind: 'feedback' };
 
 export type SceneKind = Scene['kind'];
 

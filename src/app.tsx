@@ -11,6 +11,8 @@ import { BattleScene } from '@/ui/scenes/BattleScene';
 import { TalkScene } from '@/ui/scenes/TalkScene';
 import { StatusScene } from '@/ui/scenes/StatusScene';
 import { SettingsScene } from '@/ui/scenes/SettingsScene';
+import { TrialEndScene } from '@/ui/scenes/TrialEndScene';
+import { FeedbackScene } from '@/ui/scenes/FeedbackScene';
 
 const SYNC_LABEL: Record<string, string> = {
   local: 'この端末に保存',
@@ -37,6 +39,10 @@ function renderScene(scene: Scene) {
       return <StatusScene />;
     case 'settings':
       return <SettingsScene />;
+    case 'trialEnd':
+      return <TrialEndScene chapterId={scene.chapterId} />;
+    case 'feedback':
+      return <FeedbackScene />;
   }
 }
 

@@ -390,7 +390,7 @@ export const enemies: Record<string, EnemyDef> = {
     name: '符号王ネガ',
     template: 'g1.sign.addsub',
     sprite: 'enemy_king_nega',
-    hp: 240,
+    hp: 320, // 試遊前の調整: 240 では 6〜8 問で倒れ、ボスとして短かった(Lv5〜6 で 10 問前後に)
     attack: 10,
     exp: 120,
     gold: 80,

@@ -5,3 +5,8 @@ dist/
 .DS_Store
 .env.local
 .env.*.local
+
+# 生成したままの素材(大きい)。加工後の public/assets/ だけをコミットする
+assets-src/
+# 画風くらべなどの一時的な確認用(コミットしない)
+public/assets/_preview/

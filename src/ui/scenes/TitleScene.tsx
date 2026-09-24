@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Sprite } from '@/ui/components/Sprite';
+import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button, Panel } from '@/ui/components/Ui';
 import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, type SaveData } from '@/engine/save';
 import { pushScene, resetScenes } from '@/engine/scenes';
@@ -136,11 +137,15 @@ export function TitleScene() {
 
   const who = (id: { class: string; number: string }) => (id.class === TEACHER_CLASS ? '先生' : `${id.class} ${id.number}番`);
 
+  // タイトルの一枚絵があれば画面の背景に敷く(なければ絵文字の紋章を出す)
+  const titleArt = getAsset('bg_title').path;
+
   return (
     <div class="scene scene-title">
+      {titleArt && <div class="title-backdrop" style={{ backgroundImage: `url(${assetUrl(titleArt)})` }} />}
       <Panel class="title-panel">
         <div class="title-logo">
-          <Sprite id="bg_title" size={96} />
+          {!titleArt && <Sprite id="bg_title" size={96} />}
           <h1>MathQuest</h1>
           <p class="sub">はじまりの国 プリマ</p>
         </div>

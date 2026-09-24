@@ -7,6 +7,7 @@ import type { GradeDef, ChapterDef } from '@/engine/types';
 const g1c1: ChapterDef = {
   id: 'g1c1',
   number: 1,
+  levelCap: 6,
   title: '符号の森',
   unit: '正の数と負の数',
   inscription: '負の数どうしの積は 正である',
@@ -90,6 +91,7 @@ const g1c1: ChapterDef = {
 const g1c2: ChapterDef = {
   id: 'g1c2',
   number: 2,
+  levelCap: 9,
   title: '名もなき者の平原',
   unit: '文字と式',
   inscription: '文字は どんな数の 代わりにも なれる',
@@ -152,6 +154,7 @@ const g1c2: ChapterDef = {
 const g1c3: ChapterDef = {
   id: 'g1c3',
   number: 3,
+  levelCap: 12,
   title: '未知の洞窟',
   unit: '方程式',
   inscription: '等式は 両辺に 同じことをしても 成り立つ',
@@ -225,6 +228,7 @@ const g1c3: ChapterDef = {
 const g1c4: ChapterDef = {
   id: 'g1c4',
   number: 4,
+  levelCap: 15,
   title: '水車の湖',
   unit: '比例と反比例',
   inscription: '比例では、x が 2倍、3倍になると、y も 2倍、3倍になる',
@@ -249,6 +253,7 @@ const g1c4: ChapterDef = {
 const g1c5: ChapterDef = {
   id: 'g1c5',
   number: 5,
+  levelCap: 18,
   title: '円の遺跡',
   unit: '平面図形',
   inscription: 'おうぎ形の 弧の長さと 面積は、中心角に 比例する',
@@ -273,6 +278,7 @@ const g1c5: ChapterDef = {
 const g1c6: ChapterDef = {
   id: 'g1c6',
   number: 6,
+  levelCap: 21,
   title: '立体の山',
   unit: '空間図形',
   inscription: '錐の体積は、底面と高さが 同じ 柱の 3分の1',
@@ -299,6 +305,7 @@ const g1c6: ChapterDef = {
 const g1c7: ChapterDef = {
   id: 'g1c7',
   number: 7,
+  levelCap: 24,
   title: '記録の塔',
   unit: 'データの活用',
   inscription: '平均だけでは、散らばりは 分からない',

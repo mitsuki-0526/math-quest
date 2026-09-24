@@ -380,6 +380,21 @@ img.sprite {
   justify-content: center;
   padding-top: 48px;
 }
+/* タイトルの一枚絵: 画面全体に敷き、下に向かって暗くして窓の文字を読みやすくする */
+.title-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+}
+.title-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 10, 20, 0.15), rgba(8, 10, 20, 0.55) 70%, rgba(8, 10, 20, 0.8));
+}
 .title-panel {
   width: 480px;
   text-align: center;
@@ -641,6 +656,16 @@ img.sprite {
   background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 26px);
   transform: perspective(300px) rotateX(55deg);
   transform-origin: top;
+}
+.battlefield-bg.has-image {
+  background-size: cover;
+  background-position: center 45%;
+  image-rendering: pixelated;
+}
+/* 画像があるときは、仮の地平線と地面の線は出さない */
+.battlefield-bg.has-image::before,
+.battlefield-bg.has-image::after {
+  display: none;
 }
 .battlefield-bg-emoji {
   position: absolute;
@@ -1125,6 +1150,32 @@ img.sprite {
   border-radius: var(--radius);
   color: rgba(255, 255, 255, 0.6);
 }
+/* 背景画像(ドット絵なのでぼかさずに拡大)。主役は絵の上 2/3 にあるので、少し上寄りで切り出す */
+.talk-bg.has-image {
+  inset: 0;
+  border: none;
+  border-radius: 0;
+  background-size: cover;
+  background-position: center 40%;
+  image-rendering: pixelated;
+}
+.talk-bg-tint {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+}
+.talk-place {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 10, 20, 0.55);
+  color: var(--parchment);
+  font-family: var(--font-pixel);
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+}
 .talk-actor {
   position: absolute;
   bottom: 0;
@@ -1136,8 +1187,16 @@ img.sprite {
   padding-bottom: 22px;
   background: radial-gradient(circle at 50% 100%, rgba(0, 0, 0, 0.35), transparent 70%);
 }
-.talk-actor .sprite-placeholder {
+.talk-actor .sprite-placeholder,
+.talk-actor img.sprite {
   animation: breathe 4s ease-in-out infinite;
+}
+/* 立ち絵の画像は縦長(2:3)なので、正方形の枠ではなく高さで大きさを決める(枠に合わせると小さくなる)。
+   <Sprite> は大きさを style で渡すので、ここだけ !important で上書きする */
+.talk-actor img.sprite {
+  width: auto !important;
+  height: 228px !important;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
 }
 @keyframes breathe {
   0%,
@@ -1719,6 +1778,109 @@ img.sprite {
   background: linear-gradient(180deg, #2a3350, #1f2740);
   color: var(--txt);
   cursor: pointer;
+}
+/* ---------- 体験版の終わり・感想 ---------- */
+.scene-trial-end,
+.scene-feedback {
+  display: flex;
+  justify-content: center;
+  padding-top: 24px;
+}
+.trial-end-panel,
+.feedback-panel {
+  width: 560px;
+  text-align: center;
+}
+.feedback-panel {
+  text-align: left;
+}
+.trial-end-kicker {
+  margin: 0;
+  color: var(--gold);
+  font-family: var(--font-pixel);
+  letter-spacing: 0.2em;
+}
+.trial-end-title {
+  margin: 4px 0 8px;
+  font-family: var(--font-serif-jp);
+  color: var(--gold-2);
+  letter-spacing: 0.08em;
+}
+.trial-end-record {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 14px 0;
+  padding: 12px;
+}
+.trial-end-record span {
+  display: block;
+  font-size: 0.8em;
+  color: var(--sub);
+}
+.trial-end-record b {
+  font-size: 1.15em;
+  color: var(--parchment);
+}
+.row.center {
+  justify-content: center;
+}
+.star-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.star-picker .star {
+  font-size: 30px;
+  line-height: 1;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--lock);
+  cursor: pointer;
+}
+.star-picker .star.on {
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(230, 194, 92, 0.5);
+}
+.star-picker .star:focus-visible {
+  outline: 2px solid var(--gold);
+  border-radius: var(--radius-sm);
+}
+.star-picker small {
+  margin-left: 8px;
+}
+.choice-row {
+  display: flex;
+  gap: 8px;
+}
+.feedback-panel textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--ink);
+  color: var(--txt);
+  font: inherit;
+}
+.feedback-panel .field {
+  display: block;
+  margin-bottom: 16px;
+}
+.feedback-panel .field > span {
+  display: block;
+  margin-bottom: 6px;
+}
+.feedback-panel .counter {
+  display: block;
+  text-align: right;
+}
+
+/* 見た目選びの立ち絵も縦長なので高さで合わせる */
+.look-option img.sprite {
+  width: auto !important;
+  height: 84px !important;
 }
 .look-option.on {
   border-color: var(--gold);

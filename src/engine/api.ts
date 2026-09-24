@@ -96,6 +96,17 @@ export interface LoadResult {
 }
 export type ApiError = { ok: false; error: string; detail?: string };
 
+/** 感想(体験版の試遊)。レベルや進み具合は画面側で自動で付ける */
+export interface FeedbackInput {
+  fun: number;
+  difficulty: 'easy' | 'ok' | 'hard';
+  comment: string;
+  level: number;
+  chapter: string;
+  answered: number;
+  correct: number;
+}
+
 export class ApiFailure extends Error {
   constructor(
     readonly code: string,
@@ -217,6 +228,8 @@ export const api = {
   login: (id: Identity) => post<LoginResult>({ action: 'login', class: id.class, number: id.number, pass: id.pass }),
   save: (id: Identity, save: SaveData) => post<SaveResult>({ action: 'save', class: id.class, number: id.number, pass: id.pass, save }),
   load: (id: Identity) => post<LoadResult>({ action: 'load', class: id.class, number: id.number, pass: id.pass }),
+  feedback: (id: Identity, feedback: FeedbackInput) =>
+    post<{ ok: true }>({ action: 'feedback', class: id.class, number: id.number, pass: id.pass, feedback }),
 };
 
 /** ユーザー向けの短い説明 */
@@ -229,6 +242,10 @@ export function describeError(e: unknown): string {
       return '合言葉を 決めて 入れてください';
     case 'bad_token':
       return 'サーバーの設定が 合っていません(先生に 連絡)';
+    case 'too_many':
+      return '感想は 少し 時間を あけてから 送ってね';
+    case 'bad_feedback':
+      return '感想の 内容を 確かめて、もう一度 送ってね';
     case 'closed':
       return 'いまは 遊べない 時間です。先生の 合図を 待ってください';
     case 'not_in_roster':

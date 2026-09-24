@@ -92,6 +92,7 @@ function handle(action, p) {
   if (!row) return { ok: false, error: 'not_found' };
   if (!auth(row)) return { ok: false, error: 'bad_pass' };
   if (action === 'save') return storeSave(row, p.save);
+  if (action === 'feedback') return storeFeedback(k, p.feedback);
   if (action === 'load') return { ok: true, save: row.save };
   return { ok: false, error: 'unknown_action' };
 }
@@ -117,7 +118,17 @@ function handleAccount(action, p, email) {
   if (!row) return { ok: false, error: 'not_registered' };
   if (action === 'save') return storeSave(row, p.save);
   if (action === 'load') return { ok: true, save: row.save };
+  if (action === 'feedback') return storeFeedback(k, p.feedback);
   return { ok: false, error: 'unknown_action' };
+}
+
+/** 感想(本物は feedback シート)。開発中はメモリに置き、コンソールに出す */
+const feedbacks = [];
+function storeFeedback(k, f) {
+  if (!f || !(f.fun >= 1 && f.fun <= 5) || !['easy', 'ok', 'hard'].includes(f.difficulty)) return { ok: false, error: 'bad_feedback' };
+  feedbacks.push({ time: new Date().toISOString(), who: k, ...f });
+  console.log('feedback', JSON.stringify(feedbacks.at(-1)));
+  return { ok: true };
 }
 
 function storeSave(row, save) {
