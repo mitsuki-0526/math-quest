@@ -137,6 +137,21 @@ describe('第3章 方程式', () => {
   });
 });
 
+describe('第4章 比例と反比例', () => {
+  it('変域が ★2(場面)・★3(y = ax の y の変域)に出る。★1 には出ない', () => {
+    for (const d of [1, 2, 3] as const) {
+      let n = 0;
+      each('g1.func.prop', d, (p) => {
+        if (!p.tags.includes('prop_domain')) return;
+        n++;
+        if (p.answer.kind === 'choice') expect(p.answer.options[p.answer.correct], p.promptText).toMatch(/leqq/);
+      });
+      if (d === 1) expect(n).toBe(0);
+      else expect(n).toBeGreaterThan(N / 6);
+    }
+  });
+});
+
 describe('第5章・第6章 図形', () => {
   it('おうぎ形 ★1: 半径は 3・4・6・8・12、中心角は 120° まで', () => {
     each('g1.geo.sector', 1, (p) => {
@@ -155,5 +170,13 @@ describe('第5章・第6章 図形', () => {
         else expect(r).toBeLessThanOrEqual(10);
       });
     }
+  });
+});
+
+describe('第7章 データの活用', () => {
+  it('確率(多数回の試行): 相対度数は 小数第 2 位まで、★2 は表つき、★3 の予想は整数', () => {
+    each('g1.data.prob', 1, (p) => expect(Math.abs(answerOf(p) * 100 - Math.round(answerOf(p) * 100)), p.promptText).toBeLessThan(1e-9));
+    each('g1.data.prob', 2, (p) => expect(p.figure?.kind).toBe('table'));
+    each('g1.data.prob', 3, (p) => expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true));
   });
 });

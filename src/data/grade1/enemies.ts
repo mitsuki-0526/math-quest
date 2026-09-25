@@ -380,17 +380,18 @@ export const enemies: Record<string, EnemyDef> = {
     hp: 90, attack: 14, exp: 52, gold: 25,
     lines: { appear: '中央値の司書が 眼鏡を 光らせた!', hit: '「並べ替え……されました……」', miss: '「並べ替えを、お忘れでは?」', defeat: '「眼鏡を 置いて 影に もどった」' },
   },
-  approx_owl: {
-    id: 'approx_owl', name: '近似値フクロウ', template: 'g1.data.approx', sprite: 'enemy_approx_owl',
+  // 2026-09-25: 近似値フクロウ(近似値は 3 年の内容)から差し替え。多数回の試行による確率
+  kimagure_owl: {
+    id: 'kimagure_owl', name: 'キマグレフクロウ', template: 'g1.data.prob', sprite: 'enemy_kimagure_owl',
     hp: 86, attack: 14, exp: 56, gold: 30,
-    lines: { appear: '近似値フクロウが 首を かしげた!', hit: '「ホゥ! 誤差、見抜かれた」', miss: '「その値、真の値かな〜?」', defeat: '「普通の フクロウに もどって 北へ 飛んだ」' },
+    lines: { appear: 'キマグレフクロウが 首を かしげた!', hit: '「ホゥ! 何百回も 試されたら かなわない」', miss: '「たった 数回で 決めちゃえ〜」', defeat: '「普通の フクロウに もどって 北へ 飛んだ」' },
   },
   apostle: {
     id: 'apostle', name: '歪みの使徒', template: 'g1.data.mean', sprite: 'enemy_apostle',
     hp: 520, attack: 16, exp: 400, gold: 300, boss: true,
     phases: [
       { untilHpRatio: 1, templates: ['g1.data.mean', 'g1.data.median'], line: '歪みの使徒「まず この 塔の 理を。代表値を 述べよ」' },
-      { untilHpRatio: 0.75, templates: ['g1.data.freq', 'g1.data.approx'], line: '歪みの使徒「柱の 形を 読め。数の 群れを、一つの 数に 押しこめずに」' },
+      { untilHpRatio: 0.75, templates: ['g1.data.freq', 'g1.data.prob'], line: '歪みの使徒「柱の 形を 読め。数の 群れを、一つの 数に 押しこめずに」' },
       { untilHpRatio: 0.5, templates: ['g1.sign.mixed', 'g1.expr.collect', 'g1.eq.linear', 'g1.func.prop', 'g1.geo.sector', 'g1.solid.prism'], line: '歪みの使徒「では 六つの 碑の 理を。符号、文字、等式、比例、形、体積……忘れては おるまいな」' },
       { untilHpRatio: 0.25, templates: ['g1.sign.mixed', 'g1.eq.paren'], line: '歪みの使徒「……最後だ。数の 根、四則と 等式。これを 示せば、我は 認めよう」' },
     ],

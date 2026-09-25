@@ -20,7 +20,72 @@ const divisors = (n: number): number[] => {
 
 // ---------------------------------------------------------------- 比例
 
+/**
+ * 変域(★2・★3 の 3 回に 1 回)。チャレンジテストで毎年出る(正答率 54〜62%)。docs/difficulty.md
+ *   ★2: 具体的な場面(水そう・道のり)で、x または y の変域を選ぶ
+ *   ★3: y = ax で x の変域から y の変域を選ぶ(a が負なら大小が入れかわる)
+ */
+function genDomain(rng: Rng, d: Difficulty): Problem {
+  const choice = (correct: string, wrongs: string[]) => {
+    const uniq = [...new Set(wrongs.filter((w) => w !== correct))].slice(0, 3);
+    const options = rng.shuffle([correct, ...uniq]);
+    return { options, correct: options.indexOf(correct) };
+  };
+  if (d === 2) {
+    const tank = rng.bool();
+    const [total, speed] = tank
+      ? rng.pick([[30, 2], [30, 3], [30, 5], [40, 2], [40, 5], [60, 3], [60, 4], [60, 5]])
+      : rng.pick([[600, 40], [600, 60], [800, 40], [800, 80], [1200, 60], [1200, 80]]);
+    const time = total / speed;
+    const story = tank
+      ? `深さ ${total} cm の 水そうに、毎分 ${speed} cm ずつ 水を 入れる。入れ始めてから x 分後の 水の 深さを y cm とする`
+      : `家から ${total} m 先の 駅まで、分速 ${speed} m で 歩く。歩き始めてから x 分後に 進んだ 道のりを y m とする`;
+    const until = tank ? '水そうが いっぱいに なるまで' : '駅に 着くまで';
+    const askX = rng.bool();
+    const [v, max] = askX ? ['x', time] : ['y', total];
+    const other = askX ? total : time;
+    const { options, correct } = choice(`0 \\leqq ${v} \\leqq ${max}`, [`0 < ${v} < ${max}`, `0 \\leqq ${v} \\leqq ${other}`, `${v} \\geqq 0`, `0 \\leqq ${v} \\leqq ${speed}`]);
+    return {
+      templateId: 'g1.func.prop',
+      difficulty: d,
+      prompt: text(`${story}。${until}の ${v} の 変域は?`),
+      promptText: `${story}。${until}の ${v} の 変域は?`,
+      answer: { kind: 'choice', options, correct },
+      hint: askX ? `いっぱいに なる(着く)のは 何分後? ${total} ÷ ${speed} を 計算しよう` : 'y は 0 から、いっぱい(着いた)ときの 値まで。はしも ふくむ',
+      explanation: [askX ? `${total} \\div ${speed} = ${time}` : `${text(`y の 最大は ${total}`)}`, `${text('答え: ')} 0 \\leqq ${v} \\leqq ${max}`],
+      tags: ['prop_domain'],
+      key: `dom2:${tank}:${total}:${speed}:${v}`,
+      verify: String(correct),
+    };
+  }
+  const a = rng.nonZero(5);
+  const p = -rng.int(1, 4);
+  const q = rng.int(1, 5);
+  const [yp, yq] = [a * p, a * q];
+  const [lo, hi] = [Math.min(yp, yq), Math.max(yp, yq)];
+  const { options, correct } = choice(`${lo} \\leqq y \\leqq ${hi}`, [
+    `${yp} \\leqq y \\leqq ${yq}`,
+    `${p} \\leqq y \\leqq ${q}`,
+    `${lo} < y < ${hi}`,
+    `${-hi} \\leqq y \\leqq ${-lo}`,
+    `0 \\leqq y \\leqq ${hi}`,
+  ]);
+  return {
+    templateId: 'g1.func.prop',
+    difficulty: d,
+    prompt: `y = ${a === 1 ? '' : a === -1 ? '-' : a}x \\quad ${text(`x の 変域が`)} ${p} \\leqq x \\leqq ${q} ${text(' のとき、y の 変域は?')}`,
+    promptText: `y = ${plainMinus(`${a === 1 ? '' : a === -1 ? '-' : a}x`)} で、x の変域が ${plainMinus(String(p))} ≦ x ≦ ${q} のとき、y の変域は?`,
+    answer: { kind: 'choice', options, correct },
+    hint: a < 0 ? 'x の はしの 値を 代入しよう。比例定数が 負なので、大小が 入れかわる' : 'x の はしの 値を それぞれ 代入しよう',
+    explanation: [`x = ${p} \\to y = ${yp} \\quad x = ${q} \\to y = ${yq}`, `${text('答え: ')} ${lo} \\leqq y \\leqq ${hi}`],
+    tags: ['prop_domain'],
+    key: `dom3:${a}:${p}:${q}`,
+    verify: String(correct),
+  };
+}
+
 function genProp(rng: Rng, d: Difficulty): Problem {
+  if (d > 1 && rng.int(0, 2) === 0) return genDomain(rng, d);
   const a = d === 1 ? rng.int(2, 9) : rng.nonZero(9);
   if (d === 1) {
     const x = rng.int(2, 9);

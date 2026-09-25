@@ -310,7 +310,7 @@ const g1c7: ChapterDef = {
   unit: 'データの活用',
   inscription: '平均だけでは、散らばりは 分からない',
   intro: 'C7-0',
-  templates: ['g1.data.mean', 'g1.data.median', 'g1.data.freq', 'g1.data.approx'],
+  templates: ['g1.data.mean', 'g1.data.median', 'g1.data.freq', 'g1.data.prob'],
   nodes: [
     { id: 'inn7', type: 'town', name: '塔守の宿', x: 8, y: 74, next: ['entrance7'], bg: 'bg_tower_inn' },
     { id: 'entrance7', type: 'event', name: '塔の入口', x: 22, y: 62, next: ['records7'], script: 'C7-2', bg: 'bg_tower_entrance' },
@@ -321,8 +321,8 @@ const g1c7: ChapterDef = {
     { id: 'archive7', type: 'event', name: '古文書の間', x: 62, y: 70, next: ['corridor7'], script: 'C7-5', bg: 'bg_tower_archive' },
     { id: 'corridor7', type: 'battle', name: '代表値の回廊', x: 76, y: 54, next: ['boss7', 'secret_window7'], intro: 'C7-6',
       enemies: [['median_librarian', 'freq_bat'], ['median_librarian', 'median_librarian'], ['median_librarian', 'mean_ghost', 'freq_bat']], bg: 'bg_tower_corridor' },
-    { id: 'secret_window7', type: 'secret', name: '近似値の窓', x: 72, y: 26, next: ['boss7'], revealAfter: 'corridor7', intro: 'C7-7',
-      enemies: [['approx_owl'], ['approx_owl', 'approx_owl']], reward: { item: 'recorder_pen' }, bg: 'bg_tower_window' },
+    { id: 'secret_window7', type: 'secret', name: '確率の窓', x: 72, y: 26, next: ['boss7'], revealAfter: 'corridor7', intro: 'C7-7',
+      enemies: [['kimagure_owl'], ['kimagure_owl', 'kimagure_owl']], reward: { item: 'recorder_pen' }, bg: 'bg_tower_window' },
     { id: 'boss7', type: 'boss', name: '歪みの使徒', x: 92, y: 30, next: [], enemies: [['apostle']], before: 'C7-8', after: 'C7-10,E-1,E-2', bg: 'bg_tower_top' },
   ],
 };

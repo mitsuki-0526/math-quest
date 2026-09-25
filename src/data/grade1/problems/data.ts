@@ -1,6 +1,6 @@
 import { registerTemplate, type Difficulty, type Problem } from '@/math/template';
 import type { Rng } from '@/math/rng';
-import { rat, toTex } from '@/math/rational';
+import { rat, toTex, toNumber } from '@/math/rational';
 import { text } from '@/math/format';
 
 /**
@@ -8,7 +8,8 @@ import { text } from '@/math/format';
  *   g1.data.mean   平均ゴースト      平均値
  *   g1.data.median 中央値の司書      中央値・最頻値・範囲
  *   g1.data.freq   度数コウモリ      度数分布表・相対度数(図つき)
- *   g1.data.approx 近似値フクロウ    近似値・誤差・有効数字
+ *   g1.data.prob   キマグレフクロウ  多数回の試行による確率(相対度数)
+ * 近似値・誤差・有効数字は、今の学習指導要領(平成29年告示)では 3 年の内容なので 1 年版では出さない(docs/difficulty.md)
  */
 const UNIT = 'データの活用';
 
@@ -187,74 +188,88 @@ function genFreq(rng: Rng, d: Difficulty): Problem {
   };
 }
 
-// ---------------------------------------------------------------- 近似値
+// ---------------------------------------------------------------- 確率(多数回の試行)
 
-function genApprox(rng: Rng, d: Difficulty): Problem {
+/**
+ * 多数回の試行による確率(1 年の内容。学習指導要領解説の「ペットボトルのふたを投げる」例)。
+ *   ★1: 投げた回数と 起きた回数から 相対度数を求める
+ *   ★2: 回数を増やした表から、確率は およそ いくつと 考えられるか(いちばん多い回数の 相対度数)
+ *   ★3: 確率を使って、N 回のうち およそ 何回 起きるかを 予想する
+ */
+const PROB_SCENES = [
+  { thing: 'ペットボトルの キャップ', event: '上向き' },
+  { thing: '画びょう', event: '針が 上向き' },
+  { thing: '紙コップ', event: '横向き' },
+  // 「表(おもて)」は 問題文の「表(ひょう)」と まぎれるので 使わない
+];
+
+function genProb(rng: Rng, d: Difficulty): Problem {
+  const s = rng.pick(PROB_SCENES);
   if (d === 1) {
-    // 四捨五入
-    const place = rng.pick([10, 100]);
-    const n = rng.int(place * 2, place * 90);
-    const rounded = Math.round(n / place) * place;
+    // 相対度数が 小数第 2 位で わり切れるように、起きた回数を 選ぶ
+    const n = rng.pick([50, 100, 200, 500, 1000]);
+    const unit = Math.max(1, n / 100);
+    const c = unit * rng.int(Math.ceil(10 / unit) || 1, Math.floor((n * 0.8) / unit));
+    const value = rat(c, n);
     return {
-      templateId: 'g1.data.approx',
+      templateId: 'g1.data.prob',
       difficulty: d,
-      prompt: `${text(`${n} を ${place === 10 ? '十' : '百'}の位まで の 概数にすると?(四捨五入)`)}`,
-      promptText: `${n} を${place === 10 ? '十' : '百'}の位までの概数にすると?(四捨五入)`,
-      answer: { kind: 'number', value: rat(rounded) },
-      hint: `${place === 10 ? '一' : '十'}の位を 四捨五入する`,
-      explanation: [`${text('答え: ')} ${rounded}`],
-      tags: ['approx_round'],
-      key: `apx1:${n}:${place}`,
-      verify: `Math.round(${n}/${place})*${place}`,
+      prompt: text(`${s.thing}を ${n} 回 投げたら、${s.event}に なったのは ${c} 回だった。${s.event}に なる 相対度数は?`),
+      promptText: `${s.thing}を ${n} 回 投げたら、${s.event}に なったのは ${c} 回だった。${s.event}に なる 相対度数は?`,
+      answer: { kind: 'number', value },
+      hint: '相対度数 = 起きた 回数 ÷ 投げた 回数。小数で 答えよう',
+      explanation: [`${c} \\div ${n} = ${toNumber(value)}`, `${text('答え: ')} ${toNumber(value)}`],
+      tags: ['prob_relative'],
+      key: `prob1:${s.event}:${n}:${c}`,
+      verify: `${c}/${n}`,
     };
   }
+  // 本当の確率 p(小数第 2 位まで)。回数が少ないうちは ばらつき、多くなると p に 近づく表を作る
+  const p100 = rng.int(15, 65);
   if (d === 2) {
-    // 真の値の範囲(以上・未満)
-    const place = rng.pick([10, 100]);
-    const approx = rng.int(2, 90) * place;
-    const half = place / 2;
-    const options = rng.shuffle([
-      `${approx - half} ${text('以上')} ${approx + half} ${text('未満')}`,
-      `${approx - place} ${text('以上')} ${approx + place} ${text('未満')}`,
-      `${approx} ${text('以上')} ${approx + place} ${text('未満')}`,
-      `${approx - half} ${text('より大きく')} ${approx + half} ${text('以下')}`,
-    ]);
-    const correct = 0;
-    const answerText = `${approx - half} ${text('以上')} ${approx + half} ${text('未満')}`;
-    const idx = options.indexOf(answerText);
+    const ns = [50, 100, 200, 500, 1000, 2000];
+    const spread = [0.12, 0.08, 0.05, 0.03, 0.015, 0];
+    const counts = ns.map((n, i) => {
+      const r = p100 / 100 + (rng.int(-100, 100) / 100) * spread[i];
+      return Math.min(n, Math.max(0, Math.round(n * r)));
+    });
+    const last = counts[counts.length - 1];
     return {
-      templateId: 'g1.data.approx',
+      templateId: 'g1.data.prob',
       difficulty: d,
-      prompt: `${text(`測定値 ${approx}(${place === 10 ? '十' : '百'}の位まで の 概数)の 真の値 a の 範囲は?`)}`,
-      promptText: `測定値 ${approx} の真の値 a の範囲は?`,
-      answer: { kind: 'choice', options, correct: idx >= 0 ? idx : correct },
-      hint: '四捨五入した 位の 半分だけ ずれる',
-      explanation: [`${text(`${approx - half} 以上 ${approx + half} 未満`)}`],
-      tags: ['approx_range'],
-      key: `apx2:${approx}:${place}`,
-      verify: String(idx >= 0 ? idx : correct),
+      prompt: text(`表は、${s.thing}を 投げて ${s.event}に なった 回数を まとめたもの。${s.event}に なる 確率は およそ いくつと 考えられるか(小数第2位まで)`),
+      promptText: `表は、${s.thing}を 投げて ${s.event}に なった 回数を まとめたもの。${s.event}に なる 確率は およそ いくつと 考えられるか(小数第2位まで)`,
+      answer: { kind: 'number', value: rat(p100, 100) },
+      hint: '投げる 回数が 多いほど、相対度数は ある 値に 近づく。いちばん 多く 投げたときの 相対度数を 求めよう',
+      explanation: [`${text('回数が 多いほど 相対度数は 一定の 値に 近づく')}`, `${last} \\div 2000 = ${p100 / 100}`, `${text('答え: ')} ${p100 / 100}`],
+      tags: ['prob_estimate'],
+      key: `prob2:${s.event}:${counts.join(',')}`,
+      figure: {
+        kind: 'table',
+        head: ['投げた 回数', ...ns.map(String)],
+        rows: [[`${s.event}の 回数`, ...counts.map(String)]],
+      },
+      verify: `${last}/2000`,
     };
   }
-  // ★3: 誤差
-  const trueV = rng.int(100, 999);
-  const place = rng.pick([10, 100]);
-  const approx = Math.round(trueV / place) * place;
-  const err = approx - trueV;
+  // ★3: 予想。p × N が 整数に なるように N を選ぶ
+  const total = rng.pick([500, 1000, 2000, 3000, 5000]);
+  const expected = (p100 * total) / 100;
   return {
-    templateId: 'g1.data.approx',
+    templateId: 'g1.data.prob',
     difficulty: d,
-    prompt: `${text(`真の値 ${trueV}、近似値 ${approx} のときの 誤差(近似値 − 真の値)は?`)}`,
-    promptText: `真の値 ${trueV}、近似値 ${approx} のときの誤差(近似値 − 真の値)は?`,
-    answer: { kind: 'number', value: rat(err) },
-    hint: '誤差 = 近似値 − 真の値。マイナスに なることもある',
-    explanation: [`${approx} - ${trueV} = ${err}`, `${text('答え: ')} ${err}`],
-    tags: ['approx_error'],
-    key: `apx3:${trueV}:${place}`,
-    verify: `${approx}-${trueV}`,
+    prompt: text(`${s.thing}を 投げて ${s.event}に なる 確率を ${p100 / 100} とする。${total} 回 投げると、${s.event}に なるのは およそ 何回と 考えられるか`),
+    promptText: `${s.thing}を 投げて ${s.event}に なる 確率を ${p100 / 100} とする。${total} 回 投げると、${s.event}に なるのは およそ 何回と 考えられるか`,
+    answer: { kind: 'number', value: rat(expected) },
+    hint: '起きる 回数 ≒ 投げる 回数 × 確率',
+    explanation: [`${total} \\times ${p100 / 100} = ${expected}`, `${text('答え: およそ ')} ${expected} ${text('回')}`],
+    tags: ['prob_predict'],
+    key: `prob3:${s.event}:${p100}:${total}`,
+    verify: `${total}*${p100}/100`,
   };
 }
 
 registerTemplate({ id: 'g1.data.mean', unit: UNIT, title: '平均値', timeLimit: { 1: 45, 2: 60, 3: 75 }, generate: genMean });
 registerTemplate({ id: 'g1.data.median', unit: UNIT, title: '中央値・最頻値・範囲', timeLimit: { 1: 45, 2: 55, 3: 65 }, generate: genMedian });
 registerTemplate({ id: 'g1.data.freq', unit: UNIT, title: '度数分布と相対度数', timeLimit: { 1: 40, 2: 60, 3: 70 }, generate: genFreq });
-registerTemplate({ id: 'g1.data.approx', unit: UNIT, title: '近似値と誤差', timeLimit: { 1: 40, 2: 50, 3: 55 }, generate: genApprox });
+registerTemplate({ id: 'g1.data.prob', unit: UNIT, title: '確率(相対度数)', timeLimit: { 1: 45, 2: 60, 3: 50 }, generate: genProb });

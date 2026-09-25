@@ -80,7 +80,7 @@ export const assetManifest: Record<string, AssetEntry> = {
   enemy_mean_ghost: { emoji: '📜', label: '平均ゴースト' },
   enemy_freq_bat: { emoji: '📊', label: '度数コウモリ' },
   enemy_median_librarian: { emoji: '🕵️', label: '中央値の司書' },
-  enemy_approx_owl: { emoji: '🦉', label: '近似値フクロウ' },
+  enemy_kimagure_owl: { emoji: '🦉', label: 'キマグレフクロウ' },
   enemy_apostle: { emoji: '🕯️', label: '歪みの使徒' },
 
   // --- 背景 ---
@@ -160,7 +160,7 @@ export const assetManifest: Record<string, AssetEntry> = {
   bg_tower_stairs: { emoji: '🌀', label: '度数の階段', alias: 'bg_tower_records' },
   bg_tower_archive: { emoji: '📜', label: '古文書の間', alias: 'bg_tower_records' },
   bg_tower_corridor: { emoji: '🕯️', label: '代表値の回廊', alias: 'bg_tower_records' },
-  bg_tower_window: { emoji: '🪟', label: '近似値の窓', alias: 'bg_tower_records' },
+  bg_tower_window: { emoji: '🪟', label: '確率の窓', alias: 'bg_tower_records' },
   bg_tower_top: { emoji: '🌌', label: '塔の最上階' },
   bg_black: { emoji: '⬛', label: '暗転' },
   bg_village_square_evening: { emoji: '🌇', label: 'はじまりの村(夕方)', alias: 'bg_village_square', tint: 'rgba(255, 120, 60, 0.28)' },
