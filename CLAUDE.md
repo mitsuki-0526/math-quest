@@ -10,6 +10,7 @@
 | [docs/scenario.md](docs/scenario.md) | 3学年の物語の骨格。**台本と食い違う場合は台本が正** |
 | [docs/setting.md](docs/setting.md) | 世界のルール・人物の口調・文体ルール。セリフを書く前に読む |
 | [docs/script/](docs/script/) | 台本(1年版 全7章)。会話データはここから変換する |
+| [docs/difficulty.md](docs/difficulty.md) | 問題の難易度の仕様(★ごとの数の範囲・式の形)。教科書・チャレンジテストが基準。テンプレートを作る・直すときはここに合わせる |
 | [TASKS.md](TASKS.md) | 実装タスク(縦切り)。完了したら `[x]` |
 
 ## コマンド

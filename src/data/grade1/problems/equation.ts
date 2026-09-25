@@ -216,17 +216,63 @@ function gcd(a: number, b: number): number {
 
 // ---------------------------------------------------------------- 比例式
 
+/**
+ * 比例式。数の大きさは 学習プリント(x : 8 = 3 : 4)とチャレンジテスト((x + 2) : 9 = 10 : 6、正答率 52%)に合わせる。
+ *   ★1: a : b = ka : x(k は 2〜5)
+ *   ★2: x の位置が 4 か所のどれか。a : b = c : x で c が a の倍数でないこともある(4 : 6 = 10 : x)
+ *   ★3: 半分は (x ± m) : b = c : d
+ */
 function genRatio(rng: Rng, d: Difficulty): Problem {
-  const k = rng.int(2, d === 1 ? 6 : 12);
+  if (d === 3 && rng.bool()) {
+    // (x + m) : b = c : d → (x + m) × d = b × c。整数の解になるまで 選び直す
+    let x: number, m: number, b: number, c: number, dd: number;
+    do {
+      x = rng.int(1, 12);
+      m = rng.nonZero(6);
+      b = rng.int(2, 9);
+      dd = rng.int(2, 9);
+      c = ((x + m) * dd) / b;
+    } while (x + m <= 0 || !Number.isInteger(c) || c < 2 || c > 30 || c === dd || b === dd);
+    const lhs = `(x ${m < 0 ? '-' : '+'} ${Math.abs(m)}) : ${b}`;
+    return {
+      templateId: 'g1.eq.ratio',
+      difficulty: d,
+      prompt: `${lhs} = ${c} : ${dd} \\quad ${text('x を求めよ')}`,
+      promptText: `${lhs} = ${c} : ${dd} の x を求めよ`,
+      answer: { kind: 'number', value: rat(x) },
+      hint: 'かっこごと 1 つの数と 思って、外どうし・内どうしの 積を 等しく おく',
+      explanation: [
+        `(x ${m < 0 ? '-' : '+'} ${Math.abs(m)}) \\times ${dd} = ${b} \\times ${c}`,
+        `${dd}x ${m * dd < 0 ? '-' : '+'} ${Math.abs(m * dd)} = ${b * c}`,
+        `${dd}x = ${b * c - m * dd} \\quad x = ${x}`,
+        `${text('答え: x = ')} ${x}`,
+      ],
+      tags: ['eq_ratio', 'eq_ratio_expr'],
+      key: `eqr3:${m}:${b}:${c}:${dd}`,
+      verify: `(${b}*${c})/${dd}-(${m})`,
+    };
+  }
+  // a : b = c : e の形で、4 つのうち 1 つを x にする。c : e は a : b の k 倍(★2 以上は k が分数のことも)
   const a = rng.int(2, 9);
-  const b = rng.int(2, 9);
-  // a : b = ka : x  → x = kb
-  const x = k * b;
-  const left = `${a} : ${b}`;
-  const right = `${k * a} : x`;
-  const flip = d === 3 && rng.bool();
-  const prompt = flip ? `x : ${k * b} = ${a} : ${b}` : `${left} = ${right}`;
-  const value = flip ? k * a : x;
+  let b = rng.int(2, 9);
+  while (b === a) b = rng.int(2, 9);
+  const k = rng.int(2, d === 1 ? 5 : 6);
+  let [c, e] = [a * k, b * k];
+  // ★2 以上の半分は 4 : 6 = 10 : 15 のように 何倍かが 整数でない形(a と b に 公約数が あるときだけ作れる)
+  const g = gcd(a, b);
+  if (d > 1 && g > 1 && rng.bool()) {
+    const ks = [2, 3, 4, 5, 6].filter((t) => t % g !== 0);
+    const t = rng.pick(ks);
+    [c, e] = [(a / g) * t, (b / g) * t];
+  }
+  const nums = [a, b, c, e];
+  const hole = d === 1 ? 3 : rng.int(0, 3);
+  const value = nums[hole];
+  const show = nums.map((v, i) => (i === hole ? 'x' : String(v)));
+  const prompt = `${show[0]} : ${show[1]} = ${show[2]} : ${show[3]}`;
+  // 外項の積 = 内項の積
+  const outer = `${show[0]} \\times ${show[3]}`;
+  const inner = `${show[1]} \\times ${show[2]}`;
   return {
     templateId: 'g1.eq.ratio',
     difficulty: d,
@@ -234,12 +280,10 @@ function genRatio(rng: Rng, d: Difficulty): Problem {
     promptText: `${prompt} の x を求めよ`,
     answer: { kind: 'number', value: rat(value) },
     hint: '外どうし、内どうしの 積が 等しい。a : b = c : d なら a×d = b×c',
-    explanation: flip
-      ? [`x \\times ${b} = ${k * b} \\times ${a}`, `${b}x = ${k * b * a}`, `${text('答え: x = ')} ${value}`]
-      : [`${a} \\times x = ${b} \\times ${k * a}`, `${a}x = ${b * k * a}`, `${text('答え: x = ')} ${value}`],
+    explanation: [`${outer} = ${inner}`, `${text('答え: x = ')} ${value}`],
     tags: ['eq_ratio'],
-    key: `eqr:${a}:${b}:${k}:${flip}`,
-    verify: flip ? `${k}*${a}` : `${k}*${b}`,
+    key: `eqr:${prompt}`,
+    verify: hole === 0 ? `${b}*${c}/${e}` : hole === 1 ? `${a}*${e}/${c}` : hole === 2 ? `${a}*${e}/${b}` : `${b}*${c}/${a}`,
   };
 }
 

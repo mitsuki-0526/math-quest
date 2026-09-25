@@ -77,4 +77,13 @@ export interface ChartSpec {
   highlight?: number;
 }
 
-export type FigureSpec = NumberLineSpec | PlaneSpec | AnglesSpec | SectorSpec | SolidSpec | ProjectionSpec | ChartSpec;
+/** 表(第1章「基準との差」)。1 行目が見出し、各行の先頭が行の名前 */
+export interface TableSpec {
+  kind: 'table';
+  head: string[];
+  rows: string[][];
+  /** 表の下に添える一言(単位など) */
+  caption?: string;
+}
+
+export type FigureSpec = NumberLineSpec | PlaneSpec | AnglesSpec | SectorSpec | SolidSpec | ProjectionSpec | ChartSpec | TableSpec;

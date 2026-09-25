@@ -92,6 +92,10 @@ describe('問題テンプレートの検証', () => {
           expect(p.templateId).toBe(t.id);
           expect(p.prompt.length).toBeGreaterThan(0);
           expect(p.hint.length).toBeGreaterThan(0);
+          // TS の文字列で '\\times' を '\times' と書くと、タブ文字や「div」がそのまま出る
+          expect(p.prompt, p.prompt).not.toMatch(/\t/);
+          expect(p.explanation.join(' '), p.promptText).not.toMatch(/\t/);
+          expect(p.promptText, p.promptText).not.toMatch(/times|div|frac/);
           expect(p.explanation.length).toBeGreaterThan(0);
 
           // 1. 別解法で照合(式の答えは verify も式なので、同じ値を代入して数値にする)

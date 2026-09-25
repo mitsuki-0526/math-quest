@@ -33,7 +33,7 @@ import '@/data/grade1/problems';
 import { answerToText, type Problem } from '@/math/template';
 import { Bar, Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
-import { Tex } from '@/ui/components/Tex';
+import { Tex, ProseTex } from '@/ui/components/Tex';
 import { Figure } from '@/ui/components/Figure';
 import { AnswerInput } from '@/ui/components/AnswerInput';
 
@@ -441,8 +441,8 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                   <Figure spec={problem.figure} />
                 </div>
               )}
-              <div class="question-text">
-                <Tex tex={problem.prompt} />
+              <div class={`question-text${isProse(problem) ? ' prose' : ''}`}>
+                {isProse(problem) ? <ProseTex tex={problem.prompt} /> : <Tex tex={problem.prompt} />}
               </div>
               {hintText && (
                 <p class="hint-line">
@@ -503,7 +503,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
             {tutorial && !tutorialSaid.wrong && <p class="muted">下に 解き方が 出てるよ。読んだら「つぎへ」</p>}
             {explain.note && <p class="warn">{explain.note}</p>}
             <p>
-              <b>問題:</b> <Tex tex={explain.problem.prompt} /> <b>正解:</b> <Tex tex={answerTex(explain.problem)} />
+              <b>問題:</b> {isProse(explain.problem) ? <ProseTex tex={explain.problem.prompt} /> : <Tex tex={explain.problem.prompt} />} <b>正解:</b> <Tex tex={answerTex(explain.problem)} />
             </p>
             <ol class="explain-steps">
               {explain.problem.explanation.map((line, i) => (
@@ -601,4 +601,9 @@ function answerTex(p: Problem): string {
   if (a.kind === 'choice') return a.options[a.correct];
   if (a.kind === 'factorization') return p.explanation[p.explanation.length - 1].replace(/^\\text\{答え: \}\s*/, '');
   return answerToText(a).replace(/(-?\d+)\/(\d+)/g, '\\frac{$1}{$2}');
+}
+
+/** 文章の多い問題(文章題・表の問題など)は、折り返せるように本文の文字で描く */
+function isProse(p: Problem): boolean {
+  return p.promptText.length > 30;
 }

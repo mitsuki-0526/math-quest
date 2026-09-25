@@ -34,6 +34,7 @@ export const assetManifest: Record<string, AssetEntry> = {
   enemy_abs_golem: { emoji: '🗿', label: 'ゼッタイチ・ゴーレム' },
   enemy_cross_hopper: { emoji: '🦗', label: 'クロスバッタ' },
   enemy_prime_bee: { emoji: '🐝', label: '素数バチ' },
+  enemy_heikin_tanuki: { emoji: '🦝', label: 'ヘイキンタヌキ' },
   enemy_king_nega: { emoji: '👑', label: '符号王ネガ' },
 
   // --- 第2章の敵 ---

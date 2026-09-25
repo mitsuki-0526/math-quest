@@ -938,6 +938,19 @@ img.sprite {
 .question-text .katex {
   font-size: 1.15em;
 }
+/* 文章の多い問題: 本文書体で折り返す(式の部分だけ KaTeX) */
+.question-text.prose {
+  font-family: var(--font-body);
+  font-size: 1.15em;
+  line-height: 1.7;
+  text-align: left;
+}
+.question-text.prose .katex {
+  font-size: 1.05em;
+}
+.figure-table {
+  font-size: 1.1rem;
+}
 .answer-input {
   flex: 1;
   font-size: 1.3em;
@@ -1346,6 +1359,37 @@ img.sprite {
   width: 100%;
   height: auto;
   display: block;
+}
+.figure-table-wrap {
+  overflow-x: auto;
+}
+.figure-table {
+  margin: 0 auto;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.figure-table th,
+.figure-table td {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  text-align: center;
+  white-space: nowrap;
+}
+.figure-table thead th,
+.figure-table tbody th {
+  color: var(--sub);
+  font-weight: normal;
+  font-size: 0.9em;
+}
+.figure-table td.unknown {
+  color: var(--ember);
+  font-weight: bold;
+}
+.figure-table-caption {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 0.85em;
+  color: var(--sub);
 }
 .hint-line {
   margin: 0 0 6px;

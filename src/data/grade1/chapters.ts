@@ -11,7 +11,7 @@ const g1c1: ChapterDef = {
   title: '符号の森',
   unit: '正の数と負の数',
   inscription: '負の数どうしの積は 正である',
-  templates: ['g1.sign.addsub', 'g1.sign.addsub_big', 'g1.sign.muldiv', 'g1.sign.abs', 'g1.sign.mixed', 'g1.sign.primefactor', 'g1.sign.numberline'],
+  templates: ['g1.sign.addsub', 'g1.sign.addsub_big', 'g1.sign.muldiv', 'g1.sign.abs', 'g1.sign.mixed', 'g1.sign.primefactor', 'g1.sign.numberline', 'g1.sign.average'],
   nextChapter: 'g1c2',
   nodes: [
     { id: 'village', type: 'town', name: 'はじまりの村', x: 8, y: 78, next: ['road'], bg: 'bg_village_square' },
@@ -70,7 +70,7 @@ const g1c1: ChapterDef = {
       y: 40,
       next: ['boss'],
       intro: 'C1-6',
-      enemies: [['cross_hopper', 'cross_hopper'], ['cross_hopper', 'minus_slime'], ['cross_hopper', 'cross_hopper', 'cross_hopper']],
+      enemies: [['cross_hopper', 'cross_hopper'], ['cross_hopper', 'heikin_tanuki'], ['cross_hopper', 'cross_hopper', 'heikin_tanuki']],
       bg: 'bg_forest_cliff',
     },
     {

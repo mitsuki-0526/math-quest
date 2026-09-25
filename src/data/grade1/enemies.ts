@@ -86,6 +86,18 @@ export const enemies: Record<string, EnemyDef> = {
     gold: 12,
     lines: { appear: '素数バチが ブンブンと あらわれた!', hit: '「われた! われた!」', miss: '「われない! われない!」', defeat: '「ハチに もどって とんでいった」' },
   },
+  heikin_tanuki: {
+    // 2026-09-25 追加: 基準との差・平均(チャレンジテストで毎年出題。docs/difficulty.md)
+    id: 'heikin_tanuki',
+    name: 'ヘイキンタヌキ',
+    template: 'g1.sign.average',
+    sprite: 'enemy_heikin_tanuki',
+    hp: 40,
+    attack: 8,
+    exp: 22,
+    gold: 10,
+    lines: { appear: 'ヘイキンタヌキが 帳面を かかえて あらわれた!', hit: '「ぽん! ならされた!」', miss: '「目標なんて わすれちゃえ!」', defeat: '「ただの タヌキに もどって 森へ かえった」' },
+  },
   // --- 第2章 名もなき者の平原 ---
   letter_fairy: {
     id: 'letter_fairy',

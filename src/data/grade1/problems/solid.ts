@@ -120,38 +120,42 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
 // ---------------------------------------------------------------- 球
 
 function genSphere(rng: Rng, d: Difficulty): Problem {
-  // 体積(4/3πr³)が整数になるのは r が 3 の倍数のときだけなので、表面積は広く、体積は 3 の倍数から選ぶ
+  // 半径は 教科書・学習プリントに合わせて 小さく(表面積 10 まで、体積 3・6・9)。docs/difficulty.md
+  // 体積(4/3πr³)が整数になるのは r が 3 の倍数のときだけ。半分は「直径」で出して、半径を 求める 一手間を入れる
   const askArea = d === 1 ? true : rng.bool();
-  const r = askArea ? rng.int(1, 20) : rng.pick([3, 6, 9, 12, 15, 18]);
+  const r = askArea ? rng.int(1, d === 1 ? 8 : 10) : rng.pick(d === 2 ? [3, 6] : [3, 6, 9]);
+  const byDiameter = rng.bool();
+  const given = byDiameter ? `直径 ${2 * r}` : `半径 ${r}`;
+  const figure = { kind: 'solid' as const, shape: 'sphere' as const, labels: byDiameter ? {} : { radius: `${r}` } };
+  const radiusStep = byDiameter ? [`${text(`半径は ${2 * r} ÷ 2 = ${r}`)}`] : [];
   if (askArea) {
     const v = 4 * r * r;
     return {
       templateId: 'g1.solid.sphere',
       difficulty: d,
-      prompt: `${text(`半径 ${r} の 球の 表面積は?(π を使って答える)`)}`,
-      promptText: `半径 ${r} の球の表面積は?(π を使って答える)`,
+      prompt: `${text(`${given} の 球の 表面積は?(π を使って答える)`)}`,
+      promptText: `${given} の球の表面積は?(π を使って答える)`,
       answer: { kind: 'expression', expected: `${v}π` },
-      hint: '球の 表面積は 4πr²(「心配 ある事情」)',
-      explanation: [`4 \\times \\pi \\times ${r}^{2} = ${v}\\pi`, `${text('答え: ')} ${v}\\pi`],
+      hint: byDiameter ? 'まず 半径を 出そう(直径の 半分)。球の 表面積は 4πr²' : '球の 表面積は 4πr²(「心配 ある事情」)',
+      explanation: [...radiusStep, `4 \\times \\pi \\times ${r}^{2} = ${v}\\pi`, `${text('答え: ')} ${v}\\pi`],
       tags: ['sphere_area'],
-      key: `sph:a:${r}`,
-      figure: { kind: 'solid', shape: 'sphere', labels: { radius: `${r}` } },
+      key: `sph:a:${given}`,
+      figure,
       verify: `${v}π`,
     };
   }
   const v = (4 * r * r * r) / 3;
-  if (!Number.isInteger(v)) return genSphere(rng, d);
   return {
     templateId: 'g1.solid.sphere',
     difficulty: d,
-    prompt: `${text(`半径 ${r} の 球の 体積は?(π を使って答える)`)}`,
-    promptText: `半径 ${r} の球の体積は?(π を使って答える)`,
+    prompt: `${text(`${given} の 球の 体積は?(π を使って答える)`)}`,
+    promptText: `${given} の球の体積は?(π を使って答える)`,
     answer: { kind: 'expression', expected: `${v}π` },
-    hint: '球の 体積は 4/3 πr³(「身の上に 心配 あるので 参上」)',
-    explanation: [`\\frac{4}{3} \\times \\pi \\times ${r}^{3} = ${v}\\pi`, `${text('答え: ')} ${v}\\pi`],
+    hint: byDiameter ? 'まず 半径を 出そう(直径の 半分)。球の 体積は 4/3 πr³' : '球の 体積は 4/3 πr³(「身の上に 心配 あるので 参上」)',
+    explanation: [...radiusStep, `\\frac{4}{3} \\times \\pi \\times ${r}^{3} = ${v}\\pi`, `${text('答え: ')} ${v}\\pi`],
     tags: ['sphere_volume'],
-    key: `sph:v:${r}`,
-    figure: { kind: 'solid', shape: 'sphere', labels: { radius: `${r}` } },
+    key: `sph:v:${given}`,
+    figure,
     verify: `${v}π`,
   };
 }

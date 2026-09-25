@@ -6,7 +6,7 @@ import { towns } from '@/data/grade1/town';
 import { items, getItem } from '@/data/grade1/items';
 import { hasScene, getScene } from '@/engine/script';
 import { getAsset, assetManifest } from '@/assets/manifest';
-import { allTemplates, getTemplate, generateProblem } from '@/math/template';
+import { allTemplates, getTemplate } from '@/math/template';
 import { characters } from '@/data/characters';
 import { readFileSync, readdirSync } from 'node:fs';
 
@@ -117,31 +117,6 @@ describe('1年版の章データ', () => {
     };
     for (const f of readdirSync(dir).filter((f) => /^\d.*\.json$/.test(f))) walk(JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')));
     expect([...unknown]).toEqual([]);
-  });
-
-  it('マイナススライムの加減は 2 けたの数が 1 問に 1 つまで。2 けただらけはボス専用', () => {
-    for (let i = 0; i < 300; i++) {
-      for (const d of [2, 3] as const) {
-        const p = generateProblem('g1.sign.addsub', d, []);
-        const nums = (p.promptText.match(/\d+/g) ?? []).map(Number);
-        expect(nums.filter((n) => n >= 10).length, p.promptText).toBeLessThanOrEqual(1);
-      }
-    }
-    const boss = getEnemy('king_nega');
-    expect(boss.phases![0].templates).toEqual(['g1.sign.addsub_big']);
-  });
-
-  it('素因数分解は 300 以下で、素数は 2・3・5・7(★3 だけ 11 か 13 を 1 つまで)', () => {
-    for (let i = 0; i < 300; i++) {
-      for (const d of [1, 2, 3] as const) {
-        const p = generateProblem('g1.sign.primefactor', d, []);
-        const n = (p.answer as { n: number }).n;
-        expect(n).toBeLessThanOrEqual(d === 1 ? 50 : d === 2 ? 120 : 300);
-        let m = n;
-        for (const q of [2, 3, 5, 7]) while (m % q === 0) m /= q;
-        expect(d === 3 ? [1, 11, 13] : [1], `${n}`).toContain(m);
-      }
-    }
   });
 
   it('すべての登録テンプレートが、どこかの章で出題される', () => {

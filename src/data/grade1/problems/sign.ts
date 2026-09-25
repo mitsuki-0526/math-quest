@@ -1,6 +1,6 @@
 import { registerTemplate, type Difficulty, type Problem, type ProblemTemplate } from '@/math/template';
 import type { Rng } from '@/math/rng';
-import { rat, add, sub, mul, div, pow, neg, abs as rabs, toTex, toNumber } from '@/math/rational';
+import { rat, add, sub, mul, div, pow, neg, toTex, toNumber } from '@/math/rational';
 import { paren, plainMinus, text } from '@/math/format';
 import { primeFactors, factorsToTex } from '@/math/factorization';
 
@@ -31,7 +31,55 @@ function addSubTerms(rng: Rng, d: Difficulty, big: boolean): number[] {
   return terms;
 }
 
+/**
+ * 小数・分数の加減(★3 の 5 回に 1 回)。学習プリントに (+1.3) − (−2.8)、(+1/4) + (−2/3) の形がある(docs/difficulty.md)。
+ * 小数は 小数第 1 位まで・5 以下、分数は 分母 2・3・4・6 の 真分数
+ */
+function genAddSubFraction(rng: Rng, d: Difficulty): Problem {
+  const decimal = rng.bool();
+  const nums = decimal
+    ? [rat(rng.nonZero(50), 10), rat(rng.nonZero(50), 10)]
+    : [0, 1].map(() => {
+        const den = rng.pick([2, 3, 4, 6]);
+        let num = rng.int(1, den - 1);
+        while (Number(gcdOf(num, den)) !== 1) num = rng.int(1, den - 1);
+        return rat(rng.bool() ? num : -num, den);
+      });
+  const op = rng.pick(['+', '-'] as const);
+  const value = op === '+' ? add(nums[0], nums[1]) : sub(nums[0], nums[1]);
+  const show = (r: (typeof nums)[number]) => {
+    const t = decimal ? String(toNumber(r)) : toTex(r);
+    return toNumber(r) < 0 ? `\\left(${t}\\right)` : `\\left(+${t}\\right)`;
+  };
+  const plain = (r: (typeof nums)[number]) => {
+    const t = decimal ? String(toNumber(r)) : `${r.n}/${r.d}`;
+    return toNumber(r) < 0 ? `(${plainMinus(t)})` : `(+${t})`;
+  };
+  const tex = `${show(nums[0])} ${op} ${show(nums[1])}`;
+  const signed = op === '+' ? nums[1] : neg(nums[1]);
+  return {
+    templateId: 'g1.sign.addsub',
+    difficulty: d,
+    prompt: `${tex} = ?`,
+    promptText: `${plain(nums[0])} ${op === '+' ? '+' : '−'} ${plain(nums[1])} = ?`,
+    answer: { kind: 'number', value },
+    hint: decimal ? '小数でも 整数と 同じ。符号を 決めてから 絶対値を 計算' : '分数は 通分してから。符号の 決め方は 整数と 同じ',
+    explanation: [
+      `${text('ひき算は 符号を 変えて たし算に: ')} ${show(nums[0])} + ${show(signed)}`,
+      `${text('答え: ')} ${decimal ? String(toNumber(value)) : toTex(value)}`,
+    ],
+    tags: [decimal ? 'decimal_addsub' : 'fraction_addsub'],
+    key: `addsub:frac:${tex}`,
+    verify: `(${toNumber(nums[0])})${op}(${toNumber(nums[1])})`,
+  };
+}
+
+function gcdOf(a: number, b: number): number {
+  return b === 0 ? a : gcdOf(b, a % b);
+}
+
 function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
+  if (!big && d === 3 && rng.int(0, 4) === 0) return genAddSubFraction(rng, d);
   const terms = addSubTerms(rng, d, big);
   const ops: ('+' | '-')[] = terms.slice(1).map(() => rng.pick(['+', '-']));
   // 必ず負の数を含める(正の数だけでは符号の練習にならないため)
@@ -113,8 +161,9 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
   if (d === 2) {
     // 割り切れる除算、または 3数の積
     if (rng.bool()) {
-      const b = rng.nonZero(12, 2);
-      const q = rng.nonZero(12);
+      // 教科書・学習プリントの割り算は わられる数が 48 程度まで(docs/difficulty.md)
+      const b = rng.nonZero(9, 2);
+      const q = rng.nonZero(9);
       const a = b * q;
       const value = rat(q);
       return {
@@ -154,26 +203,59 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
       verify: ns.map((x) => `(${x})`).join('*'),
     };
   }
-  // ★3: 乗除の混合。答えが分数になることもある
-  const a = rng.nonZero(12);
-  const b = rng.nonZero(9);
-  const c = rng.nonZero(6, 2);
-  const value = div(mul(rat(a), rat(b)), rat(c));
+  // ★3: 答えが整数になる ×÷ の混合(例: (−24) ÷ (−8) × 3)、または 1けたの 4数の積(docs/difficulty.md)
+  const form = rng.int(0, 2);
+  if (form === 2) {
+    let ns: number[];
+    do {
+      ns = [rng.nonZero(6), rng.nonZero(6), rng.nonZero(6), rng.nonZero(6)];
+      if (ns.every((x) => x > 0)) ns[rng.int(0, 3)] *= -1;
+    } while (Math.abs(ns.reduce((p, x) => p * x, 1)) > 360);
+    const prod = ns.reduce((p, x) => p * x, 1);
+    return {
+      templateId: 'g1.sign.muldiv',
+      difficulty: d,
+      prompt: `${ns.map(paren).join(' \\times ')} = ?`,
+      promptText: plainMinus(`${ns.map(paren).join(' × ')} = ?`),
+      answer: { kind: 'number', value: rat(prod) },
+      hint: '負の数の個数を 数えて 符号を 先に。あとは 絶対値を かけていく',
+      explanation: [
+        `${text('負の数が ')}${ns.filter((x) => x < 0).length}${text(' 個 → 符号は ')}${prod < 0 ? '-' : '+'}`,
+        `${ns.map((x) => Math.abs(x)).join(' \\times ')} = ${Math.abs(prod)}`,
+        `${text('答え: ')} ${prod}`,
+      ],
+      tags: ['count_negatives'],
+      key: `muldiv:${ns.join('*')}`,
+      verify: ns.map((x) => `(${x})`).join('*'),
+    };
+  }
+  // form 0: a ÷ b × c / form 1: a × b ÷ c。どちらも わり切れるように作る
+  const divFirst = form === 0;
+  const divisor = rng.nonZero(9, 2);
+  const k = rng.nonZero(6);
+  const other = rng.nonZero(9);
+  const a = divisor * k;
+  const nums = divFirst ? [a, divisor, other] : [a, other, divisor];
+  const ops = divFirst ? ['\\div', '\\times'] : ['\\times', '\\div'];
+  const value = rat(k * other);
+  const tex = `${paren(nums[0])} ${ops[0]} ${paren(nums[1])} ${ops[1]} ${paren(nums[2])}`;
+  const mid = divFirst ? k : a * other;
   return {
     templateId: 'g1.sign.muldiv',
     difficulty: d,
-    prompt: `${paren(a)} \\times ${paren(b)} \\div ${paren(c)} = ?`,
-    promptText: plainMinus(`${paren(a)} × ${paren(b)} ÷ ${paren(c)} = ?`),
+    prompt: `${tex} = ?`,
+    promptText: plainMinus(tex.replace(/\\times/g, '×').replace(/\\div/g, '÷')) + ' = ?',
     answer: { kind: 'number', value },
-    hint: '符号を 先に 決めて、÷ は 逆数の × に 直すと 楽',
+    hint: '符号を 先に 決めよう。あとは 左から 順に 計算する',
     explanation: [
-      `${text('負の数が ')}${[a, b, c].filter((x) => x < 0).length}${text(' 個 → 符号は ')}${toNumber(value) < 0 ? '-' : '+'}`,
-      `${Math.abs(a)} \\times ${Math.abs(b)} \\div ${Math.abs(c)} = \\frac{${Math.abs(a * b)}}{${Math.abs(c)}} = ${toTex(rabs(value))}`,
+      `${text('負の数が ')}${nums.filter((x) => x < 0).length}${text(' 個 → 符号は ')}${toNumber(value) < 0 ? '-' : '+'}`,
+      `${paren(nums[0])} ${ops[0]} ${paren(nums[1])} = ${mid}`,
+      `${paren(mid)} ${ops[1]} ${paren(nums[2])} = ${toTex(value)}`,
       `${text('答え: ')} ${toTex(value)}`,
     ],
-    tags: value.d !== 1n ? ['fraction_result'] : ['count_negatives'],
-    key: `muldiv:${a}*${b}/${c}`,
-    verify: `(${a})*(${b})/(${c})`,
+    tags: ['count_negatives'],
+    key: `muldiv:${tex}`,
+    verify: divFirst ? `(${a})/(${divisor})*(${other})` : `(${a})*(${other})/(${divisor})`,
   };
 }
 
@@ -221,9 +303,29 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       verify: `[${options.join(',')}].indexOf(Math.${wantMin ? 'min' : 'max'}(${options.join(',')}))`,
     };
   }
-  // ★3: 絶対値が a の数を すべて / ある範囲の整数の個数
-  if (rng.bool()) {
-    const a = rng.int(1, 30);
+  // ★3: 絶対値が a の数を すべて / 絶対値が a より小さい整数を すべて / ある範囲の整数の個数
+  const form = rng.int(0, 2);
+  if (form === 1) {
+    const a = rng.int(2, 4);
+    const list = Array.from({ length: 2 * a - 1 }, (_, i) => i - (a - 1));
+    return {
+      templateId: 'g1.sign.abs',
+      difficulty: d,
+      prompt: `${text(`絶対値が ${a} より小さい 整数を すべて答えよ`)}`,
+      promptText: `絶対値が ${a} より小さい 整数を すべて答えよ(「,」で区切る)`,
+      answer: { kind: 'numbers', values: list.map((k) => rat(k)) },
+      hint: '数直線で 0 から 左右に 同じだけ。0 も 整数だよ',
+      explanation: [
+        `${text(`0 からの 距離が ${a} より 小さい 整数`)}`,
+        `${text('答え: ')} ${list.join(', ')} ${text(`(${list.length} 個)`)}`,
+      ],
+      tags: ['abs_range_list'],
+      key: `abs:less:${a}`,
+      verify: `[${list.join(',')}]`,
+    };
+  }
+  if (form === 0) {
+    const a = rng.int(1, 10);
     return {
       templateId: 'g1.sign.abs',
       difficulty: d,
@@ -296,7 +398,8 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
     if (rng.bool()) {
       const a = rng.int(2, 6);
       const withParen = rng.bool();
-      const e = rng.pick([2, 3]);
+      // 3乗は 3 まで((−6)³ = −216 のような大きな数は 教科書に出ない)
+      const e = a <= 3 ? rng.pick([2, 3]) : 2;
       const value = withParen ? pow(rat(-a), e) : neg(pow(rat(a), e));
       const tex = withParen ? `(-${a})^{${e}}` : `-${a}^{${e}}`;
       return {
@@ -332,7 +435,8 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       verify: `(${a})*((${b})+(${c}))`,
     };
   }
-  // ★3: 累乗 + 乗除 + 加減
+  // ★3: 4 回に 3 回は チャレンジテストの形(乗除のかたまりを 加減でつなぐ)、1 回は 累乗 + 乗除
+  if (rng.int(0, 3) > 0) return genMixedChain(rng, d);
   const a = rng.nonZero(4, 2);
   const b = rng.nonZero(9);
   const c = rng.nonZero(6, 2);
@@ -359,6 +463,77 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
     tags: ['order_of_operations', withParen ? 'power_of_negative' : 'negative_of_power'],
     key: `mixed:${tex}`,
     verify: `${withParen ? `(-${Math.abs(a)})**${e}` : `-(${Math.abs(a)}**${e})`} + (${b})*(${k})/(${c})`,
+  };
+}
+
+/**
+ * 四則混合 ★3 の「かたまり」の形。大阪府チャレンジテストの計算問題に合わせる(docs/difficulty.md)。
+ *   [['÷'], ['×']]       −20 ÷ (−4) + (−6) × 2
+ *   [['÷', '×'], ['×']]  −20 ÷ 5 × 2 − 7 × (−2)
+ *   [['×'], ['÷', '×']]  5 × (−3) − 18 ÷ (−2) × 3
+ *   [[], ['×'], ['÷']]   −3 + 5 × (−4) − 6 ÷ (−2)
+ * わられる数は 20 まで、ほかは 1けた。どの割り算も わり切れる
+ */
+const CHAIN_SHAPES: ('×' | '÷')[][][] = [
+  [['÷'], ['×']],
+  [['÷', '×'], ['×']],
+  [['×'], ['÷', '×']],
+  [[], ['×'], ['÷']],
+];
+
+function genChainBlock(rng: Rng, ops: ('×' | '÷')[]): { nums: number[]; value: number } {
+  if (ops[0] === '÷') {
+    const b = rng.nonZero(6, 2);
+    const q = rng.nonZero(Math.floor(20 / Math.abs(b)));
+    const nums = [b * q, b];
+    let value = q;
+    // ÷ のあとは × だけ(CHAIN_SHAPES)。× 1 は計算にならないので 2 から
+    for (const _ of ops.slice(1)) {
+      const c = rng.nonZero(5, 2);
+      nums.push(c);
+      value *= c;
+    }
+    return { nums, value };
+  }
+  const nums = [rng.nonZero(9, 2)];
+  for (const _ of ops) nums.push(rng.nonZero(9, 2));
+  return { nums, value: nums.reduce((p, x) => p * x, 1) };
+}
+
+function genMixedChain(rng: Rng, d: Difficulty): Problem {
+  const shape = rng.pick(CHAIN_SHAPES);
+  let blocks: { sign: 1 | -1; nums: number[]; value: number; ops: ('×' | '÷')[] }[];
+  let value: number;
+  do {
+    blocks = shape.map((ops, i) => ({ sign: i === 0 ? 1 : rng.pick([1, -1] as const), ops, ...genChainBlock(rng, ops) }));
+    value = blocks.reduce((sum, b) => sum + b.sign * b.value, 0);
+  } while (Math.abs(value) > 60);
+
+  const TEX_OP = { '×': '\\times', '÷': '\\div' } as const;
+  // 先頭の負の数は かっこなし(−20 ÷ 5)。演算子のうしろの負の数は かっこつき
+  const blockTex = (b: (typeof blocks)[number], first: boolean) =>
+    b.nums.map((n, i) => (i === 0 ? (first ? String(n) : paren(n)) : ` ${TEX_OP[b.ops[i - 1]]} ${paren(n)}`)).join('');
+  const tex = blocks.map((b, i) => (i === 0 ? blockTex(b, true) : ` ${b.sign > 0 ? '+' : '-'} ${blockTex(b, false)}`)).join('');
+  const sumTex = blocks.map((b, i) => (i === 0 ? String(b.value) : ` ${b.sign > 0 ? '+' : '-'} ${paren(b.value)}`)).join('');
+  const jsOp = { '×': '*', '÷': '/' } as const;
+  const verify = blocks
+    .map((b, i) => `${i === 0 ? '' : b.sign > 0 ? '+' : '-'}(${b.nums.map((n, k) => (k === 0 ? `(${n})` : `${jsOp[b.ops[k - 1]]}(${n})`)).join('')})`)
+    .join('');
+  return {
+    templateId: 'g1.sign.mixed',
+    difficulty: d,
+    prompt: `${tex} = ?`,
+    promptText: plainMinus(tex.replace(/\\times/g, '×').replace(/\\div/g, '÷')) + ' = ?',
+    answer: { kind: 'number', value: rat(value) },
+    hint: '× と ÷ の かたまりを 先に 計算して、あとで 足し引き',
+    explanation: [
+      ...blocks.filter((b) => b.ops.length > 0).map((b) => `${blockTex(b, false)} = ${b.value}`),
+      `${sumTex} = ${value}`,
+      `${text('答え: ')} ${value}`,
+    ],
+    tags: ['order_of_operations'],
+    key: `mixed:${tex}`,
+    verify,
   };
 }
 

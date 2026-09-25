@@ -1,4 +1,4 @@
-import type { FigureSpec, NumberLineSpec, PlaneSpec, AnglesSpec, SectorSpec, SolidSpec, ProjectionSpec, ChartSpec } from '@/math/figure';
+import type { FigureSpec, NumberLineSpec, PlaneSpec, AnglesSpec, SectorSpec, SolidSpec, ProjectionSpec, ChartSpec, TableSpec } from '@/math/figure';
 
 /**
  * 問題の図を SVG で描く(要件 F48)。
@@ -20,6 +20,8 @@ export function Figure({ spec }: { spec: FigureSpec }) {
       return <Projection spec={spec} />;
     case 'chart':
       return <Chart spec={spec} />;
+    case 'table':
+      return <DataTable spec={spec} />;
   }
 }
 
@@ -446,5 +448,44 @@ function Chart({ spec }: { spec: ChartSpec }) {
         </text>
       )}
     </svg>
+  );
+}
+
+// ---------------------------------------------------------------- 表(第1章)
+
+/** 表は文字が主役なので SVG ではなく HTML の表で描く(読み上げ・拡大にも強い) */
+function DataTable({ spec }: { spec: TableSpec }) {
+  return (
+    <div class="figure-table-wrap">
+      <table class="figure-table">
+        <thead>
+          <tr>
+            {spec.head.map((h, i) => (
+              <th key={i} scope="col">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {spec.rows.map((row, r) => (
+            <tr key={r}>
+              {row.map((c, i) =>
+                i === 0 ? (
+                  <th key={i} scope="row">
+                    {c}
+                  </th>
+                ) : (
+                  <td key={i} class={c === '?' ? 'unknown' : ''}>
+                    {c}
+                  </td>
+                ),
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {spec.caption && <p class="figure-table-caption">{spec.caption}</p>}
+    </div>
   );
 }
