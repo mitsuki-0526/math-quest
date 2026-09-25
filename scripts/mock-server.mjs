@@ -93,6 +93,7 @@ function handle(action, p) {
   if (!auth(row)) return { ok: false, error: 'bad_pass' };
   if (action === 'save') return storeSave(row, p.save);
   if (action === 'feedback') return storeFeedback(k, p.feedback);
+  if (action === 'review') return teacher ? storeReview(p.marks) : { ok: false, error: 'not_teacher' };
   if (action === 'load') return { ok: true, save: row.save };
   return { ok: false, error: 'unknown_action' };
 }
@@ -119,7 +120,15 @@ function handleAccount(action, p, email) {
   if (action === 'save') return storeSave(row, p.save);
   if (action === 'load') return { ok: true, save: row.save };
   if (action === 'feedback') return storeFeedback(k, p.feedback);
+  if (action === 'review') return teacher ? storeReview(p.marks) : { ok: false, error: 'not_teacher' };
   return { ok: false, error: 'unknown_action' };
+}
+
+/** 見本帳の印(本物は review シート。先生だけ)。開発中はコンソールに出す */
+function storeReview(marks) {
+  if (!Array.isArray(marks) || marks.length === 0 || marks.length > 200) return { ok: false, error: 'bad_review' };
+  for (const m of marks) console.log('review', JSON.stringify({ time: new Date().toISOString(), ...m }));
+  return { ok: true, count: marks.length };
 }
 
 /** 感想(本物は feedback シート)。開発中はメモリに置き、コンソールに出す */

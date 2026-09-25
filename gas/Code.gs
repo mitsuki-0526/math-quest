@@ -40,6 +40,7 @@
  *   { action:'save',  class, number, pass, save }  → { ok, stored:boolean, save }  (サーバーの方が新しければ stored=false で返す)
  *   { action:'load',  class, number, pass }        → { ok, save }
  *   { action:'feedback', class, number, pass, feedback:{ fun, difficulty, comment, level, chapter, answered, correct } } → { ok }
+ *   { action:'review', class, number, pass, marks:[{ node, template, star, rating, comment, flagged }] } → { ok, count }(先生だけ。問題の見本帳の印)
  *        感想(体験版の試遊)。feedback シートに 1 行足す
  */
 
@@ -47,6 +48,7 @@ var SHEETS = {
   students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at'],
   roster: ['email', 'class', 'number', 'memo'],
   feedback: ['time', 'class', 'number', 'fun', 'difficulty', 'comment', 'level', 'chapter', 'answered', 'correct'],
+  review: ['time', 'node', 'template', 'star', 'rating', 'comment', 'flagged'],
   unlock: ['class', 'g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'],
   config: ['key', 'value'],
   log: ['time', 'action', 'class', 'number', 'note'],
@@ -243,6 +245,7 @@ function handle(body) {
     else if (body.action === 'save') res = saveGame(cls, num, pass, body.save);
     else if (body.action === 'load') res = loadGame(cls, num, pass);
     else if (body.action === 'feedback') res = passFeedback(cls, num, pass, body.feedback);
+    else if (body.action === 'review') res = passReview(cls, num, pass, body.marks);
     else return { ok: false, error: 'unknown_action' };
     if (res.error === 'bad_pass') recordFailure(cls, num);
     else if (res.ok) clearFailures(cls, num);
@@ -346,6 +349,44 @@ function passFeedback(cls, num, pass, f) {
   if (!row) return { ok: false, error: 'not_found' };
   if (!authorize(row, cls, pass)) return { ok: false, error: 'bad_pass' };
   return writeFeedback(cls, num, f);
+}
+
+function passReview(cls, num, pass, marks) {
+  if (cls !== TEACHER_CLASS) return { ok: false, error: 'not_teacher' };
+  var row = findStudent(cls, num);
+  if (!row) return { ok: false, error: 'not_found' };
+  if (!authorize(row, cls, pass)) return { ok: false, error: 'bad_pass' };
+  return writeReview(marks);
+}
+
+/**
+ * 問題の見本帳の印(先生だけ)。1 行 = 地点 × 出題タイプ × ★。
+ * 難易度の調整に使う(docs/difficulty.md)。文字は すべて asText で 式として動かないようにする
+ */
+function writeReview(marks) {
+  if (!Array.isArray(marks) || marks.length === 0 || marks.length > 200) return { ok: false, error: 'bad_review' };
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('review');
+  if (!sh) {
+    sh = ss.insertSheet('review');
+    sh.appendRow(SHEETS.review);
+    sh.setFrozenRows(1);
+  }
+  var now = new Date().toISOString();
+  var rows = marks.map(function (m) {
+    var flagged = Array.isArray(m.flagged) ? m.flagged.slice(0, 10).map(function (f) { return String(f).slice(0, 200); }).join(' / ') : '';
+    return [
+      now,
+      asText(String(m.node || '').slice(0, 40)),
+      asText(String(m.template || '').slice(0, 40)),
+      Number(m.star) || '',
+      asText(String(m.rating || '').slice(0, 10)),
+      asText(String(m.comment || '').slice(0, 300)),
+      asText(flagged),
+    ];
+  });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, SHEETS.review.length).setValues(rows);
+  return { ok: true, count: rows.length };
 }
 
 function writeFeedback(cls, num, f) {
@@ -473,6 +514,7 @@ function handleAccount(email, body) {
   lock.waitLock(10000);
   try {
     if (body.action === 'feedback') return writeFeedback(cls, num, body.feedback);
+    if (body.action === 'review') return teacher ? writeReview(body.marks) : { ok: false, error: 'not_teacher' };
     var row = findStudent(cls, num);
     var now = new Date().toISOString();
     var account = { class: cls, number: num };

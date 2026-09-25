@@ -17,7 +17,7 @@ const g1c1: ChapterDef = {
     { id: 'village', type: 'town', name: 'はじまりの村', x: 8, y: 78, next: ['road'], bg: 'bg_village_square' },
     {
       id: 'road',
-      type: 'battle',
+      type: 'battle', maxStar: 1,
       name: '森の小道',
       x: 24,
       y: 66,
@@ -28,7 +28,7 @@ const g1c1: ChapterDef = {
     },
     {
       id: 'marsh',
-      type: 'battle',
+      type: 'battle', maxStar: 2,
       name: '符号の湿地',
       x: 40,
       y: 76,
@@ -40,6 +40,7 @@ const g1c1: ChapterDef = {
     {
       id: 'secret_cave',
       type: 'secret',
+      maxStar: 2,
       name: '隠し洞窟',
       x: 46,
       y: 36,
@@ -102,7 +103,7 @@ const g1c2: ChapterDef = {
     { id: 'village2', type: 'town', name: '羊飼いの集落', x: 8, y: 74, next: ['windmill'], bg: 'bg_plain_village' },
     {
       id: 'windmill',
-      type: 'battle',
+      type: 'battle', maxStar: 1,
       name: '風車の丘',
       x: 24,
       y: 58,
@@ -114,7 +115,7 @@ const g1c2: ChapterDef = {
     { id: 'sheepfold', type: 'event', name: '羊の囲い', x: 40, y: 70, next: ['road2'], script: 'C2-3', bg: 'bg_plain_sheepfold' },
     {
       id: 'road2',
-      type: 'battle',
+      type: 'battle', maxStar: 2,
       name: '草原の道',
       x: 56,
       y: 56,
@@ -165,7 +166,7 @@ const g1c3: ChapterDef = {
     { id: 'camp3', type: 'town', name: '野営地', x: 8, y: 70, next: ['entrance3'], bg: 'bg_cave_camp' },
     {
       id: 'entrance3',
-      type: 'battle',
+      type: 'battle', maxStar: 1,
       name: '洞窟の入口',
       x: 22,
       y: 56,
@@ -177,7 +178,7 @@ const g1c3: ChapterDef = {
     { id: 'balance3', type: 'event', name: '第一の天秤', x: 36, y: 70, next: ['corridor3'], script: 'C3-3', bg: 'bg_cave_balance' },
     {
       id: 'corridor3',
-      type: 'battle',
+      type: 'battle', maxStar: 2,
       name: '移項の回廊',
       x: 50,
       y: 54,
@@ -237,10 +238,10 @@ const g1c4: ChapterDef = {
   nextChapter: 'g1c5',
   nodes: [
     { id: 'town4', type: 'town', name: '湖畔の町', x: 8, y: 72, next: ['pier4'], bg: 'bg_lake_town' },
-    { id: 'pier4', type: 'battle', name: '水位計の桟橋', x: 24, y: 58, next: ['islands4'], intro: 'C4-2',
+    { id: 'pier4', type: 'battle', maxStar: 1, name: '水位計の桟橋', x: 24, y: 58, next: ['islands4'], intro: 'C4-2',
       enemies: [['prop_master'], ['prop_master'], ['prop_master', 'prop_master']], bg: 'bg_lake_pier' },
     { id: 'islands4', type: 'event', name: '座標の浮島', x: 38, y: 72, next: ['mill4'], script: 'C4-3', bg: 'bg_lake_islands' },
-    { id: 'mill4', type: 'battle', name: '水車小屋', x: 54, y: 56, next: ['cape4', 'secret_fog4'], intro: 'C4-4',
+    { id: 'mill4', type: 'battle', maxStar: 2, name: '水車小屋', x: 54, y: 56, next: ['cape4', 'secret_fog4'], intro: 'C4-4',
       enemies: [['invprop_strider', 'prop_master'], ['invprop_strider', 'invprop_strider'], ['invprop_strider', 'coord_jelly']], bg: 'bg_lake_mill' },
     { id: 'secret_fog4', type: 'secret', name: '霧の沖', x: 60, y: 30, next: ['cape4'], revealAfter: 'mill4', intro: 'C4-5',
       enemies: [['graph_eel'], ['graph_eel', 'graph_eel']], reward: { item: 'mirror_shield' }, bg: 'bg_lake_fog' },
@@ -262,10 +263,10 @@ const g1c5: ChapterDef = {
   nextChapter: 'g1c6',
   nodes: [
     { id: 'camp5', type: 'town', name: '発掘隊のキャンプ', x: 8, y: 70, next: ['door5'], bg: 'bg_ruins_camp' },
-    { id: 'door5', type: 'battle', name: '遺跡の門', x: 24, y: 56, next: ['mural5'], intro: 'C5-2',
+    { id: 'door5', type: 'battle', maxStar: 1, name: '遺跡の門', x: 24, y: 56, next: ['mural5'], intro: 'C5-2',
       enemies: [['angle_gargoyle'], ['angle_gargoyle', 'angle_gargoyle'], ['angle_gargoyle', 'mirror_spirit']], bg: 'bg_ruins_door' },
     { id: 'mural5', type: 'event', name: '壁画の間', x: 38, y: 70, next: ['corridor5'], script: 'C5-3', bg: 'bg_ruins_mural' },
-    { id: 'corridor5', type: 'battle', name: '対称の回廊', x: 52, y: 54, next: ['plaza5'], intro: 'C5-4',
+    { id: 'corridor5', type: 'battle', maxStar: 2, name: '対称の回廊', x: 52, y: 54, next: ['plaza5'], intro: 'C5-4',
       enemies: [['mirror_spirit', 'angle_gargoyle'], ['mirror_spirit', 'mirror_spirit'], ['angle_gargoyle', 'mirror_spirit']], bg: 'bg_ruins_corridor' },
     { id: 'plaza5', type: 'battle', name: 'おうぎ形の広場', x: 68, y: 68, next: ['boss5', 'secret_altar5'], intro: 'C5-5',
       enemies: [['sector_guard'], ['sector_guard', 'sector_guard'], ['sector_guard', 'mirror_spirit']], bg: 'bg_ruins_plaza' },
@@ -287,10 +288,10 @@ const g1c6: ChapterDef = {
   nextChapter: 'g1c7',
   nodes: [
     { id: 'village6', type: 'town', name: '石切り場の村', x: 8, y: 74, next: ['foot6'], bg: 'bg_mountain_village' },
-    { id: 'foot6', type: 'battle', name: '山の麓', x: 22, y: 62, next: ['cave6'], intro: 'C6-2',
+    { id: 'foot6', type: 'battle', maxStar: 1, name: '山の麓', x: 22, y: 62, next: ['cave6'], intro: 'C6-2',
       enemies: [['prism_golem'], ['prism_golem'], ['prism_golem', 'relation_spider']], bg: 'bg_mountain_foot' },
     { id: 'cave6', type: 'event', name: '展開図の洞', x: 34, y: 74, next: ['ridge6'], script: 'C6-3', bg: 'bg_mountain_cave' },
-    { id: 'ridge6', type: 'battle', name: '角柱の尾根', x: 48, y: 58, next: ['peak6'], intro: 'C6-4',
+    { id: 'ridge6', type: 'battle', maxStar: 2, name: '角柱の尾根', x: 48, y: 58, next: ['peak6'], intro: 'C6-4',
       enemies: [['prism_golem', 'face_turtle'], ['face_turtle', 'face_turtle'], ['face_turtle', 'relation_spider']], bg: 'bg_mountain_ridge' },
     { id: 'peak6', type: 'battle', name: '円錐の峰', x: 62, y: 44, next: ['rocks6', 'secret_sphere6'], intro: 'C6-5',
       enemies: [['cone_bat', 'cone_bat'], ['cone_bat', 'prism_golem'], ['cone_bat', 'cone_bat', 'cone_bat']], bg: 'bg_mountain_peak' },
@@ -314,9 +315,9 @@ const g1c7: ChapterDef = {
   nodes: [
     { id: 'inn7', type: 'town', name: '塔守の宿', x: 8, y: 74, next: ['entrance7'], bg: 'bg_tower_inn' },
     { id: 'entrance7', type: 'event', name: '塔の入口', x: 22, y: 62, next: ['records7'], script: 'C7-2', bg: 'bg_tower_entrance' },
-    { id: 'records7', type: 'battle', name: '記録の間', x: 36, y: 72, next: ['stairs7'], intro: 'C7-3',
+    { id: 'records7', type: 'battle', maxStar: 1, name: '記録の間', x: 36, y: 72, next: ['stairs7'], intro: 'C7-3',
       enemies: [['mean_ghost'], ['mean_ghost', 'mean_ghost'], ['mean_ghost', 'freq_bat']], bg: 'bg_tower_records' },
-    { id: 'stairs7', type: 'battle', name: '度数の階段', x: 50, y: 56, next: ['archive7'], intro: 'C7-4',
+    { id: 'stairs7', type: 'battle', maxStar: 2, name: '度数の階段', x: 50, y: 56, next: ['archive7'], intro: 'C7-4',
       enemies: [['freq_bat', 'mean_ghost'], ['freq_bat', 'freq_bat'], ['freq_bat', 'median_librarian']], bg: 'bg_tower_stairs' },
     { id: 'archive7', type: 'event', name: '古文書の間', x: 62, y: 70, next: ['corridor7'], script: 'C7-5', bg: 'bg_tower_archive' },
     { id: 'corridor7', type: 'battle', name: '代表値の回廊', x: 76, y: 54, next: ['boss7', 'secret_window7'], intro: 'C7-6',

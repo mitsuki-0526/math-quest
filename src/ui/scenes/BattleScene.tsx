@@ -30,10 +30,11 @@ import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
 import '@/data/grade1/problems';
-import { answerToText, type Problem } from '@/math/template';
+import { type Difficulty, type Problem } from '@/math/template';
 import { Bar, Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
-import { Tex, ProseTex } from '@/ui/components/Tex';
+import { Tex } from '@/ui/components/Tex';
+import { ProblemPrompt, answerTex, isProse } from '@/ui/components/ProblemView';
 import { Figure } from '@/ui/components/Figure';
 import { AnswerInput } from '@/ui/components/AnswerInput';
 
@@ -92,7 +93,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
       encounters,
       getEnemy,
       player: { name: ps.name, hp: ps.hp, maxHp: ps.maxHp, attack: ps.attack, defense: ps.defense, timeBonus: ps.timeBonus, expMul: ps.expMul },
-      pickDifficulty: (t) => (tutorial ? 1 : currentDifficulty(saveStore.get()!, t)),
+      pickDifficulty: (t) => (tutorial ? 1 : (Math.min(currentDifficulty(saveStore.get()!, t), node?.maxStar ?? 3) as Difficulty)),
       isWeak: (t) => isWeak(saveStore.get()!, t),
       hints: tutorial ? 99 : config.battle.hintsPerNode + ps.hintBonus,
       isBoss,
@@ -442,7 +443,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                 </div>
               )}
               <div class={`question-text${isProse(problem) ? ' prose' : ''}`}>
-                {isProse(problem) ? <ProseTex tex={problem.prompt} /> : <Tex tex={problem.prompt} />}
+                <ProblemPrompt problem={problem} />
               </div>
               {hintText && (
                 <p class="hint-line">
@@ -503,7 +504,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
             {tutorial && !tutorialSaid.wrong && <p class="muted">下に 解き方が 出てるよ。読んだら「つぎへ」</p>}
             {explain.note && <p class="warn">{explain.note}</p>}
             <p>
-              <b>問題:</b> {isProse(explain.problem) ? <ProseTex tex={explain.problem.prompt} /> : <Tex tex={explain.problem.prompt} />} <b>正解:</b> <Tex tex={answerTex(explain.problem)} />
+              <b>問題:</b> <ProblemPrompt problem={explain.problem} /> <b>正解:</b> <Tex tex={answerTex(explain.problem)} />
             </p>
             <ol class="explain-steps">
               {explain.problem.explanation.map((line, i) => (
@@ -594,16 +595,4 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
       )}
     </div>
   );
-}
-
-function answerTex(p: Problem): string {
-  const a = p.answer;
-  if (a.kind === 'choice') return a.options[a.correct];
-  if (a.kind === 'factorization') return p.explanation[p.explanation.length - 1].replace(/^\\text\{答え: \}\s*/, '');
-  return answerToText(a).replace(/(-?\d+)\/(\d+)/g, '\\frac{$1}{$2}');
-}
-
-/** 文章の多い問題(文章題・表の問題など)は、折り返せるように本文の文字で描く */
-function isProse(p: Problem): boolean {
-  return p.promptText.length > 30;
 }

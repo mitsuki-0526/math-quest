@@ -1837,6 +1837,151 @@ img.sprite {
   color: var(--txt);
   cursor: pointer;
 }
+/* ---------- 問題の見本帳(先生用) ---------- */
+.scene-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.catalog-chapters,
+.catalog-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.catalog-chapters {
+  display: flex;
+}
+.catalog-status {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-body);
+  font-size: 0.9em;
+  color: var(--sub);
+}
+.catalog-body {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.catalog-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: sticky;
+  top: 8px;
+}
+.catalog-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--ink);
+  color: var(--txt);
+  cursor: pointer;
+  text-align: left;
+}
+.catalog-node.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+.catalog-node small {
+  color: var(--sub);
+}
+.catalog-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.catalog-group {
+  padding: 10px 14px;
+  font-family: var(--font-body);
+}
+.catalog-group.rated-hard {
+  border-color: var(--ember);
+}
+.catalog-group.rated-easy {
+  border-color: var(--ok);
+}
+.catalog-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--gold-2);
+}
+.catalog-problems {
+  margin: 0;
+  padding-left: 1.6em;
+}
+.catalog-problems li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.catalog-problems li.flagged .catalog-problem {
+  color: var(--ember);
+}
+.catalog-problem {
+  min-width: 0;
+  flex: 1;
+}
+.catalog-problem .question-figure {
+  max-width: 420px;
+  margin: 0 0 4px;
+}
+.catalog-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 2px 0;
+  font-size: 0.85em;
+  color: var(--sub);
+}
+.catalog-options span::before {
+  content: '・';
+}
+.catalog-answer {
+  margin-left: 8px;
+  color: var(--gold-2);
+}
+.catalog-flag {
+  flex: none;
+  font-size: 0.85em;
+}
+.catalog-rate {
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.catalog-comment {
+  flex: 1;
+  min-width: 180px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--ink);
+  color: var(--txt);
+  font: inherit;
+}
+@media (max-width: 720px) {
+  .catalog-body {
+    grid-template-columns: 1fr;
+  }
+  .catalog-nodes {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
 /* ---------- 体験版の終わり・感想 ---------- */
 .scene-trial-end,
 .scene-feedback {

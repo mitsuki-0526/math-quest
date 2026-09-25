@@ -4,6 +4,7 @@ import { generateProblem, type Difficulty, type Problem } from '@/math/template'
 import { toNumber } from '@/math/rational';
 import { createRng } from '@/math/rng';
 import { getEnemy } from '@/data/grade1/enemies';
+import { grade1 } from '@/data/grade1/chapters';
 import type { NumberLineSpec, TableSpec } from '@/math/figure';
 
 /**
@@ -33,10 +34,33 @@ describe('第1章 正の数と負の数', () => {
     each('g1.sign.muldiv', 2, (p) => {
       if (p.promptText.includes('÷')) expect(numbersIn(p)[0], p.promptText).toBeLessThanOrEqual(81);
     });
+    let fractions = 0;
     each('g1.sign.muldiv', 3, (p) => {
+      if (p.tags.includes('fraction_muldiv')) {
+        // 分数の乗除: 答えは 約分して 分子・分母とも 20 以下
+        fractions++;
+        const v = (p.answer as { value: { n: bigint; d: bigint } }).value;
+        expect(Math.abs(Number(v.n)), p.promptText).toBeLessThanOrEqual(20);
+        expect(Number(v.d), p.promptText).toBeLessThanOrEqual(20);
+        return;
+      }
       expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
       expect(Math.abs(answerOf(p)), p.promptText).toBeLessThanOrEqual(360);
     });
+    expect(fractions).toBeGreaterThan(N / 8);
+  });
+
+  it('加減 ★1 は 1 けただけ(習いたてでも 解ける)', () => {
+    each('g1.sign.addsub', 1, (p) => expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(9));
+  });
+
+  it('各章の 最初の戦闘は ★1 まで、2 つめは ★2 まで', () => {
+    for (const c of grade1.chapters) {
+      const battles = c.nodes.filter((n) => n.type === 'battle');
+      if (battles.length === 0) continue;
+      expect(battles[0].maxStar, `${c.id}.${battles[0].id}`).toBe(1);
+      if (battles[1]) expect(battles[1].maxStar, `${c.id}.${battles[1].id}`).toBe(2);
+    }
   });
 
   it('絶対値: ★3 の「絶対値が a」は 10 まで', () => {

@@ -26,7 +26,9 @@ export type Scene =
   | { kind: 'settings' }
   /** 章をクリアしたが次の章がまだ開いていないとき(体験版の終わり) */
   | { kind: 'trialEnd'; chapterId: string }
-  | { kind: 'feedback' };
+  | { kind: 'feedback' }
+  /** 問題の見本帳(先生用。難易度の確認) */
+  | { kind: 'catalog' };
 
 export type SceneKind = Scene['kind'];
 

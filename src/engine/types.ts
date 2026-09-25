@@ -27,6 +27,11 @@ export interface NodeDef {
   reward?: { item: string; count?: number };
   /** 背景の素材ID */
   bg?: string;
+  /**
+   * この地点で出す問題の ★ の上限(省略時は上限なし)。生徒の ★ がもっと高くても、ここでは この ★ までにする。
+   * 章の最初の戦闘は「習いたてでも解ける」★1 だけにする(先生の試遊での指摘 2026-09-26)
+   */
+  maxStar?: 1 | 2 | 3;
 }
 
 export interface ChapterDef {

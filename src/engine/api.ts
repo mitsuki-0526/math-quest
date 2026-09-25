@@ -107,6 +107,16 @@ export interface FeedbackInput {
   correct: number;
 }
 
+/** 問題の見本帳の印(先生だけが送れる)。1 行 = 地点 × 出題タイプ × ★ */
+export interface ReviewInput {
+  node: string;
+  template: string;
+  star: number;
+  rating: string;
+  comment: string;
+  flagged: string[];
+}
+
 export class ApiFailure extends Error {
   constructor(
     readonly code: string,
@@ -230,6 +240,8 @@ export const api = {
   load: (id: Identity) => post<LoadResult>({ action: 'load', class: id.class, number: id.number, pass: id.pass }),
   feedback: (id: Identity, feedback: FeedbackInput) =>
     post<{ ok: true }>({ action: 'feedback', class: id.class, number: id.number, pass: id.pass, feedback }),
+  review: (id: Identity, marks: ReviewInput[]) =>
+    post<{ ok: true; count: number }>({ action: 'review', class: id.class, number: id.number, pass: id.pass, marks }),
 };
 
 /** ユーザー向けの短い説明 */
@@ -244,6 +256,10 @@ export function describeError(e: unknown): string {
       return 'サーバーの設定が 合っていません(先生に 連絡)';
     case 'too_many':
       return '感想は 少し 時間を あけてから 送ってね';
+    case 'not_teacher':
+      return '先生の アカウントで 入ったときだけ 送れます';
+    case 'bad_review':
+      return '見本帳の 印を 送れませんでした。内容を 確かめてください';
     case 'bad_feedback':
       return '感想の 内容を 確かめて、もう一度 送ってね';
     case 'closed':

@@ -25,7 +25,8 @@ const UNIT = '正の数と負の数';
  */
 function addSubTerms(rng: Rng, d: Difficulty, big: boolean): number[] {
   if (big) return Array.from({ length: d === 1 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(50));
-  if (d === 1) return [rng.nonZero(10), rng.nonZero(10)];
+  // ★1 は 習いたてでも 解けるように 1 けただけ(10 も 出さない)
+  if (d === 1) return [rng.nonZero(9), rng.nonZero(9)];
   const terms = Array.from({ length: d === 2 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(9));
   terms[rng.int(0, terms.length - 1)] = rng.nonZero(d === 2 ? 15 : 20);
   return terms;
@@ -203,6 +204,8 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
       verify: ns.map((x) => `(${x})`).join('*'),
     };
   }
+  // ★3 の 4 回に 1 回は 分数の乗除(学習プリントの 3/4 × (−5/6) ÷ 15/4 の形)
+  if (rng.int(0, 3) === 0) return genMulDivFraction(rng, d);
   // ★3: 答えが整数になる ×÷ の混合(例: (−24) ÷ (−8) × 3)、または 1けたの 4数の積(docs/difficulty.md)
   const form = rng.int(0, 2);
   if (form === 2) {
@@ -256,6 +259,58 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
     tags: ['count_negatives'],
     key: `muldiv:${tex}`,
     verify: divFirst ? `(${a})/(${divisor})*(${other})` : `(${a})*(${other})/(${divisor})`,
+  };
+}
+
+/**
+ * 分数の乗除。2 つ または 3 つの分数(分母 2〜9)。答えは 約分して 分子・分母とも 20 以下になるものだけ出す
+ * (約分の練習にはなるが、大きな数の計算にはしない)
+ */
+function genMulDivFraction(rng: Rng, d: Difficulty): Problem {
+  const frac = () => {
+    const den = rng.int(2, 9);
+    let num = rng.int(1, 9);
+    while (gcdOf(num, den) !== 1 || num === den) num = rng.int(1, 9);
+    return rat(rng.bool() ? num : -num, den);
+  };
+  let fs: ReturnType<typeof rat>[];
+  let ops: ('×' | '÷')[];
+  let value: ReturnType<typeof rat>;
+  do {
+    const three = rng.bool();
+    fs = three ? [frac(), frac(), frac()] : [frac(), frac()];
+    if (fs.every((f) => toNumber(f) > 0)) {
+      const i = rng.int(0, fs.length - 1);
+      fs[i] = neg(fs[i]);
+    }
+    ops = fs.slice(1).map(() => rng.pick(['×', '÷'] as const));
+    value = fs[0];
+    for (let i = 1; i < fs.length; i++) value = ops[i - 1] === '×' ? mul(value, fs[i]) : div(value, fs[i]);
+  } while (Math.abs(Number(value.n)) > 20 || Number(value.d) > 20 || (fs.length === 3 && Number(value.d) === 1 && Math.abs(Number(value.n)) === 1));
+  const TEX = { '×': '\\times', '÷': '\\div' } as const;
+  // 負の分数は かっこつき
+  const fTex = (f: ReturnType<typeof rat>) => (toNumber(f) < 0 ? `\\left(${toTex(f)}\\right)` : toTex(f));
+  const fPlain = (f: ReturnType<typeof rat>) => (toNumber(f) < 0 ? `(${plainMinus(`${f.n}/${f.d}`)})` : `${f.n}/${f.d}`);
+  const tex = fs.map((f, i) => (i === 0 ? fTex(f) : ` ${TEX[ops[i - 1]]} ${fTex(f)}`)).join('');
+  const plain = fs.map((f, i) => (i === 0 ? fPlain(f) : ` ${ops[i - 1]} ${fPlain(f)}`)).join('');
+  // ÷ を 逆数の × に 直した式(解説用)
+  const asMul = fs.map((f, i) => (i === 0 ? fTex(f) : ` \\times ${fTex(ops[i - 1] === '÷' ? div(rat(1), f) : f)}`)).join('');
+  const negatives = fs.filter((f) => toNumber(f) < 0).length;
+  return {
+    templateId: 'g1.sign.muldiv',
+    difficulty: d,
+    prompt: `${tex} = ?`,
+    promptText: `${plain} = ?`,
+    answer: { kind: 'number', value },
+    hint: '÷ は 逆数の × に 直す。符号を 先に 決めて、かける前に 約分',
+    explanation: [
+      ...(ops.includes('÷') ? [`${text('÷ を 逆数の × に: ')} ${asMul}`] : []),
+      `${text('負の数が ')}${negatives}${text(' 個 → 符号は ')}${toNumber(value) < 0 ? '-' : '+'}`,
+      `${text('答え: ')} ${toTex(value)}`,
+    ],
+    tags: ['fraction_muldiv'],
+    key: `muldiv:frac:${plain}`,
+    verify: fs.map((f, i) => `${i === 0 ? '' : ops[i - 1] === '×' ? '*' : '/'}(${Number(f.n)}/${Number(f.d)})`).join(''),
   };
 }
 
