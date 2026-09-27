@@ -1,5 +1,6 @@
 import { createStore } from './store';
 import { DEFAULT_PLAYER_NAME } from '@/data/characters';
+import type { TallyData } from './tally';
 
 /** セーブデータの版。構造を変えたら上げて migrate() に変換を書く。 */
 export const SAVE_VERSION = 1 as const;
@@ -51,6 +52,8 @@ export interface SaveData {
   };
   /** テンプレートID → 集計(要件 §3 の「1生徒1行」に入る学習情報) */
   stats: Record<string, TemplateStats>;
+  /** 授業の集計(地点 × 出題タイプ × ★ の回答数など)。先生のスプレッドシートの summary シートに まとまる */
+  tally?: TallyData;
   /** 今日のクエスト(要件 F14): 練習が少ない単元を毎日 1 つ提示する */
   daily?: { date: string; templateId: string; correct: number; target: number; claimed: boolean };
   settings: {

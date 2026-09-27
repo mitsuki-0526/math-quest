@@ -8,12 +8,16 @@
  * 学校アカウント方式の再現: MOCK_EMAIL=s1@school.example で起動すると、その人が開いている扱いになる
  * (リクエストに __email を付けると、その回だけ別の人になる。テスト用)。
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
- * 授業の管理(先生のメニューの代わり): GET ?action=__admin&op=reset|close|open&token=dev-token
+ * 授業の管理(先生のメニューの代わり): GET ?action=__admin&op=reset|close|open|summary&token=dev-token
+ *   summary は「集計を更新する」と同じ集計(gas/Code.gs の summarizeTallies をそのまま使う)を返す
  */
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PORT ?? 8787);
+// 本物と同じ集計にするため、Code.gs の関数を読み込む(関数と定数の定義だけなので そのまま評価できる)
+const gasSummary = new Function(`${readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8')}; return { summarizeTallies, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS };`)();
 const TOKEN = process.env.MOCK_TOKEN ?? 'dev-token';
 const UNLOCK = (process.env.MOCK_UNLOCK ?? 'g1c1').split(',');
 const ALL = ['g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'];
@@ -47,6 +51,10 @@ function handle(action, p) {
     if (p.op === 'reset') session.epoch = new Date().toISOString();
     if (p.op === 'close') session.open = false;
     if (p.op === 'open') session.open = true;
+    if (p.op === 'summary') {
+      const list = [...students.entries()].filter(([k, r]) => !k.startsWith('teacher|') && r.save?.tally).map(([k, r]) => ({ cls: k.split('|')[0], tally: r.save.tally }));
+      return { ok: true, students: list.length, ...gasSummary.summarizeTallies(list, gasSummary.SUMMARY_TARGETS, gasSummary.SUMMARY_MIN_ANSWERS) };
+    }
     return { ok: true };
   }
   const email = String(p.__email ?? MOCK_EMAIL).toLowerCase();

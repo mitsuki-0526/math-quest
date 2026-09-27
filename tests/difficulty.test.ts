@@ -23,10 +23,25 @@ const numbersIn = (p: Problem) => (p.promptText.match(/\d+(\.\d+)?/g) ?? []).map
 const answerOf = (p: Problem) => (p.answer.kind === 'number' ? toNumber(p.answer.value) : NaN);
 
 describe('第1章 正の数と負の数', () => {
-  it('加減: ★2・★3 は 2 けたの数が 1 問に 1 つまで。2 けただらけはボス専用', () => {
-    for (const d of [2, 3] as const) {
-      each('g1.sign.addsub', d, (p) => expect(numbersIn(p).filter((n) => n >= 10).length, p.promptText).toBeLessThanOrEqual(1));
+  it('加減は 教科書の練習問題の形: ★1 は 2 項(2 けたは 18 まで 1 つ)、★2 は 3〜4 項(23 まで 2 つ)、★3 は 4 項(30 まで 2 つ)', () => {
+    const spec = { 1: { terms: [2], max: 18 }, 2: { terms: [3, 4], max: 23 }, 3: { terms: [4], max: 30 } } as const;
+    for (const d of [1, 2, 3] as const) {
+      let zero = 0;
+      each('g1.sign.addsub', d, (p) => {
+        if (p.tags.some((t) => t.startsWith('decimal') || t.startsWith('fraction'))) return;
+        const nums = numbersIn(p);
+        expect(spec[d].terms, p.promptText).toContain(nums.length);
+        expect(Math.max(...nums), p.promptText).toBeLessThanOrEqual(spec[d].max);
+        expect(nums.filter((n) => n >= 10).length, p.promptText).toBeLessThanOrEqual(d === 1 ? 1 : 2);
+        if (nums.includes(0)) zero++;
+      });
+      // 0 を含む式も出る(教科書の (−4) + 0、0 − (−3))
+      expect(zero, `★${d}`).toBeGreaterThan(0);
     }
+    // ★1 は 正の数も (+7) と符号つき
+    each('g1.sign.addsub', 1, (p) => {
+      if (/\(\d/.test(p.promptText)) throw new Error(`符号のない かっこ: ${p.promptText}`);
+    });
     expect(getEnemy('king_nega').phases![0].templates).toEqual(['g1.sign.addsub_big']);
   });
 
@@ -48,10 +63,6 @@ describe('第1章 正の数と負の数', () => {
       expect(Math.abs(answerOf(p)), p.promptText).toBeLessThanOrEqual(360);
     });
     expect(fractions).toBeGreaterThan(N / 8);
-  });
-
-  it('加減 ★1 は 1 けただけ(習いたてでも 解ける)', () => {
-    each('g1.sign.addsub', 1, (p) => expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(9));
   });
 
   it('各章の 最初の戦闘は ★1 まで、2 つめは ★2 まで', () => {

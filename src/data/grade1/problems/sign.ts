@@ -19,17 +19,122 @@ const UNIT = '正の数と負の数';
 // ---------------------------------------------------------------- 加減
 
 /**
- * 加減の数の選び方。雑魚(マイナススライム)は符号の練習が目的なので、★が上がっても項の数と式の形で難しくし、
- * 2 けたの数は 1 問に 1 つまでにする(試遊で「★3 が 2 けただらけで難しすぎる」と先生の指摘)。
+ * 加減(マイナススライム)。教科書の練習問題の形に合わせる(先生が示した教科書のページ。docs/difficulty.md)。
+ *   ★1: 加法・減法の 2 項。正の数も (+7) と符号つき。0 を含む式・反数どうしも出る。
+ *       2 けたの数は 3 回に 1 回ほど、1 問に 1 つだけ(18 まで)
+ *   ★2: 加法と減法の混じった 3〜4 項。「−2 − 6」のような項だけの式と、「−1 − (−3) − 5」のような かっこ混じり。
+ *       2 けたは 23 まで・1 問に 2 つまで
+ *   ★3: 4 項。2 けたは 30 まで・1 問に 2 つまで。5 回に 1 回は 小数・分数
  * 2 けたの数ばかりの計算は、ボス(符号王ネガ)専用の addsub_big で出す
  */
-function addSubTerms(rng: Rng, d: Difficulty, big: boolean): number[] {
-  if (big) return Array.from({ length: d === 1 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(50));
-  // ★1 は 習いたてでも 解けるように 1 けただけ(10 も 出さない)
-  if (d === 1) return [rng.nonZero(9), rng.nonZero(9)];
-  const terms = Array.from({ length: d === 2 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(9));
-  terms[rng.int(0, terms.length - 1)] = rng.nonZero(d === 2 ? 15 : 20);
+interface AddSubToken {
+  /** 先頭の項は null */
+  op: '+' | '-' | null;
+  /** 書かれている数(かっこの中の符号つきの数、または 項の絶対値) */
+  value: number;
+  /** かっこで書くか */
+  paren: boolean;
+}
+
+const ADDSUB_SPEC: Record<Difficulty, { terms: number[]; bigMax: number; bigProb: number; maxBig: number; zeroProb: number }> = {
+  1: { terms: [2], bigMax: 18, bigProb: 0.3, maxBig: 1, zeroProb: 0.12 },
+  2: { terms: [3, 4], bigMax: 23, bigProb: 0.4, maxBig: 2, zeroProb: 0.1 },
+  3: { terms: [4], bigMax: 30, bigProb: 0.6, maxBig: 2, zeroProb: 0.05 },
+};
+
+/** 符号つきの項(+7, −2, 0 …)を 教科書の形に 並べる */
+function addSubSignedTerms(rng: Rng, d: Difficulty): number[] {
+  const spec = ADDSUB_SPEC[d];
+  const n = rng.pick(spec.terms);
+  const terms = Array.from({ length: n }, () => rng.nonZero(9));
+  // 2 けたの数(1 問に maxBig 個まで)
+  let bigs = rng.bool(spec.bigProb) ? 1 : 0;
+  if (bigs && spec.maxBig > 1 && rng.bool(0.25)) bigs = 2;
+  for (const i of rng.shuffle(terms.map((_, i) => i)).slice(0, bigs)) terms[i] = rng.nonZero(spec.bigMax, 10);
+  // 0 を含む式((−4) + 0、0 − (−3))
+  if (rng.bool(spec.zeroProb)) terms[rng.int(0, n - 1)] = 0;
+  // ★1 は ときどき 反数どうし((+9) + (−9))。教科書では 1 けたなので 1 けたのときだけ
+  if (d === 1 && terms[0] !== 0 && terms[1] !== 0 && Math.abs(terms[0]) < 10 && rng.bool(0.08)) terms[1] = -terms[0];
+  // 負の数を 必ず含める(正の数だけでは 符号の練習にならない)
+  if (!terms.some((t) => t < 0)) {
+    // どの項を負にするかは ばらけさせる(先頭ばかり 負にならないように)
+    const i = rng.pick(terms.map((t, k) => (t > 0 ? k : -1)).filter((k) => k >= 0));
+    terms[i] = -terms[i];
+  }
   return terms;
+}
+
+function genAddSubTextbook(rng: Rng, d: Difficulty): Problem {
+  if (d === 3 && rng.int(0, 4) === 0) return genAddSubFraction(rng, d);
+  const signedTerms = addSubSignedTerms(rng, d);
+  let tokens: AddSubToken[];
+  if (d === 1) {
+    // (+7) + (−2) / (−4) − (−11): 2 つめの数を「ひく」ときは 符号を反対にして持つ
+    const op = rng.pick(['+', '-'] as const);
+    const second = op === '+' ? signedTerms[1] : -signedTerms[1];
+    tokens = [
+      { op: null, value: signedTerms[0], paren: signedTerms[0] !== 0 },
+      { op, value: second, paren: second !== 0 },
+    ];
+  } else {
+    // 半分は 項だけの式(6 − 7 + 5 − 2)、半分は かっこ混じり(−1 − (−3) − 5、10 + (−15) − (−13) − 23)
+    const termOnly = rng.bool();
+    tokens = signedTerms.map((t, i) => {
+      if (i === 0) return { op: null, value: t, paren: false };
+      // かっこ混じりの式では 多めに かっこを使う(教科書の問3は 6 問中 4 問に かっこがある)
+      if (termOnly || rng.bool(0.3)) return { op: t < 0 ? '-' : '+', value: Math.abs(t), paren: false };
+      // かっこで書く: + (−15) / − (−13)。− のときは 符号を反対にして持つ
+      const op = rng.pick(['+', '-'] as const);
+      const v = op === '+' ? t : -t;
+      return v < 0 ? { op, value: v, paren: true } : { op: t < 0 ? '-' : '+', value: Math.abs(t), paren: false };
+    });
+  }
+  const show = (tk: AddSubToken) => {
+    const num = tk.paren ? `(${tk.value > 0 ? '+' : ''}${tk.value})` : `${tk.value}`;
+    return tk.op ? ` ${tk.op} ${num}` : num;
+  };
+  const tex = tokens.map(show).join('');
+  const plain = plainMinus(tex);
+  const value = tokens.reduce((s, tk) => (tk.op === '-' ? s - tk.value : s + tk.value), 0);
+  const asTerms = tokens.map((tk) => (tk.op === '-' ? -tk.value : tk.value));
+
+  const explanation: string[] = [];
+  if (tokens.some((tk) => tk.paren)) explanation.push(`${text('項だけの式に: ')} ${asTerms.map((t, i) => (i === 0 ? `${t}` : t < 0 ? ` - ${-t}` : ` + ${t}`)).join('')}`);
+  const pos = asTerms.filter((t) => t > 0);
+  const negs = asTerms.filter((t) => t < 0);
+  if (pos.length && negs.length && asTerms.length > 2) {
+    explanation.push(`${text('正の項: ')} ${pos.join(' + ')} = ${sumOf(pos)} \\quad ${text('負の項: ')} ${negs.map((n) => `(${n})`).join(' + ')} = ${sumOf(negs)}`);
+  }
+  explanation.push(`${text('答え: ')} ${value}`);
+
+  const tags: string[] = [];
+  if (tokens.some((tk) => tk.op === '-' && tk.value < 0)) tags.push('minus_minus');
+  if (negs.length >= 2) tags.push('neg_plus_neg');
+  if (asTerms.includes(0)) tags.push('with_zero');
+  return {
+    templateId: 'g1.sign.addsub',
+    difficulty: d,
+    prompt: `${tex} = ?`,
+    promptText: `${plain} = ?`,
+    answer: { kind: 'number', value: rat(value) },
+    hint:
+      d === 1
+        ? tokens[1].op === '-'
+          ? 'ひく数の 符号を 変えて たし算に。−(−3) は +3'
+          : '同じ符号なら 絶対値を たして その符号。ちがう符号なら 大きいほうから 小さいほうを ひく'
+        : '正の項どうし、負の項どうしを 先に まとめてみよう。−(−3) は +3',
+    explanation,
+    tags,
+    key: `addsub:${tex}`,
+    verify: tokens.map((tk) => `${tk.op ?? ''}(${tk.value})`).join(''),
+  };
+}
+
+const sumOf = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+/** ボス(符号王ネガ)専用: 50 までの 2 けたの数の加減 */
+function addSubTerms(rng: Rng, d: Difficulty): number[] {
+  return Array.from({ length: d === 1 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(50));
 }
 
 /**
@@ -80,8 +185,9 @@ function gcdOf(a: number, b: number): number {
 }
 
 function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
-  if (!big && d === 3 && rng.int(0, 4) === 0) return genAddSubFraction(rng, d);
-  const terms = addSubTerms(rng, d, big);
+  if (!big) return genAddSubTextbook(rng, d);
+  // ここから ボス専用(addsub_big)
+  const terms = addSubTerms(rng, d);
   const ops: ('+' | '-')[] = terms.slice(1).map(() => rng.pick(['+', '-']));
   // 必ず負の数を含める(正の数だけでは符号の練習にならないため)
   if (terms.every((t) => t > 0)) terms[rng.int(0, terms.length - 1)] *= -1;

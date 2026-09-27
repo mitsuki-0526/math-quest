@@ -105,7 +105,140 @@ function onOpen() {
     .addSeparator()
     .addItem('受付を停止する(生徒は入れない)', 'menuClose')
     .addItem('受付を再開する', 'menuOpen')
+    .addSeparator()
+    .addItem('集計を更新する(summary シート)', 'menuSummary')
     .addToUi();
+}
+
+// ------------------------------------------------------------------ 授業の集計(summary シート)
+
+/** この回答数に満たない組は、判定を出さない(数問では 正答率が ぶれるため) */
+var SUMMARY_MIN_ANSWERS = 20;
+/** ★ ごとの 目標の正答率 [下限, 上限](docs/difficulty.md)。外れたら「むずかしめ」「やさしめ」 */
+var SUMMARY_TARGETS = { 1: [0.9, 1.01], 2: [0.8, 0.9], 3: [0.5, 0.75] };
+
+function menuSummary() {
+  var r = writeSummary();
+  SpreadsheetApp.getActiveSpreadsheet().toast('生徒 ' + r.students + ' 人ぶんを 集計しました(' + r.rows + ' 行)。判定が ついた行を 見てください', 'MathQuest');
+}
+
+/** students シートの全員のセーブから 集計して、summary シートを 書き直す */
+function writeSummary() {
+  var sh = sheet('students');
+  var last = sh.getLastRow();
+  var values = last < 2 ? [] : sh.getRange(2, 1, last - 1, SHEETS.students.length).getValues();
+  var ci = SHEETS.students.indexOf('class');
+  var si = SHEETS.students.indexOf('save_json');
+  var list = [];
+  values.forEach(function (v) {
+    var cls = cellText(v[ci]);
+    if (!cls || cls === TEACHER_CLASS || !v[si]) return; // 先生の試し遊びは 数えない
+    try {
+      var save = JSON.parse(v[si]);
+      if (save && save.tally) list.push({ cls: cls, tally: save.tally });
+    } catch (e) {
+      // 壊れた行は とばす
+    }
+  });
+  var result = summarizeTallies(list, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS);
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var out = ss.getSheetByName('summary') || ss.insertSheet('summary');
+  out.clear();
+  var table = [result.header].concat(result.rows);
+  out.getRange(1, 1, table.length, result.header.length).setValues(table);
+  out.setFrozenRows(1);
+  out.setFrozenColumns(4);
+  // 判定の列に 色を付ける(むずかしめ = 赤、やさしめ = 青)
+  if (result.rows.length) {
+    var col = result.header.indexOf('判定') + 1;
+    var colors = result.rows.map(function (r) {
+      var j = r[col - 1];
+      return [j === 'むずかしめ' ? '#f8d7d3' : j === 'やさしめ' ? '#d6e6fb' : null];
+    });
+    out.getRange(2, col, colors.length, 1).setBackgrounds(colors);
+  }
+  out.getRange(table.length + 2, 1).setValue(
+    '更新: ' + new Date().toLocaleString() + ' ・ 判定は 回答 ' + SUMMARY_MIN_ANSWERS + ' 問以上の組だけ。目標の正答率 ★1: 90% 以上 / ★2: 80〜90% / ★3: 50〜75%',
+  );
+  return { students: list.length, rows: result.rows.length };
+}
+
+/**
+ * 生徒ごとの集計(save.tally)を 地点 × 出題タイプ × ★ で 合計する。シートに触らない(テストできるように)。
+ *   list: [{ cls, tally: { c: { '章.地点|タイプ|★': [回答, 正解, 秒, ヒント, 時間切れ] }, names, order } }]
+ * 戻り値: { header, rows }。rows は 章 → 地点の順番 → タイプ → ★ の順
+ */
+function summarizeTallies(list, targets, minAnswers) {
+  var groups = {};
+  var names = {};
+  var order = {};
+  var classes = {};
+  list.forEach(function (s) {
+    classes[s.cls] = true;
+    var t = s.tally || {};
+    Object.keys(t.names || {}).forEach(function (k) {
+      names[k] = t.names[k];
+    });
+    Object.keys(t.order || {}).forEach(function (k) {
+      order[k] = t.order[k];
+    });
+    Object.keys(t.c || {}).forEach(function (k) {
+      var v = t.c[k];
+      if (!Array.isArray(v) || !(v[0] > 0)) return;
+      var g = (groups[k] = groups[k] || { n: 0, ok: 0, sec: 0, hint: 0, timeout: 0, students: 0, byClass: {} });
+      g.n += v[0];
+      g.ok += v[1];
+      g.sec += v[2];
+      g.hint += v[3];
+      g.timeout += v[4];
+      g.students++;
+      var c = (g.byClass[s.cls] = g.byClass[s.cls] || { n: 0, ok: 0 });
+      c.n += v[0];
+      c.ok += v[1];
+    });
+  });
+  var classList = Object.keys(classes).sort();
+  var header = ['章', '地点', '出題タイプ', '★', '人数', '回答数', '正答率', '平均時間(秒)', 'ヒント率', '時間切れ率', '判定'].concat(
+    classList.map(function (c) {
+      return c + ' 正答率';
+    }),
+  );
+  var keys = Object.keys(groups).sort(function (a, b) {
+    var pa = a.split('|');
+    var pb = b.split('|');
+    var ca = chapterNumber(pa[0]);
+    var cb = chapterNumber(pb[0]);
+    if (ca !== cb) return ca - cb;
+    var oa = order[pa[0]] == null ? 50 : order[pa[0]];
+    var ob = order[pb[0]] == null ? 50 : order[pb[0]];
+    if (oa !== ob) return oa - ob;
+    if (pa[1] !== pb[1]) return pa[1] < pb[1] ? -1 : 1;
+    return Number(pa[2]) - Number(pb[2]);
+  });
+  var pct = function (x, n) {
+    return n > 0 ? Math.round((x / n) * 1000) / 10 + '%' : '';
+  };
+  var rows = keys.map(function (k) {
+    var p = k.split('|');
+    var g = groups[k];
+    var rate = g.ok / g.n;
+    var range = targets[p[2]] || [0, 1.01];
+    var judge = g.n < minAnswers ? 'データ不足' : rate < range[0] ? 'むずかしめ' : rate > range[1] ? 'やさしめ' : 'ちょうど';
+    return ['第' + chapterNumber(p[0]) + '章', names[p[0]] || p[0], names[p[1]] || p[1], '★' + p[2], g.students, g.n, pct(g.ok, g.n), Math.round((g.sec / g.n) * 10) / 10, pct(g.hint, g.n), pct(g.timeout, g.n), judge].concat(
+      classList.map(function (c) {
+        var cg = g.byClass[c];
+        return cg ? pct(cg.ok, cg.n) + '(' + cg.n + ')' : '';
+      }),
+    );
+  });
+  return { header: header, rows: rows };
+}
+
+/** 'g1c3.pier' → 3 */
+function chapterNumber(nodeId) {
+  var m = /c(\d+)\./.exec(String(nodeId));
+  return m ? Number(m[1]) : 0;
 }
 
 function menuResetSessions() {

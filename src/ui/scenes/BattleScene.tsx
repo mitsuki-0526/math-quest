@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { popScene, replaceScene, resetScenes } from '@/engine/scenes';
-import { saveStore, updateSave } from '@/engine/save';
+import { saveStore, updateSave, type SaveData } from '@/engine/save';
+import { recordTally } from '@/engine/tally';
 import { useStore } from '@/engine/store';
 import {
   createBattle,
@@ -168,6 +169,24 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     }
   }
 
+  /** 授業の集計に 1 問ぶん 記録する(操作説明の戦闘は ★1 固定・ヒント無制限なので 数えない) */
+  function tally(d: SaveData, p: Problem, correct: boolean, seconds: number, hinted: boolean, timedOut: boolean) {
+    if (tutorial) return;
+    const isSpring = nodeKey === 'spring';
+    recordTally(d, {
+      nodeId: `${chapterId}.${nodeKey}`,
+      nodeName: isSpring ? '修練の泉' : (node?.name ?? nodeKey),
+      nodeOrder: isSpring ? 99 : Math.max(0, chapter?.nodes.findIndex((n) => n.id === nodeKey) ?? 0),
+      templateId: p.templateId,
+      templateTitle: getTemplate(p.templateId).title,
+      star: p.difficulty,
+      correct,
+      seconds,
+      hinted,
+      timedOut,
+    });
+  }
+
   function submit(value: string) {
     if (!state || state.phase !== 'question' || !problem) return;
     const elapsed = (Date.now() - askedAt.current) / 1000;
@@ -177,6 +196,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     if (tutorial && next.player.hp < 1) next = { ...next, player: { ...next.player, hp: 1 }, phase: 'explain' };
     const last = next.last!;
     updateSave((d) => {
+      tally(d, problem, last.correct, elapsed, before.hintUsedForCurrent, false);
       const change = recordAnswer(d, problem.templateId, last.correct, problem.tags);
       if (change !== 0) next = { ...next, log: [...next.log, change > 0 ? `${characters.pita.name}「調子いいね! 問題が 少し 難しくなるよ」` : `${characters.pita.name}「少し やさしい 問題に するね。ゆっくり いこう」`] };
     });
@@ -201,7 +221,10 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     const next = engineTimeout(state, ctx);
     setFx((f) => [...f, { id: Date.now(), kind: 'player', amount: next.last!.damage }]);
     setShake((n) => n + 1);
-    updateSave((d) => recordAnswer(d, before.problem!.templateId, false, before.problem!.tags));
+    updateSave((d) => {
+      tally(d, before.problem!, false, before.timeLimit, before.hintUsedForCurrent, true);
+      recordAnswer(d, before.problem!.templateId, false, before.problem!.tags);
+    });
     setExplain({ problem: before.problem!, note: undefined, timeout: true });
     commit(next);
   }
