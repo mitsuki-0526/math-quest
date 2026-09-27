@@ -13,6 +13,7 @@ export function ProblemPrompt({ problem }: { problem: Problem }) {
 
 /** 答えを TeX で(選択式は正解の選択肢、素因数分解は解説の最後の行) */
 export function answerTex(p: Problem): string {
+  if (p.answerLabel) return p.answerLabel;
   const a = p.answer;
   if (a.kind === 'choice') return a.options[a.correct];
   if (a.kind === 'factorization') return p.explanation[p.explanation.length - 1].replace(/^\\text\{答え: \}\s*/, '');

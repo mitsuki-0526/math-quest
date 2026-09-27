@@ -1934,8 +1934,17 @@ img.sprite {
   flex: 1;
 }
 .catalog-problem .question-figure {
-  max-width: 420px;
   margin: 0 0 4px;
+}
+/* 図(SVG)は小さめに。表は 横に切れないように 幅を制限しない */
+.catalog-problem .figure {
+  max-width: 420px;
+}
+.catalog-problem .figure-table-wrap {
+  overflow-x: visible;
+}
+.catalog-problem .figure-table {
+  margin: 0;
 }
 .catalog-options {
   display: flex;

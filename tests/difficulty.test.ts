@@ -23,31 +23,39 @@ const numbersIn = (p: Problem) => (p.promptText.match(/\d+(\.\d+)?/g) ?? []).map
 const answerOf = (p: Problem) => (p.answer.kind === 'number' ? toNumber(p.answer.value) : NaN);
 
 describe('第1章 正の数と負の数', () => {
-  it('加減は 教科書の練習問題の形: ★1 は 2 項(2 けたは 18 まで 1 つ)、★2 は 3〜4 項(23 まで 2 つ)、★3 は 4 項(30 まで 2 つ)', () => {
-    const spec = { 1: { terms: [2], max: 18 }, 2: { terms: [3, 4], max: 23 }, 3: { terms: [4], max: 30 } } as const;
+  it('加減(先生の印 2026-09-27): ★1 は 1 けたの 2 項、★2 は かっこつき 3 項が基本(ときどき かっこなし 2〜3 項)、★3 は 3〜4 項', () => {
+    const spec = { 1: { terms: [2], max: 9, bigs: 0 }, 2: { terms: [2, 3], max: 18, bigs: 1 }, 3: { terms: [3, 4], max: 23, bigs: 2 } } as const;
     for (const d of [1, 2, 3] as const) {
       let zero = 0;
+      let paren = 0;
       each('g1.sign.addsub', d, (p) => {
         if (p.tags.some((t) => t.startsWith('decimal') || t.startsWith('fraction'))) return;
         const nums = numbersIn(p);
         expect(spec[d].terms, p.promptText).toContain(nums.length);
         expect(Math.max(...nums), p.promptText).toBeLessThanOrEqual(spec[d].max);
-        expect(nums.filter((n) => n >= 10).length, p.promptText).toBeLessThanOrEqual(d === 1 ? 1 : 2);
+        expect(nums.filter((n) => n >= 10).length, p.promptText).toBeLessThanOrEqual(spec[d].bigs);
         if (nums.includes(0)) zero++;
+        if (p.promptText.startsWith('(')) paren++;
       });
       // 0 を含む式も出る(教科書の (−4) + 0、0 − (−3))
       expect(zero, `★${d}`).toBeGreaterThan(0);
+      // ★2 は かっこつき 3 項が基本
+      if (d === 2) expect(paren, '★2 の かっこつき').toBeGreaterThan(N / 2);
     }
-    // ★1 は 正の数も (+7) と符号つき
-    each('g1.sign.addsub', 1, (p) => {
-      if (/\(\d/.test(p.promptText)) throw new Error(`符号のない かっこ: ${p.promptText}`);
-    });
+    // ★1・★2 の かっこの中の 正の数は (+7) と符号つき
+    for (const d of [1, 2] as const) {
+      each('g1.sign.addsub', d, (p) => {
+        if (/\(\d/.test(p.promptText)) throw new Error(`符号のない かっこ: ${p.promptText}`);
+      });
+    }
     expect(getEnemy('king_nega').phases![0].templates).toEqual(['g1.sign.addsub_big']);
   });
 
-  it('乗除: ★2 の割り算は わられる数 81 まで。★3 は答えが整数', () => {
+  it('乗除: ★2 は わり算だけ(わられる数 81 まで)。★3 は答えが整数(分数の乗除を除く)', () => {
     each('g1.sign.muldiv', 2, (p) => {
-      if (p.promptText.includes('÷')) expect(numbersIn(p)[0], p.promptText).toBeLessThanOrEqual(81);
+      expect(p.promptText, p.promptText).toContain('÷');
+      expect(p.promptText, p.promptText).not.toContain('×');
+      expect(numbersIn(p)[0], p.promptText).toBeLessThanOrEqual(81);
     });
     let fractions = 0;
     each('g1.sign.muldiv', 3, (p) => {
@@ -74,43 +82,96 @@ describe('第1章 正の数と負の数', () => {
     }
   });
 
-  it('絶対値: ★3 の「絶対値が a」は 10 まで', () => {
+  it('絶対値: 記号 |−7| は使わず 文で聞く(中学校では 教えない)。★3 の「絶対値が a」は 10 まで', () => {
+    for (const d of [1, 2, 3] as const) each('g1.sign.abs', d, (p) => expect(p.promptText, p.promptText).not.toContain('|'));
     each('g1.sign.abs', 3, (p) => {
       const m = p.promptText.match(/絶対値が (\d+)/);
       if (m) expect(Number(m[1]), p.promptText).toBeLessThanOrEqual(10);
     });
   });
 
-  it('四則混合: ★2 の 3 乗は 3 まで。★3 は 20 までの数で、答えは整数', () => {
-    each('g1.sign.mixed', 2, (p) => {
+  it('四則混合: ★1 は 累乗・かっこ(3 乗は 3 まで)、★2 は ×が先(先生の印で入れかえ)。★3 は 20 までの数で、答えは整数', () => {
+    each('g1.sign.mixed', 1, (p) => {
+      expect(p.tags.some((t) => t.includes('power') || t === 'parentheses_first'), p.promptText).toBe(true);
       if (p.promptText.includes('³')) expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(3);
     });
+    each('g1.sign.mixed', 2, (p) => expect(p.tags, p.promptText).toEqual(['order_of_operations']));
     each('g1.sign.mixed', 3, (p) => {
       expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(20);
       expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
     });
   });
 
-  it('素因数分解: 300 以下で、素数は 2・3・5・7(★3 だけ 11 か 13 を 1 つまで)', () => {
+  it('素因数分解: ★1 は 50 まで、★2 は 2 けた(30〜99)で 素因数 3 つまで(11 も)、★3 は 300 まで', () => {
+    const factorCount = (n: number) => {
+      let c = 0;
+      for (let q = 2, m = n; m > 1; ) if (m % q === 0) (m /= q), c++;
+      else q++;
+      return c;
+    };
     for (const d of [1, 2, 3] as const) {
       each('g1.sign.primefactor', d, (p) => {
         const n = (p.answer as { n: number }).n;
-        expect(n).toBeLessThanOrEqual(d === 1 ? 50 : d === 2 ? 120 : 300);
+        expect(n).toBeLessThanOrEqual(d === 1 ? 50 : d === 2 ? 99 : 300);
+        if (d === 2) {
+          expect(n, `${n}`).toBeGreaterThanOrEqual(30);
+          expect(factorCount(n), `${n}`).toBeLessThanOrEqual(3);
+        }
         let m = n;
         for (const q of [2, 3, 5, 7]) while (m % q === 0) m /= q;
-        expect(d === 3 ? [1, 11, 13] : [1], `${n}`).toContain(m);
+        expect(d === 1 ? [1] : d === 2 ? [1, 11] : [1, 11, 13], `${n}`).toContain(m);
       });
     }
   });
 
-  it('数直線: ★2 に 0.5 きざみ、★3 に 2・5 きざみの目盛りが出る', () => {
-    const steps = (d: Difficulty) => {
-      const set = new Set<number>();
-      each('g1.sign.numberline', d, (p) => set.add((p.figure as NumberLineSpec).step ?? 1));
-      return set;
+  it('数直線: 目盛りは 1 だけ。★2 は 距離・1 回進む、★3 は 2 回進む・逆向き(★2 と ★3 の逆転を直した)', () => {
+    for (const d of [1, 2, 3] as const) each('g1.sign.numberline', d, (p) => expect((p.figure as NumberLineSpec).step ?? 1, p.promptText).toBe(1));
+    const tags = (d: Difficulty) => {
+      const set = new Set<string>();
+      each('g1.sign.numberline', d, (p) => p.tags.forEach((t) => set.add(t)));
+      return [...set].sort();
     };
-    expect([...steps(2)].sort()).toEqual([0.5, 1]);
-    expect([...steps(3)].sort((a, b) => a - b)).toEqual([1, 2, 5]);
+    expect(tags(2)).toEqual(['numberline_add', 'numberline_distance', 'numberline_sub']);
+    expect(tags(3)).toEqual(['numberline_reverse', 'numberline_two_moves']);
+  });
+
+  it('絶対値 ★2: 半分は 負の数どうしの比較(符号だけで 選べないように)。「絶対値が a の数」は ★2、★3 には 出さない', () => {
+    let negOnly = 0;
+    let both = 0;
+    each('g1.sign.abs', 2, (p) => {
+      if (p.tags.includes('abs_two_values')) return void both++;
+      const opts = (p.answer as { options: string[] }).options;
+      if (opts.every((o) => o.startsWith('−'))) negOnly++;
+    });
+    expect(negOnly).toBeGreaterThan(N / 5);
+    expect(both).toBeGreaterThan(N / 5);
+    each('g1.sign.abs', 3, (p) => expect(p.tags, p.promptText).not.toContain('abs_two_values'));
+  });
+
+  it('加減 ★2 の かっこなしの式は、先頭が負か 答えが負(「7 − 6」のような式は出さない)。ボスの式も 項に直すと 負の項がある', () => {
+    each('g1.sign.addsub', 2, (p) => {
+      if (p.promptText.includes('(')) return; // かっこつきの式は 対象外
+      expect(p.promptText.startsWith('−') || answerOf(p) < 0, p.promptText).toBe(true);
+    });
+    for (const d of [1, 2, 3] as const)
+      each('g1.sign.addsub_big', d, (p) => {
+        // 「31 + 46 + 40」のような 正の数だけの 項だけの式は ない
+        expect(/^\d[\d +]*= \?$/.test(p.promptText), p.promptText).toBe(false);
+      });
+  });
+
+  it('小数の問題の正解は 小数で 見せる(26/5 ではなく 5.2)', () => {
+    each('g1.sign.addsub', 3, (p) => {
+      if (p.tags.includes('decimal_addsub')) expect(p.answerLabel, p.promptText).toMatch(/^-?\d+(\.\d)?$/);
+    });
+  });
+
+  it('平均から ? を求める問題の ヒントは 符号つきの差(平均 − 目標)で 案内する。? は「目標との差」と 明記', () => {
+    each('g1.sign.average', 3, (p) => {
+      if (!p.tags.includes('base_average_missing')) return;
+      expect(p.hint, p.hint).toMatch(/平均 − (目標|基準) = .*(符号つき)/);
+      expect(p.promptText, p.promptText).toMatch(/(目標|基準)との差は\?$/);
+    });
   });
 
   it('基準との差・平均: 差は ±15 まで。★2・★3 は表つき、★3 の平均は整数', () => {

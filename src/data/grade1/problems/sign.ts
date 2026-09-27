@@ -19,12 +19,11 @@ const UNIT = '正の数と負の数';
 // ---------------------------------------------------------------- 加減
 
 /**
- * 加減(マイナススライム)。教科書の練習問題の形に合わせる(先生が示した教科書のページ。docs/difficulty.md)。
- *   ★1: 加法・減法の 2 項。正の数も (+7) と符号つき。0 を含む式・反数どうしも出る。
- *       2 けたの数は 3 回に 1 回ほど、1 問に 1 つだけ(18 まで)
- *   ★2: 加法と減法の混じった 3〜4 項。「−2 − 6」のような項だけの式と、「−1 − (−3) − 5」のような かっこ混じり。
- *       2 けたは 23 まで・1 問に 2 つまで
- *   ★3: 4 項。2 けたは 30 まで・1 問に 2 つまで。5 回に 1 回は 小数・分数
+ * 加減(マイナススライム)。教科書の練習問題の形に合わせ、先生の見本帳の印で直した(2026-09-27。docs/difficulty.md)。
+ *   ★1: 加法・減法の 2 項。正の数も (+7) と符号つき。0 を含む式・反数どうしも出る。1 けただけ(「2けたはまだ早い」)
+ *   ★2: かっこつきの数 3 つ((+3) + (−5) − (−2))が基本。ときどき かっこなしの 2〜3 項(−2 − 6、6 − 7 + 5)。
+ *       2 けたは 4 回に 1 回ほど・1 つだけ(18 まで)。「数字 4 つは多い」ので 3 つまで
+ *   ★3: 加法と減法の混じった 3〜4 項(項だけの式・かっこ混じり)。2 けたは 23 まで・1 問に 2 つまで。5 回に 1 回は 小数・分数
  * 2 けたの数ばかりの計算は、ボス(符号王ネガ)専用の addsub_big で出す
  */
 interface AddSubToken {
@@ -37,9 +36,9 @@ interface AddSubToken {
 }
 
 const ADDSUB_SPEC: Record<Difficulty, { terms: number[]; bigMax: number; bigProb: number; maxBig: number; zeroProb: number }> = {
-  1: { terms: [2], bigMax: 18, bigProb: 0.3, maxBig: 1, zeroProb: 0.12 },
-  2: { terms: [3, 4], bigMax: 23, bigProb: 0.4, maxBig: 2, zeroProb: 0.1 },
-  3: { terms: [4], bigMax: 30, bigProb: 0.6, maxBig: 2, zeroProb: 0.05 },
+  1: { terms: [2], bigMax: 9, bigProb: 0, maxBig: 0, zeroProb: 0.12 },
+  2: { terms: [3], bigMax: 18, bigProb: 0.25, maxBig: 1, zeroProb: 0.08 },
+  3: { terms: [3, 4], bigMax: 23, bigProb: 0.4, maxBig: 2, zeroProb: 0.08 },
 };
 
 /** 符号つきの項(+7, −2, 0 …)を 教科書の形に 並べる */
@@ -76,6 +75,22 @@ function genAddSubTextbook(rng: Rng, d: Difficulty): Problem {
       { op: null, value: signedTerms[0], paren: signedTerms[0] !== 0 },
       { op, value: second, paren: second !== 0 },
     ];
+  } else if (d === 2) {
+    // 基本は かっこつきの数 3 つ((+3) + (−5) − (−2))。3 回に 1 回は かっこなしの 2〜3 項(−2 − 6、6 − 7 + 5)
+    if (rng.bool(0.35)) {
+      const terms = rng.bool() ? signedTerms.slice(0, 2) : signedTerms;
+      if (!terms.some((t) => t < 0)) terms[terms.length - 1] = -Math.abs(terms[terms.length - 1]) || -rng.int(1, 9);
+      // 「7 − 6」のように 小学校の ひき算で 済む式は 出さない。先頭が負か、答えが負になる形に(−2 − 6、6 − 7。Codex のレビュー)
+      if (terms[0] >= 0 && terms.reduce((a, b) => a + b, 0) >= 0) terms[0] = -Math.abs(terms[0]) || -rng.int(1, 9);
+      tokens = terms.map((t, i) => (i === 0 ? { op: null, value: t, paren: false } : { op: t < 0 ? '-' : '+', value: Math.abs(t), paren: false }));
+    } else {
+      tokens = signedTerms.map((t, i) => {
+        if (i === 0) return { op: null, value: t, paren: t !== 0 };
+        const op = rng.pick(['+', '-'] as const);
+        const v = op === '+' ? t : -t;
+        return { op, value: v, paren: v !== 0 };
+      });
+    }
   } else {
     // 半分は 項だけの式(6 − 7 + 5 − 2)、半分は かっこ混じり(−1 − (−3) − 5、10 + (−15) − (−13) − 23)
     const termOnly = rng.bool();
@@ -174,6 +189,8 @@ function genAddSubFraction(rng: Rng, d: Difficulty): Problem {
       `${text('ひき算は 符号を 変えて たし算に: ')} ${show(nums[0])} + ${show(signed)}`,
       `${text('答え: ')} ${decimal ? String(toNumber(value)) : toTex(value)}`,
     ],
+    // 小数の問題の正解は 小数で 見せる(26/5 ではなく 5.2)
+    ...(decimal ? { answerLabel: String(toNumber(value)) } : {}),
     tags: [decimal ? 'decimal_addsub' : 'fraction_addsub'],
     key: `addsub:frac:${tex}`,
     verify: `(${toNumber(nums[0])})${op}(${toNumber(nums[1])})`,
@@ -189,8 +206,11 @@ function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
   // ここから ボス専用(addsub_big)
   const terms = addSubTerms(rng, d);
   const ops: ('+' | '-')[] = terms.slice(1).map(() => rng.pick(['+', '-']));
-  // 必ず負の数を含める(正の数だけでは符号の練習にならないため)
-  if (terms.every((t) => t > 0)) terms[rng.int(0, terms.length - 1)] *= -1;
+  // 必ず負の数を含める(正の数だけでは符号の練習にならないため)。
+  // 「− (−46)」のように ひく数が負だと 項に直したとき正になるので、演算子を ふくめた「項」で 確かめる
+  // (以前は 31 + 46 + 40 のような 正の数だけの式が 出ていた。Codex のレビュー)
+  const asTerm = (i: number) => (i === 0 ? terms[0] : ops[i - 1] === '+' ? terms[i] : -terms[i]);
+  if (terms.every((_, i) => asTerm(i) > 0)) terms[rng.int(0, terms.length - 1)] *= -1;
 
   // ★3(ボスは ★2 から)の半分は「項だけの式」(-3 + 7 - 5)で出す
   const termForm = (d === 3 || (big && d >= 2)) && rng.bool();
@@ -243,9 +263,10 @@ function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
 
 function genMulDiv(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
-    // 2数の積。必ず負の数を含める
-    let a = rng.nonZero(9);
-    let b = rng.nonZero(9);
+    // 2数の積。必ず負の数を含める。1・−1 は 10 回に 1 回ほどに(多いと 符号だけの練習に 偏る。Codex のレビュー)
+    const factor = () => (rng.bool(0.1) ? rng.nonZero(9) : rng.nonZero(9, 2));
+    let a = factor();
+    let b = factor();
     if (a > 0 && b > 0) (rng.bool() ? (a *= -1) : (b *= -1));
     const value = rat(a * b);
     return {
@@ -266,8 +287,8 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
     };
   }
   if (d === 2) {
-    // 割り切れる除算、または 3数の積
-    if (rng.bool()) {
+    // 割り切れる除算だけ(先生の印「★2 は わり算のみ」2026-09-27。3 数の積は ★3 へ)
+    {
       // 教科書・学習プリントの割り算は わられる数が 48 程度まで(docs/difficulty.md)
       const b = rng.nonZero(9, 2);
       const q = rng.nonZero(9);
@@ -290,25 +311,6 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
         verify: `(${a})/(${b})`,
       };
     }
-    const ns = [rng.nonZero(6), rng.nonZero(6), rng.nonZero(6)];
-    if (ns.filter((x) => x < 0).length === 0) ns[rng.int(0, 2)] *= -1;
-    const prod = ns[0] * ns[1] * ns[2];
-    return {
-      templateId: 'g1.sign.muldiv',
-      difficulty: d,
-      prompt: `${ns.map(paren).join(' \\times ')} = ?`,
-      promptText: plainMinus(`${ns.map(paren).join(' × ')} = ?`),
-      answer: { kind: 'number', value: rat(prod) },
-      hint: '負の数の個数を 数えよう。奇数個なら −、偶数個なら +',
-      explanation: [
-        `${text('負の数が ')}${ns.filter((x) => x < 0).length}${text(' 個 → 符号は ')}${prod < 0 ? '-' : '+'}`,
-        `${ns.map((x) => Math.abs(x)).join(' \\times ')} = ${Math.abs(prod)}`,
-        `${text('答え: ')} ${prod}`,
-      ],
-      tags: ['count_negatives'],
-      key: `muldiv:${ns.join('*')}`,
-      verify: ns.map((x) => `(${x})`).join('*'),
-    };
   }
   // ★3 の 4 回に 1 回は 分数の乗除(学習プリントの 3/4 × (−5/6) ÷ 15/4 の形)
   if (rng.int(0, 3) === 0) return genMulDivFraction(rng, d);
@@ -317,8 +319,9 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
   if (form === 2) {
     let ns: number[];
     do {
-      ns = [rng.nonZero(6), rng.nonZero(6), rng.nonZero(6), rng.nonZero(6)];
-      if (ns.every((x) => x > 0)) ns[rng.int(0, 3)] *= -1;
+      // 3 数 または 4 数の積(3 数の積は ★2 から移した)
+      ns = Array.from({ length: rng.pick([3, 4]) }, () => rng.nonZero(6));
+      if (ns.every((x) => x > 0)) ns[rng.int(0, ns.length - 1)] *= -1;
     } while (Math.abs(ns.reduce((p, x) => p * x, 1)) > 360);
     const prod = ns.reduce((p, x) => p * x, 1);
     return {
@@ -424,24 +427,51 @@ function genMulDivFraction(rng: Rng, d: Difficulty): Problem {
 
 function genAbs(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
-    const n = rng.nonZero(20);
+    // 絶対値の記号 |−7| は中学校では教えない(高校で習う)ので、文で聞く(先生の印 2026-09-27)
+    // 0 の絶対値・小数(−2.5 など)も ときどき 出す(Codex のレビュー)
+    const r = rng.int(0, 9);
+    const n = r === 0 ? 0 : r === 1 ? rng.nonZero(5) + (rng.bool() ? 0.5 : -0.5) : rng.nonZero(20);
+    const shown = n > 0 ? `+${n}` : String(n);
+    const abs = Math.abs(n);
     return {
       templateId: 'g1.sign.abs',
       difficulty: d,
-      prompt: `|${n}| = ?`,
-      promptText: plainMinus(`|${n}| = ?`),
-      answer: { kind: 'number', value: rat(Math.abs(n)) },
+      prompt: text(`${plainMinus(shown)} の 絶対値は?`),
+      promptText: `${plainMinus(shown)} の 絶対値は?`,
+      answer: { kind: 'number', value: rat(Math.round(abs * 2), 2) },
+      answerLabel: String(abs),
       hint: '絶対値は 0 からの 距離。符号を とった 数だよ',
-      explanation: [`${text(`${plainMinus(String(n))} は 0 から ${Math.abs(n)} はなれている`)}`, `${text('答え: ')} ${Math.abs(n)}`],
+      explanation: [`${text(`${plainMinus(String(n))} は 0 から ${abs} はなれている`)}`, `${text('答え: ')} ${abs}`],
       tags: ['abs_value'],
       key: `abs:${n}`,
       verify: `Math.abs(${n})`,
     };
   }
+  if (d === 2 && rng.bool(0.35)) {
+    // 絶対値が a である数を すべて(±a)。以前は ★3 だったが 易しいので ★2 へ(Codex のレビュー)
+    const a = rng.int(1, 10);
+    return {
+      templateId: 'g1.sign.abs',
+      difficulty: d,
+      prompt: `${text(`絶対値が ${a} である数を すべて答えよ`)}`,
+      promptText: `絶対値が ${a} である数を すべて答えよ(「,」で区切る)`,
+      answer: { kind: 'numbers', values: [rat(a), rat(-a)] },
+      hint: '0 から 同じ 距離の 数は、右と左に 1つずつ',
+      explanation: [`${text('0 から')} ${a} ${text('はなれた数は')} ${a} ${text('と')} -${a}`, `${text('答え: ')} ${a}, -${a}`],
+      tags: ['abs_two_values'],
+      key: `abs:both:${a}`,
+      verify: `[${a}, -${a}]`,
+    };
+  }
   if (d === 2) {
-    // 4つの数から 最も小さい/大きい 数を選ぶ(選択式)
+    // 4つの数から 最も小さい/大きい 数を選ぶ(選択式)。
+    // 半分は 負の数どうし(−5 / −5.5 / −0.5 / −1)。正の数が 1 つだけだと 符号を見るだけで 選べてしまう(Codex のレビュー)
+    const negativesOnly = rng.bool();
     const nums = new Set<number>();
-    while (nums.size < 4) nums.add(rng.pick([rng.nonZero(15), rat2num(rng)]));
+    while (nums.size < 4) {
+      const v = rng.pick([rng.nonZero(15), rat2num(rng)]);
+      nums.add(negativesOnly ? -Math.abs(v) : v);
+    }
     const options = rng.shuffle([...nums]);
     const wantMin = rng.bool();
     const target = wantMin ? Math.min(...options) : Math.max(...options);
@@ -464,8 +494,40 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       verify: `[${options.join(',')}].indexOf(Math.${wantMin ? 'min' : 'max'}(${options.join(',')}))`,
     };
   }
-  // ★3: 絶対値が a の数を すべて / 絶対値が a より小さい整数を すべて / ある範囲の整数の個数
-  const form = rng.int(0, 2);
+  // ★3: 条件を組み合わせる。絶対値が a より小さい整数を すべて / 絶対値が a より小さい 負の整数を すべて /
+  //       絶対値が a 以下の整数の個数 / ある範囲の整数の個数
+  const form = rng.int(0, 3);
+  if (form === 0) {
+    const a = rng.int(3, 6);
+    const list = Array.from({ length: a - 1 }, (_, i) => -(i + 1));
+    return {
+      templateId: 'g1.sign.abs',
+      difficulty: d,
+      prompt: `${text(`絶対値が ${a} より小さい 負の整数を すべて答えよ`)}`,
+      promptText: `絶対値が ${a} より小さい 負の整数を すべて答えよ(「,」で区切る)`,
+      answer: { kind: 'numbers', values: list.map((k) => rat(k)) },
+      hint: '負の整数だけ。0 は ふくまない。−' + a + ' は ちょうど ' + a + ' なので ふくまない',
+      explanation: [`${text(`0 より左で、0 からの 距離が ${a} より 小さい 整数`)}`, `${text('答え: ')} ${list.join(', ')}`],
+      tags: ['abs_negative_list'],
+      key: `abs:negless:${a}`,
+      verify: `[${list.join(',')}]`,
+    };
+  }
+  if (form === 2) {
+    const a = rng.int(2, 7);
+    return {
+      templateId: 'g1.sign.abs',
+      difficulty: d,
+      prompt: `${text(`絶対値が ${a} 以下の 整数は 何個?`)}`,
+      promptText: `絶対値が ${a} 以下の 整数は 何個?`,
+      answer: { kind: 'number', value: rat(2 * a + 1) },
+      hint: `−${a} から ${a} まで。0 も 数えるのを わすれずに`,
+      explanation: [`${text(`−${a}, …, −1, 0, 1, …, ${a}`)}`, `${a} \\times 2 + 1 = ${2 * a + 1}`, `${text('答え: ')} ${2 * a + 1} ${text('個')}`],
+      tags: ['abs_count'],
+      key: `abs:atmost:${a}`,
+      verify: `${2 * a}+1`,
+    };
+  }
   if (form === 1) {
     const a = rng.int(2, 4);
     const list = Array.from({ length: 2 * a - 1 }, (_, i) => i - (a - 1));
@@ -483,21 +545,6 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       tags: ['abs_range_list'],
       key: `abs:less:${a}`,
       verify: `[${list.join(',')}]`,
-    };
-  }
-  if (form === 0) {
-    const a = rng.int(1, 10);
-    return {
-      templateId: 'g1.sign.abs',
-      difficulty: d,
-      prompt: `${text(`絶対値が ${a} である数を すべて答えよ`)}`,
-      promptText: `絶対値が ${a} である数を すべて答えよ(「,」で区切る)`,
-      answer: { kind: 'numbers', values: [rat(a), rat(-a)] },
-      hint: '0 から 同じ 距離の 数は、右と左に 1つずつ',
-      explanation: [`${text('0 から')} ${a} ${text('はなれた数は')} ${a} ${text('と')} -${a}`, `${text('答え: ')} ${a}, -${a}`],
-      tags: ['abs_two_values'],
-      key: `abs:both:${a}`,
-      verify: `[${a}, -${a}]`,
     };
   }
   const lo = -rng.int(1, 6) - (rng.bool() ? 0.5 : 0);
@@ -533,7 +580,9 @@ function listIntegers(lo: number, hi: number): number[] {
 // ---------------------------------------------------------------- 四則混合・累乗
 
 function genMixed(rng: Rng, d: Difficulty): Problem {
-  if (d === 1) {
+  // ★1 と ★2 の中身を入れかえた(先生の印 2026-09-27)。教科書でも 累乗 → 四則の混じった計算 の順
+  //   ★1: 累乗((−a)² と −a² の区別)・かっこの中を先に / ★2: a × b + c(× が先)
+  if (d === 2) {
     // a × b + c / a + b × c(× が先)
     const a = rng.nonZero(6);
     const b = rng.nonZero(6);
@@ -554,7 +603,7 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       verify: `(${a})*(${b})+(${c})`,
     };
   }
-  if (d === 2) {
+  if (d === 1) {
     // 累乗: (−a)² と −a² の区別、または かっこつき
     if (rng.bool()) {
       const a = rng.int(2, 6);
@@ -725,9 +774,10 @@ function genPrimeFactor(rng: Rng, d: Difficulty): Problem {
     do n = productOf(rng, rng.pick([2, 3]));
     while (n > 50 || n < 12);
   } else if (d === 2) {
-    // 3〜4個の積(≤ 120)。例: 60, 72, 84, 90
-    do n = productOf(rng, rng.pick([3, 4]));
-    while (n > 120 || n < 24);
+    // 2 けた(30〜99)で、素因数は 3 つまで(先生の印「54 = 2×3×3×3 や 105 は まだ」2026-09-27)。
+    // 3 つめの素数に 11 も使う(44 = 2×2×11 など)。例: 42, 45, 63, 70, 98
+    do n = rng.bool(0.25) ? productOf(rng, rng.pick([1, 2]), [11]) : productOf(rng, rng.pick([2, 3]));
+    while (n > 99 || n < 30);
   } else {
     // 4〜5個の積(≤ 300)。5 回に 1 回は 11 か 13 を 1 つ混ぜる。例: 126, 180, 252, 132
     const extra = rng.bool(0.2) ? [rng.pick([11, 13])] : [];

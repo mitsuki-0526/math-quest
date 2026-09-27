@@ -187,4 +187,38 @@ describe('ボス戦の演出', () => {
     expect(all).toContain('ならば かけ算だ');
     expect(all).toContain('な、なぜ 当たる');
   });
+
+  describe('★3(難問)は 道中では 最後の戦闘で 数問だけ(先生の印 2026-09-27)', () => {
+    /** 全問 正解しながら 地点の最後まで進め、出た問題の [戦闘の番号, ★, テンプレート] を集める */
+    function play(c: BattleContext) {
+      const seen: [number, number, string][] = [];
+      let s = createBattle(c);
+      for (let i = 0; i < 200 && s.phase !== 'nodeClear'; i++) {
+        if (s.phase === 'question') {
+          seen.push([s.encounterIndex, s.problem!.difficulty, s.problem!.templateId]);
+          s = answer(s, correctInput(s.problem!.answer), 1, c);
+        } else if (s.phase === 'explain') s = continueAfterExplain(s, c);
+        else if (s.phase === 'victory') s = continueAfterVictory(s, c);
+        else break;
+      }
+      return seen;
+    }
+
+    it('最後の戦闘より前は ★2 まで。最後の戦闘でも ★3 は 合わせて 2 問まで', () => {
+      const seen = play(ctx({ encounters: [['minus_slime'], ['minus_slime'], ['abs_golem', 'abs_golem', 'abs_golem']], pickDifficulty: () => 3, hardPerBattle: 2 }));
+      expect(seen.filter(([w, d]) => w < 2 && d === 3)).toEqual([]);
+      expect(seen.filter(([w, d]) => w === 2 && d === 3)).toHaveLength(2);
+      expect(seen.filter(([w, d]) => w === 2 && d === 2).length).toBeGreaterThan(0);
+    });
+
+    it('とくに難しいタイプ(基準との差・平均)は 1 問まで', () => {
+      const seen = play(ctx({ encounters: [['heikin_tanuki', 'heikin_tanuki']], pickDifficulty: () => 3, hardPerBattle: 2 }));
+      expect(seen.filter(([, d, t]) => d === 3 && t === 'g1.sign.average')).toHaveLength(1);
+    });
+
+    it('ボス戦・修練の泉(hardPerBattle なし)には かからない', () => {
+      const seen = play(ctx({ encounters: [['minus_slime'], ['minus_slime']], pickDifficulty: () => 3 }));
+      expect(seen.every(([, d]) => d === 3)).toBe(true);
+    });
+  });
 });

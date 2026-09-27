@@ -75,6 +75,8 @@ export interface BattleState {
   canFlee: boolean;
   /** 直近に出した問題のキー(重複回避) */
   recentKeys: string[];
+  /** この戦闘(地点)で出した ★3 の数(テンプレートごと) */
+  hardAsked: Record<string, number>;
   /** 答え合わせに使うため、テンプレートごとに出した問題の履歴(難易度調整用) */
   levelUps: number;
 }
@@ -92,6 +94,12 @@ export interface BattleContext {
   rng?: Rng;
   /** 修練の泉: 敵の種類に関係なく、このテンプレートを出題する */
   templateOverride?: string;
+  /**
+   * 道中の戦闘で ★3(難問)を出す上限。★3 は 最後の戦闘(ウェーブ)でだけ、合わせて この数まで出す。
+   * 「難問を いくつも 解くのは しんどい。数問 解けば クリアできる ところで 出してほしい」(先生の印 2026-09-27)。
+   * 省略時は制限なし(ボス戦・修練の泉)
+   */
+  hardPerBattle?: number;
 }
 
 const LOG_MAX = 12;
@@ -120,6 +128,7 @@ export function createBattle(ctx: BattleContext): BattleState {
     isBoss: !!ctx.isBoss,
     canFlee: !ctx.isBoss,
     recentKeys: [],
+    hardAsked: {},
     levelUps: 0,
   };
   return nextEncounter(state, ctx);
@@ -156,7 +165,14 @@ export function ask(state: BattleState, ctx: BattleContext): BattleState {
   const weak = ctx.isWeak ? alive.filter((e) => ctx.isWeak!(templateFor(s, e))) : [];
   const target = weak.length > 0 && rng.bool(0.7) ? rng.pick(weak) : rng.pick(alive);
   const templateId = ctx.templateOverride ?? templateFor(s, target);
-  const difficulty = ctx.pickDifficulty(templateId);
+  let difficulty = ctx.pickDifficulty(templateId);
+  if (difficulty === 3 && ctx.hardPerBattle !== undefined) {
+    const lastWave = s.encounterIndex === s.encounters.length - 1;
+    const total = Object.values(s.hardAsked).reduce((a, b) => a + b, 0);
+    const perTemplate = getTemplate(templateId).hardPerBattle ?? Infinity;
+    if (!lastWave || total >= ctx.hardPerBattle || (s.hardAsked[templateId] ?? 0) >= perTemplate) difficulty = 2;
+    else s.hardAsked = { ...s.hardAsked, [templateId]: (s.hardAsked[templateId] ?? 0) + 1 };
+  }
   const problem = generateProblem(templateId, difficulty, s.recentKeys, rng);
   const base = getTemplate(templateId).timeLimit[difficulty];
   s.problem = problem;

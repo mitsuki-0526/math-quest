@@ -219,6 +219,7 @@ function genProb(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value },
       hint: '相対度数 = 起きた 回数 ÷ 投げた 回数。小数で 答えよう',
       explanation: [`${c} \\div ${n} = ${toNumber(value)}`, `${text('答え: ')} ${toNumber(value)}`],
+      answerLabel: String(toNumber(value)),
       tags: ['prob_relative'],
       key: `prob1:${s.event}:${n}:${c}`,
       verify: `${c}/${n}`,
@@ -242,6 +243,7 @@ function genProb(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value: rat(p100, 100) },
       hint: '投げる 回数が 多いほど、相対度数は ある 値に 近づく。いちばん 多く 投げたときの 相対度数を 求めよう',
       explanation: [`${text('回数が 多いほど 相対度数は 一定の 値に 近づく')}`, `${last} \\div 2000 = ${p100 / 100}`, `${text('答え: ')} ${p100 / 100}`],
+      answerLabel: String(p100 / 100),
       tags: ['prob_estimate'],
       key: `prob2:${s.event}:${counts.join(',')}`,
       figure: {

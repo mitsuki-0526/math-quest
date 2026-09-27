@@ -43,6 +43,8 @@ function NumberLine({ spec }: { spec: NumberLineSpec }) {
   const ticks: number[] = [];
   for (let v = spec.min; v <= spec.max + 1e-9; v += step) ticks.push(Number(v.toFixed(6)));
   const labels = new Set(spec.labels ?? ticks.filter((v) => v === spec.min || v === spec.max || v === 0 || v % 5 === 0));
+  // 0 の目盛りには 必ず数を書く(授業の数直線と そろえる。先生の印 2026-09-27)
+  if (spec.min <= 0 && spec.max >= 0) labels.add(0);
 
   return (
     <svg class="figure" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`数直線 ${spec.min} から ${spec.max}`}>

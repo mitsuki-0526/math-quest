@@ -31,6 +31,11 @@ export interface Problem {
   /** 読み上げ・ログ用の平文 */
   promptText: string;
   answer: AnswerSpec;
+  /**
+   * 正解の見せ方(TeX)。省略時は答えから作る(分数は分数の形)。
+   * 小数の問題の答えを 5.2 のように 小数で見せたいときに使う(判定には 使わない。5.2 も 26/5 も 正解)
+   */
+  answerLabel?: string;
   /** ヒント(最初の一手だけ。答えは言わない) */
   hint: string;
   /** 解説(途中式)。1要素 = 1行。KaTeX */
@@ -56,6 +61,8 @@ export interface ProblemTemplate {
   title: string;
   /** 難易度ごとの制限時間の目安(秒)。M2 で config に外出しする */
   timeLimit: Record<Difficulty, number>;
+  /** 道中の 1 戦(地点)で ★3 を出す上限。省略時は config.battle.hardPerBattle だけ。とくに難しいタイプは 1 にする */
+  hardPerBattle?: number;
   generate(rng: Rng, difficulty: Difficulty): Problem;
 }
 

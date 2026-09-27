@@ -4,6 +4,8 @@
  */
 export const config = {
   battle: {
+    /** 道中の 1 戦で ★3(難問)を出す上限。★3 は 最後の戦闘でだけ出す(ボス戦・修練の泉は 制限なし) */
+    hardPerBattle: 2,
     /** 基礎ダメージ = base + 攻撃力 × 倍率 */
     baseDamage: 8,
     attackScale: 1.0,
