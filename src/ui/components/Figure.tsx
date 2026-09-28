@@ -56,7 +56,7 @@ function NumberLine({ spec }: { spec: NumberLineSpec }) {
         <g key={v}>
           <line x1={toX(v)} y1={y - (v === 0 ? 10 : 6)} x2={toX(v)} y2={y + (v === 0 ? 10 : 6)} stroke="currentColor" stroke-width={v === 0 ? 2 : 1.2} />
           {labels.has(v) && (
-            <text x={toX(v)} y={y + 26} text-anchor="middle" font-size="14" fill="currentColor">
+            <text x={toX(v)} y={y + 28} text-anchor="middle" font-size="18" fill="currentColor">
               {v < 0 ? `−${-v}` : v}
             </text>
           )}
@@ -80,7 +80,7 @@ function NumberLine({ spec }: { spec: NumberLineSpec }) {
       {spec.points.map((p) => (
         <g key={p.label}>
           <circle cx={toX(p.value)} cy={y} r="6" fill="var(--ember)" stroke="#fff" stroke-width="1.5" />
-          <text x={toX(p.value)} y={y - 14} text-anchor="middle" font-size="16" font-weight="bold" fill="var(--ember)">
+          <text x={toX(p.value)} y={y - 14} text-anchor="middle" font-size="20" font-weight="bold" fill="var(--ember)">
             {p.label}
           </text>
         </g>

@@ -2244,8 +2244,14 @@ img.sprite {
     min-height: 34px;
     padding: 2px 0;
   }
+  /* 縦に並べた窓の中では 図の枠が 中身の幅まで 縮み、数直線が 小さくなった(先生の試遊 2026-09-28)。幅いっぱいに 戻す */
+  .rpg-battle .question-figure {
+    width: 100%;
+    max-width: 640px;
+    align-self: center;
+  }
   .rpg-battle .question-figure svg {
-    max-height: 96px;
+    max-height: 104px;
   }
   .answer-form {
     gap: 5px;
@@ -2299,6 +2305,12 @@ img.sprite {
   }
   .rpg-battle .question-text.prose {
     font-size: 1.2em;
+  }
+  .rpg-battle .question-figure {
+    max-width: 760px;
+  }
+  .rpg-battle .question-figure svg {
+    max-height: 140px;
   }
   .answer-input {
     font-size: 1.45em;
