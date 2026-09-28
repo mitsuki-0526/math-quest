@@ -472,7 +472,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
               </div>
               {hintText && (
                 <p class="hint-line">
-                  🦉 {characters.pita.name}「{hintText}」
+                  <Sprite id="char_pita_icon" size={28} class="inline-icon" alt="" /> {characters.pita.name}「{hintText}」
                 </p>
               )}
               <AnswerInput answer={problem.answer} value={input} onChange={setInput} onSubmit={submit} disabled={!!explain} />
@@ -508,7 +508,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
             <span class="num">{save.player.level}</span>
           </div>
           {state.streak >= 2 && <div class="party-sub">🔥 {state.streak}連続 正解中</div>}
-          {save.party.includes('pita') && <div class="party-sub">🦉 {characters.pita.name} ・ ヒント {tutorial ? '∞' : state.hintsLeft}</div>}
+          {save.party.includes('pita') && <div class="party-sub"><Sprite id="char_pita_icon" size={22} class="inline-icon" alt="" /> {characters.pita.name} ・ ヒント {tutorial ? '∞' : state.hintsLeft}</div>}
           {fx
             .filter((f) => f.kind === 'player')
             .map((f) => (

@@ -1430,6 +1430,13 @@ img.sprite {
   font-size: 0.85em;
   color: var(--sub);
 }
+/* 文の頭に置く 小さな絵(ヒントのピタなど)。文字の高さに そろえる */
+.inline-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin: -4px 2px -2px 0;
+  image-rendering: pixelated;
+}
 .hint-line {
   margin: 0 0 6px;
   padding: 6px 10px;

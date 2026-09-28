@@ -40,6 +40,11 @@ MARGIN = 0.06  # 透過素材のまわりの余白(割合)
 FILL = {
     'char_pita': 0.55,  # 手のひらサイズのフクロウ
 }
+# 小さく並べて出す アイコン(書き出した画像の 絵の部分だけを 正方形に 切り出す)。
+# ピタは 人と並べるため 枠の下に小さく置いてあるので、ヒントの行などに そのまま使うと 小さすぎる(先生の試遊 2026-09-28)
+ICONS = {
+    'char_pita': 'char_pita_icon',
+}
 
 
 def fit_transparent(im, grid, fill=1.0):
@@ -102,7 +107,21 @@ def process(kind, filename):
     os.makedirs(os.path.join(OUT, kind), exist_ok=True)
     dest = os.path.join(OUT, kind, asset_id + '.png')
     out.save(dest, optimize=True)
+    if asset_id in ICONS:
+        make_icon(out, os.path.join(OUT, kind, ICONS[asset_id] + '.png'))
     return asset_id, f'assets/{kind}/{asset_id}.png', os.path.getsize(dest)
+
+
+def make_icon(im, dest):
+    """絵の部分を 正方形に 切り出す(まわりに 1 ドットの余白。ドットの格子は そのまま)"""
+    box = im.getchannel('A').getbbox()
+    if not box:
+        return
+    x0, y0, x1, y1 = box
+    side = max(x1 - x0, y1 - y0) + SCALE * 2
+    icon = Image.new('RGBA', (side, side), (0, 0, 0, 0))
+    icon.paste(im.crop(box), ((side - (x1 - x0)) // 2, (side - (y1 - y0)) // 2))
+    icon.save(dest, optimize=True)
 
 
 def main():

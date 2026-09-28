@@ -205,7 +205,7 @@ export function TownScene({ townId }: { townId: string }) {
               </div>
               <div class="row" style={{ marginTop: 10 }}>
                 <Button primary onClick={() => startPractice(undefined)}>
-                  🦉 ピタに おまかせ(苦手を 優先)
+                  <Sprite id="char_pita_icon" size={22} class="inline-icon" alt="" /> {characters.pita.name}に おまかせ(苦手を 優先)
                 </Button>
               </div>
             </div>

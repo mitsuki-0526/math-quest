@@ -24,6 +24,8 @@ export const assetManifest: Record<string, AssetEntry> = {
   char_player_boy: { emoji: '👦', label: '主人公(男の子)' },
   char_player_girl: { emoji: '👧', label: '主人公(女の子)' },
   char_pita: { emoji: '🦉', label: 'ピタ' },
+  /** ピタの顔だけの 正方形(ヒントの行など 小さく出す所。scripts/process_assets.py の ICONS が 立ち絵から 切り出す) */
+  char_pita_icon: { emoji: '🦉', label: 'ピタ' },
   char_teo: { emoji: '🧔', label: 'テオ' },
   char_elder: { emoji: '👴', label: '村長' },
   char_rena: { emoji: '🛡️', label: 'レナ' },
