@@ -8,18 +8,28 @@ import { plainMinus, text } from '@/math/format';
  *   ★1: 点の位置を読む
  *   ★2: 2 点の間の距離(0 をまたぐことが多い)/ 点から 右・左へ n 目盛り 進んだ位置
  *   ★3: 2 回 進んだあとの位置 / 進んだあとの点から はじめの点を求める(逆向きに考える)
- * 目盛りは 1 だけ(授業は 1 目盛り 1。先生の印 2026-09-27)。0 の目盛りには 必ず数を書く(Figure 側でも保証)。
+ * 目盛りは 1 だけ(授業は 1 目盛り 1。先生の印 2026-09-27)。数は 0・±5・±10 の 5 きざみだけに書く(Figure 側)。
+ * 図に置く点は 数が書いてある目盛り(0・±5・±10)を 避ける(読むだけで 答えが 分かってしまう。先生の試遊 2026-09-28)
  * Codex のレビュー(2026-09-27): 以前の ★2(0.5 きざみの距離)が ★3(1 回進む)より難しく、逆転していたので組み直した
  * 範囲は docs/difficulty.md
  */
 const HALF = 10;
-const line = (points: { value: number; label: string }[], half = HALF) => ({ kind: 'numberline' as const, min: -half, max: half, step: 1, points });
+const line = (points: { value: number; label: string }[]) => ({ kind: 'numberline' as const, min: -HALF, max: HALF, step: 1, points });
+/** 数が書いてある目盛り(5 の倍数)か */
+const labeled = (v: number) => v % 5 === 0;
+/** 数の書いていない目盛りから 1 つ(lo〜hi) */
+function unlabeled(rng: Rng, lo: number, hi: number): number {
+  let v: number;
+  do v = rng.int(lo, hi);
+  while (labeled(v));
+  return v;
+}
 const dir = (n: number) => (n > 0 ? '右' : '左');
 const pm = (n: number) => plainMinus(String(n));
 
 function gen(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
-    const a = rng.int(-8, 8);
+    const a = unlabeled(rng, -9, 9);
     return {
       templateId: 'g1.sign.numberline',
       difficulty: d,
@@ -30,7 +40,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
       explanation: [`${text(`0 から ${a < 0 ? '左' : '右'}へ ${Math.abs(a)} 目盛り`)}`, `${text('答え: ')} ${a}`],
       tags: ['numberline_read'],
       key: `nl:read:${a}`,
-      figure: line([{ value: a, label: 'A' }], 8),
+      figure: line([{ value: a, label: 'A' }]),
       verify: `${a}`,
     };
   }
@@ -42,7 +52,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
       do {
         a = rng.int(-HALF, HALF);
         b = rng.int(-HALF, HALF);
-      } while (a === b || (rng.bool(0.67) && a * b >= 0));
+      } while (a === b || labeled(a) || labeled(b) || (rng.bool(0.67) && a * b >= 0));
       const dist = Math.abs(a - b);
       return {
         templateId: 'g1.sign.numberline',
@@ -67,7 +77,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
     }
     // 1 回 進む(以前の ★3)
     const move = rng.nonZero(9, 2);
-    const start = rng.int(Math.max(-HALF, -HALF - move), Math.min(HALF, HALF - move));
+    const start = unlabeled(rng, Math.max(-HALF, -HALF - move), Math.min(HALF, HALF - move));
     const end = start + move;
     return {
       templateId: 'g1.sign.numberline',
@@ -92,7 +102,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
       start = rng.int(-6, 6);
       m1 = rng.nonZero(8, 2);
       m2 = rng.nonZero(8, 2);
-    } while (Math.sign(m1) === Math.sign(m2) || Math.abs(start + m1) > HALF || Math.abs(start + m1 + m2) > HALF);
+    } while (labeled(start) || Math.sign(m1) === Math.sign(m2) || Math.abs(start + m1) > HALF || Math.abs(start + m1 + m2) > HALF);
     const end = start + m1 + m2;
     return {
       templateId: 'g1.sign.numberline',
@@ -110,7 +120,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
   }
   // 逆向き: ある点から 右へ 6 目盛り 進むと 点 A。はじめの点は?
   const move = rng.nonZero(9, 2);
-  const end = rng.int(Math.max(-HALF, -HALF + move), Math.min(HALF, HALF + move));
+  const end = unlabeled(rng, Math.max(-HALF, -HALF + move), Math.min(HALF, HALF + move));
   const start = end - move;
   return {
     templateId: 'g1.sign.numberline',

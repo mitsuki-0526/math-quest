@@ -14,6 +14,7 @@ import { SettingsScene } from '@/ui/scenes/SettingsScene';
 import { TrialEndScene } from '@/ui/scenes/TrialEndScene';
 import { FeedbackScene } from '@/ui/scenes/FeedbackScene';
 import { CatalogScene } from '@/ui/scenes/CatalogScene';
+import { FullscreenButton } from '@/ui/components/FullscreenButton';
 
 const SYNC_LABEL: Record<string, string> = {
   local: 'この端末に保存',
@@ -92,6 +93,7 @@ export function App() {
           </span>
         )}
         <span class="topbar-crumbs">{stack.map((s) => s.kind).join(' › ')}</span>
+        <FullscreenButton />
       </header>
       <main class="stage">{renderScene(scene)}</main>
     </div>

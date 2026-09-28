@@ -115,6 +115,9 @@ select {
 
 /* ---------- 上部 HUD ---------- */
 .topbar {
+  /* 解説などの 重ね窓(z-index 10)より 上に置く: 全画面ボタンと その案内を いつでも 押せるように */
+  position: relative;
+  z-index: 15;
   display: flex;
   gap: 18px;
   align-items: center;
@@ -611,6 +614,41 @@ img.sprite {
   font-size: 1.05em;
   letter-spacing: 0.02em;
   line-height: 1.7;
+}
+
+/* 全画面ボタン(Chromebook の小さい画面向け) */
+.fullscreen-wrap {
+  position: relative;
+}
+.fullscreen-btn {
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--gold-2);
+  font: inherit;
+  font-size: 0.95em;
+  cursor: pointer;
+}
+.fullscreen-btn:hover,
+.fullscreen-btn:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+.fullscreen-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 300px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gold);
+  background: var(--ink);
+  color: var(--txt);
+  line-height: 1.6;
+  box-shadow: var(--shadow);
+  cursor: pointer;
 }
 
 /* ---------- バトル ---------- */
@@ -2106,4 +2144,131 @@ img.sprite {
 .figure-square {
   max-width: 320px;
   margin: 0 auto;
+}
+
+/* ---------- 低い画面(Chromebook: ブラウザの枠を除くと 高さ 550〜650px) ----------
+ * 先生の試遊(2026-09-28)で 戦闘画面が 画面に収まらなかった(問題の窓だけで 高さ 540px)。
+ * 高さが 820px 以下のときは、戦闘を「左: 戦場 / コマンド・パーティ、右: 問題」の横並びにして、
+ * 1 画面に収める。高い画面では これまでの 上下の配置のまま
+ */
+@media (max-height: 820px) {
+  .topbar {
+    padding: 5px 16px;
+  }
+  .stage {
+    padding: 8px 14px 10px;
+  }
+  .rpg-battle {
+    display: grid;
+    grid-template-columns: 190px 240px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'field field q'
+      'cmd party q';
+    gap: 10px;
+    /* 上の HUD(約 34px)と 余白を引いた 残りの高さ */
+    height: calc(100dvh - 54px);
+    min-height: 460px;
+  }
+  .rpg-battle .battle-bottom {
+    display: contents;
+  }
+  .rpg-battle .battlefield {
+    grid-area: field;
+    height: auto;
+    min-height: 0;
+  }
+  .rpg-battle .cmd-window {
+    grid-area: cmd;
+    padding: 8px 6px;
+  }
+  .rpg-battle .cmd-item {
+    padding: 6px 8px;
+    font-size: 1.05em;
+  }
+  .rpg-battle .party-window {
+    grid-area: party;
+  }
+  .rpg-battle .question-window {
+    grid-area: q;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 8px 14px 10px;
+  }
+  .msg-window {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    min-height: 0;
+    padding: 8px 12px;
+    font-size: 0.9em;
+  }
+  /* 戦場が せまいので、メッセージは 最後の 2 行だけ(敵の名前と HP が 隠れないように) */
+  .msg-window p:not(:nth-last-child(-n + 2)) {
+    display: none;
+  }
+  .rpg-battle .enemy-group {
+    gap: 10px;
+    padding-bottom: 12px;
+  }
+  .rpg-battle .enemy {
+    gap: 4px;
+  }
+  .rpg-battle .enemy-plate {
+    min-width: 0;
+    width: 130px;
+    padding: 4px 8px 6px;
+    font-size: 0.85em;
+  }
+  .question-text {
+    font-size: 1.6em;
+    margin: 4px 0 6px;
+  }
+  .question-text.prose {
+    font-size: 1.05em;
+    line-height: 1.6;
+  }
+  .key {
+    min-height: 34px;
+    padding: 2px 0;
+  }
+  .rpg-battle .question-figure svg {
+    max-height: 96px;
+  }
+  .answer-form {
+    gap: 5px;
+  }
+  .keypad {
+    gap: 5px;
+  }
+  /* 地図: 「すすむ」ボタンが 画面の中に 入るように、地図の高さを 画面に合わせる。右の列は 中で スクロール */
+  .map-svg,
+  .map-empty {
+    height: max(240px, calc(100dvh - 222px));
+  }
+  .map-header {
+    margin-bottom: 6px;
+  }
+  .map-side {
+    max-height: calc(100dvh - 54px);
+    overflow-y: auto;
+  }
+  /* タイトル・町: 上の余白と 一枚絵を 少し 詰める */
+  .scene-title {
+    padding-top: 12px;
+  }
+  .title-logo .sub {
+    margin-bottom: 12px;
+  }
+  .title-panel {
+    padding: 18px 28px 18px;
+  }
+  .town-stage {
+    height: 170px;
+  }
+  .overlay-box {
+    max-height: 92dvh;
+    overflow-y: auto;
+    padding: 14px 20px;
+  }
 }

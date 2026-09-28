@@ -42,7 +42,9 @@ function NumberLine({ spec }: { spec: NumberLineSpec }) {
   const toX = (v: number) => padX + ((v - spec.min) / (spec.max - spec.min)) * (W - padX * 2);
   const ticks: number[] = [];
   for (let v = spec.min; v <= spec.max + 1e-9; v += step) ticks.push(Number(v.toFixed(6)));
-  const labels = new Set(spec.labels ?? ticks.filter((v) => v === spec.min || v === spec.max || v === 0 || v % 5 === 0));
+  // 数は 5 きざみ(…, −10, −5, 0, 5, 10)だけに書く。両はしに −8・8 のような数を書くと、
+  // 読み取りの問題の答えが 書いてある目盛りに なりやすかった(先生の試遊 2026-09-28)
+  const labels = new Set(spec.labels ?? ticks.filter((v) => Number.isInteger(v) && v % 5 === 0));
   // 0 の目盛りには 必ず数を書く(授業の数直線と そろえる。先生の印 2026-09-27)
   if (spec.min <= 0 && spec.max >= 0) labels.add(0);
 

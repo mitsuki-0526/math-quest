@@ -132,6 +132,15 @@ describe('第1章 正の数と負の数', () => {
     }
   });
 
+  it('数直線: −10〜10 で、図の点は 数が書いてある目盛り(0・±5・±10)に 置かない(先生の試遊 2026-09-28)', () => {
+    for (const d of [1, 2, 3] as const)
+      each('g1.sign.numberline', d, (p) => {
+        const f = p.figure as NumberLineSpec;
+        expect([f.min, f.max]).toEqual([-10, 10]);
+        for (const pt of f.points) expect(pt.value % 5, `${p.promptText} ${pt.label}=${pt.value}`).not.toBe(0);
+      });
+  });
+
   it('数直線: 目盛りは 1 だけ。★2 は 距離・1 回進む、★3 は 2 回進む・逆向き(★2 と ★3 の逆転を直した)', () => {
     for (const d of [1, 2, 3] as const) each('g1.sign.numberline', d, (p) => expect((p.figure as NumberLineSpec).step ?? 1, p.promptText).toBe(1));
     const tags = (d: Difficulty) => {
