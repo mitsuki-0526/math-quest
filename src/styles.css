@@ -621,7 +621,8 @@ img.sprite {
   position: relative;
 }
 .fullscreen-btn {
-  padding: 3px 10px;
+  padding: 1px 10px;
+  line-height: 1.5;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: transparent;
@@ -2166,8 +2167,8 @@ img.sprite {
       'field field q'
       'cmd party q';
     gap: 10px;
-    /* 上の HUD(約 34px)と 余白を引いた 残りの高さ */
-    height: calc(100dvh - 54px);
+    /* 上の HUD(約 36px)と 余白(18px)を引いた 残りの高さ */
+    height: calc(100dvh - 58px);
     min-height: 460px;
   }
   .rpg-battle .battle-bottom {
@@ -2194,6 +2195,17 @@ img.sprite {
     min-height: 0;
     overflow-y: auto;
     padding: 8px 14px 10px;
+    /* 余った高さは 問題文の上下に配り、入力とキーパッドは 窓の下に そろえる(全画面で 下が 空かないように) */
+    display: flex;
+    flex-direction: column;
+  }
+  .rpg-battle .question-window > * {
+    flex-shrink: 0;
+  }
+  .rpg-battle .question-text {
+    margin-top: auto;
+    margin-bottom: auto;
+    padding: 6px 0;
   }
   .msg-window {
     top: 8px;
@@ -2244,13 +2256,13 @@ img.sprite {
   /* 地図: 「すすむ」ボタンが 画面の中に 入るように、地図の高さを 画面に合わせる。右の列は 中で スクロール */
   .map-svg,
   .map-empty {
-    height: max(240px, calc(100dvh - 222px));
+    height: max(240px, calc(100dvh - 226px));
   }
   .map-header {
     margin-bottom: 6px;
   }
   .map-side {
-    max-height: calc(100dvh - 54px);
+    max-height: calc(100dvh - 58px);
     overflow-y: auto;
   }
   /* タイトル・町: 上の余白と 一枚絵を 少し 詰める */
@@ -2270,5 +2282,25 @@ img.sprite {
     max-height: 92dvh;
     overflow-y: auto;
     padding: 14px 20px;
+  }
+}
+
+/* 全画面の Chromebook(高さ 700〜820px): 空いた高さで キーと 問題文を 大きくする(押しやすく、読みやすく) */
+@media (min-height: 700px) and (max-height: 820px) {
+  .key {
+    min-height: 52px;
+    font-size: 1.3em;
+  }
+  .keypad {
+    gap: 8px;
+  }
+  .rpg-battle .question-text {
+    font-size: 2em;
+  }
+  .rpg-battle .question-text.prose {
+    font-size: 1.2em;
+  }
+  .answer-input {
+    font-size: 1.45em;
   }
 }
