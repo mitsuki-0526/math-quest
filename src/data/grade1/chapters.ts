@@ -72,7 +72,8 @@ const g1c1: ChapterDef = {
       y: 40,
       next: ['boss'],
       intro: 'C1-6',
-      enemies: [['cross_hopper', 'cross_hopper'], ['cross_hopper', 'heikin_tanuki'], ['cross_hopper', 'cross_hopper', 'heikin_tanuki']],
+      // 1 戦目の素数バチ: ここで 手に入れる『累乗』を すぐ使えるように(先生の試遊 2026-09-28「手に入れた累乗を使う場面がない」)
+      enemies: [['cross_hopper', 'prime_bee'], ['cross_hopper', 'heikin_tanuki'], ['cross_hopper', 'cross_hopper', 'heikin_tanuki']],
       bg: 'bg_forest_cliff',
     },
     {

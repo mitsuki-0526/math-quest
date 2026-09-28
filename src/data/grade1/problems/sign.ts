@@ -811,7 +811,7 @@ function genPrimeFactor(rng: Rng, d: Difficulty): Problem {
     prompt: `${n} ${text(' を 素因数分解せよ')}`,
     promptText: `${n} を 素因数分解せよ(例: 2×2×3 または 2^2×3)`,
     answer: { kind: 'factorization', n },
-    hint: '小さい 素数(2, 3, 5, 7…)で 割れるだけ 割っていこう',
+    hint: '小さい 素数(2, 3, 5, 7…)で 割れるだけ 割っていこう。同じ素数が 並んだら 累乗で 2^2×3 と 書いてもいい',
     explanation: [...steps, `${text('答え: ')} ${factorsToTex(factors)}`],
     tags: ['prime_factorization'],
     key: `pf:${n}`,

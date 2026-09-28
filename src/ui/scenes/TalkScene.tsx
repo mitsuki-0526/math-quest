@@ -11,7 +11,7 @@ import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 import { Figure } from '@/ui/components/Figure';
-import { keyFlag } from '@/ui/components/AnswerInput';
+import { keyFlag, storyKeyNames } from '@/ui/components/AnswerInput';
 
 /**
  * 会話シーン(要件 F60〜F63)。スクリプト(JSON)を ScriptRunner で進め、ここは表示だけを行う。
@@ -71,7 +71,7 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
         updateSave((d) => {
           for (const k of e.keys) d.flags[keyFlag(k)] = true;
         });
-        setBanner(`新しい力『${e.keys.join(' ')}』を 手に入れた!`);
+        setBanner(`新しい力『${storyKeyNames(e.keys).join('・')}』を 手に入れた!`);
         break;
       case 'nameInput':
         break;

@@ -1339,22 +1339,26 @@ img.sprite {
 
 /* ---------- 戦闘の追加要素 ---------- */
 .boss-phase {
-  position: absolute;
-  top: 118px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
-  gap: 6px;
-  z-index: 2;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
 }
-.boss-phase span {
-  width: 34px;
+.boss-phase small {
+  margin-right: 4px;
+  white-space: nowrap;
+  font-size: 0.75em;
+  color: var(--sub);
+}
+.boss-phase i {
+  width: 22px;
   height: 6px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(243, 220, 143, 0.4);
 }
-.boss-phase span.on {
+.boss-phase i.on {
   background: var(--ember);
   box-shadow: 0 0 8px rgba(240, 112, 92, 0.7);
 }
@@ -2238,6 +2242,14 @@ img.sprite {
     width: 130px;
     padding: 4px 8px 6px;
     font-size: 0.85em;
+  }
+  /* ボスは 1 体だけなので 名前の窓を 広く(段階の ゲージを 1 行に)、絵は 画面の高さに 合わせて 少し 小さく */
+  .rpg-battle .enemy-plate:has(.boss-phase) {
+    width: 190px;
+  }
+  .rpg-battle .enemy-sprite .sprite {
+    width: min(170px, 25dvh) !important;
+    height: min(170px, 25dvh) !important;
   }
   .question-text {
     font-size: 1.6em;

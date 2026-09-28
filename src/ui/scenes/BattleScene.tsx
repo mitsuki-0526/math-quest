@@ -382,14 +382,6 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
           ))}
         </div>
 
-        {phaseInfo && (
-          <div class="boss-phase">
-            {Array.from({ length: phaseInfo.total }, (_, i) => (
-              <span key={i} class={i <= phaseInfo.index ? 'on' : ''} />
-            ))}
-          </div>
-        )}
-
         <div class="enemy-group">
           {state.enemies.map((e) => (
             <div key={e.key} class={`enemy ${e.hp === 0 ? 'defeated' : ''} ${e.key === state.targetKey ? 'asking' : ''}`}>
@@ -399,6 +391,15 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                 <span class="enemy-hp">
                   {e.hp}/{e.def.hp}
                 </span>
+                {/* ボスの段階: 名前の窓の中に 文字つきで 出す(戦場の上に 置くと HP の窓と 重なって 分かりにくかった。先生の試遊 2026-09-28) */}
+                {phaseInfo && e.def.phases && (
+                  <span class="boss-phase" aria-label={`だんかい ${phaseInfo.index + 1} / ${phaseInfo.total}`}>
+                    <small>だんかい</small>
+                    {Array.from({ length: phaseInfo.total }, (_, i) => (
+                      <i key={i} class={i <= phaseInfo.index ? 'on' : ''} />
+                    ))}
+                  </span>
+                )}
               </div>
               <div class={`enemy-sprite ${fx.some((f) => f.kind === 'enemy' && f.targetKey === e.key) ? 'hit' : ''}`} key={`sp-${fx.find((f) => f.targetKey === e.key)?.id ?? 0}`}>
                 <Sprite id={e.def.sprite} size={isBoss ? 170 : state.enemies.length > 2 ? 100 : 130} />

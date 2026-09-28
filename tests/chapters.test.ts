@@ -152,4 +152,33 @@ describe('1年版の章データ', () => {
   it('素材マニフェストは存在しないIDでも落ちない', () => {
     expect(getAsset('nope').emoji).toBe('❔');
   });
+
+  it('第1章: 入力キー(×・累乗)は 本道で 使う前に 手に入り、手に入れたあと 本道で 必ず 使う(先生の試遊 2026-09-28)', () => {
+    const c = chapters[0];
+    // 本道 = 寄り道(secret)を 通らない 道。next の 先頭を たどる
+    const byId = new Map(c.nodes.map((n) => [n.id, n]));
+    const path = [];
+    for (let n = c.nodes[0]; n; n = byId.get(n.next.find((id) => byId.get(id)?.type !== 'secret') ?? '')!) path.push(n);
+    // 素因数分解の答えを 書くのに 要るキー
+    const needs: Record<string, string[]> = { 'g1.sign.primefactor': ['×', '^'] };
+    const have = new Set<string>();
+    const used = new Set<string>();
+    for (const n of path) {
+      for (const id of [n.intro, n.script].filter((x): x is string => !!x && hasScene(x)))
+        for (const l of getScene(id).lines) if ('effect' in l && l.effect === 'unlockKeys') l.keys.forEach((k: string) => have.add(k));
+      const templates = new Set<string>();
+      for (const wave of n.enemies ?? [])
+        for (const e of wave) {
+          const d = getEnemy(e);
+          (d.phases ? d.phases.flatMap((p) => p.templates) : [d.template]).forEach((t) => templates.add(t));
+        }
+      for (const t of templates)
+        for (const k of needs[t] ?? []) {
+          if (k === '×') expect(have.has(k), `${n.name}: ${t} に ${k} が 要るのに まだ 手に入らない`).toBe(true);
+          if (have.has(k)) used.add(k);
+        }
+    }
+    expect([...have].sort()).toEqual(['^', '×']);
+    expect([...used].sort(), '手に入れた力を 使う場面が ない').toEqual(['^', '×']);
+  });
 });

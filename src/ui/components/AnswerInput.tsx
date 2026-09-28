@@ -14,6 +14,15 @@ import { Tex } from './Tex';
  */
 export const STORY_KEYS = ['×', '^', 'x', '(', ')', 'π', '√'] as const;
 export const keyFlag = (k: string): string => `key:${k}`;
+/**
+ * 手に入れたときに見せる 力の名前。記号のままだと 読めないもの(^ は 授業で 習わない記号)は 名前で 見せる(先生の要望 2026-09-28)。
+ * ここにない記号は そのまま見せる
+ */
+const STORY_KEY_NAMES: Record<string, string> = { '^': '累乗', '(': 'かっこ', ')': 'かっこ', '√': 'ルート' };
+/** 手に入れた力の 見せ方(「(」「)」は まとめて「かっこ」1 つ) */
+export function storyKeyNames(keys: readonly string[]): string[] {
+  return [...new Set(keys.map((k) => STORY_KEY_NAMES[k] ?? k))];
+}
 /** 文字キー(x, a, n …)はまとめて「文字」の力(key:x)で解放する */
 const storyKeyFor = (label: string): string => (/^[a-z]$/.test(label) ? 'x' : label);
 export function isKeyUnlocked(flags: Record<string, boolean>, k: string): boolean {
