@@ -100,6 +100,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
       isBoss,
       templateOverride: reviewTemplate.current ?? undefined,
       hardPerBattle: isBoss || review || tutorial ? undefined : config.battle.hardPerBattle,
+      basis: review ? 'challenge' : 'textbook',
     };
     ctxRef.current = ctx;
     updateSave((d) => void ensureDailyQuest(d, practiceTemplates(d)));

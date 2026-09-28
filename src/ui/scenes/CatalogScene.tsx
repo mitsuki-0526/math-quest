@@ -159,7 +159,7 @@ function Group({
   showAnswers: boolean;
   mark: ReturnType<typeof reviewStore.get>[string] | undefined;
 }) {
-  const problems = useMemo(() => sampleProblems(templateId, star, PER_GROUP, seed), [templateId, star, seed]);
+  const problems = useMemo(() => sampleProblems(templateId, star, PER_GROUP, seed, node.basis), [templateId, star, seed, node.basis]);
   const base = { node: node.id, nodeName: node.name, template: templateId, star };
   const flagged = new Set(mark?.flagged ?? []);
   const setRating = (r: Rating) => updateMark(base, (m) => (m.rating = m.rating === r ? undefined : r));

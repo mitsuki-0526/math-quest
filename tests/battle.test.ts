@@ -221,4 +221,14 @@ describe('ボス戦の演出', () => {
       expect(seen.every(([, d]) => d === 3)).toBe(true);
     });
   });
+
+  it('問題の基準(basis)が 出題に渡る: 修練の泉(challenge)の 平均 ★2 は 5 日分、道中は 3〜4 日分', () => {
+    const cols = (basis?: 'challenge') => {
+      const s = createBattle(ctx({ encounters: [['heikin_tanuki']], pickDifficulty: () => 2, basis }));
+      const t = s.problem!.figure as { rows: string[][] };
+      return t.rows[0].length - 1;
+    };
+    expect(cols('challenge')).toBe(5);
+    expect([3, 4]).toContain(cols());
+  });
 });

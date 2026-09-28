@@ -64,6 +64,11 @@ export interface SaveData {
   };
   /** 最終更新(ISO)。サーバー同期の競合解決に使う */
   updatedAt: string;
+  /**
+   * はじめた日時(ISO)。先生が セーブを消したとき(サーバーの resetAt)より前に はじめたセーブは 捨てる。
+   * この項目を足す前(2026-09-28 より前)のセーブには ない
+   */
+  createdAt?: string;
 }
 
 export function createNewSave(name = DEFAULT_PLAYER_NAME, look: PlayerLook = 'neutral'): SaveData {
@@ -88,6 +93,7 @@ export function createNewSave(name = DEFAULT_PLAYER_NAME, look: PlayerLook = 'ne
     stats: {},
     settings: { sound: false, reduceMotion: prefersReducedMotion(), fontScale: 1 },
     updatedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -130,6 +136,8 @@ export function migrate(raw: unknown): SaveData | null {
     player: { ...base.player, ...data.player },
     progress: { ...base.progress, ...data.progress },
     settings: { ...base.settings, ...data.settings },
+    // 既定値で 埋めない(古いセーブに「いま はじめた」日時が付くと、先生が消したあとも 残ってしまう)
+    createdAt: data.createdAt,
     version: SAVE_VERSION,
   };
 }

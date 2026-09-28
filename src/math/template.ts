@@ -9,6 +9,12 @@ import type { FigureSpec } from './figure';
 export type Difficulty = 1 | 2 | 3;
 
 /**
+ * 問題の基準。道中(ふつうの戦闘・ボス)は教科書の練習問題、修練の泉は 大阪府チャレンジテストに合わせる(先生の方針 2026-09-28)。
+ * 違いがあるテンプレートだけ 見ればよい(ほとんどは同じ問題を出す)。docs/difficulty.md
+ */
+export type ProblemBasis = 'textbook' | 'challenge';
+
+/**
  * 答えの形式。判定(judge)と入力UI(パレットのキー構成)はこれで決まる。
  * expression(式入力)は M5 で追加する。
  */
@@ -63,7 +69,8 @@ export interface ProblemTemplate {
   timeLimit: Record<Difficulty, number>;
   /** 道中の 1 戦(地点)で ★3 を出す上限。省略時は config.battle.hardPerBattle だけ。とくに難しいタイプは 1 にする */
   hardPerBattle?: number;
-  generate(rng: Rng, difficulty: Difficulty): Problem;
+  /** basis を省略したら textbook */
+  generate(rng: Rng, difficulty: Difficulty, basis?: ProblemBasis): Problem;
 }
 
 /** 登録済みテンプレート。各学年のデータファイルが register() で追加する。 */
@@ -94,10 +101,11 @@ export function generateProblem(
   difficulty: Difficulty,
   recentKeys: readonly string[] = [],
   rng: Rng = createRng(),
+  basis: ProblemBasis = 'textbook',
 ): Problem {
   const t = getTemplate(templateId);
-  let p = t.generate(rng, difficulty);
-  for (let i = 0; i < 8 && recentKeys.includes(p.key); i++) p = t.generate(rng, difficulty);
+  let p = t.generate(rng, difficulty, basis);
+  for (let i = 0; i < 8 && recentKeys.includes(p.key); i++) p = t.generate(rng, difficulty, basis);
   return p;
 }
 

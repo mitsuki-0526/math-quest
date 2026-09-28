@@ -1,6 +1,6 @@
 import { config } from '@/data/config';
 import type { EnemyDef } from '@/data/grade1/enemies';
-import { generateProblem, getTemplate, judge, type Difficulty, type Problem } from '@/math/template';
+import { generateProblem, getTemplate, judge, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { createRng } from '@/math/rng';
 
@@ -100,6 +100,8 @@ export interface BattleContext {
    * 省略時は制限なし(ボス戦・修練の泉)
    */
   hardPerBattle?: number;
+  /** 問題の基準(修練の泉は challenge)。省略時は textbook */
+  basis?: ProblemBasis;
 }
 
 const LOG_MAX = 12;
@@ -173,7 +175,7 @@ export function ask(state: BattleState, ctx: BattleContext): BattleState {
     if (!lastWave || total >= ctx.hardPerBattle || (s.hardAsked[templateId] ?? 0) >= perTemplate) difficulty = 2;
     else s.hardAsked = { ...s.hardAsked, [templateId]: (s.hardAsked[templateId] ?? 0) + 1 };
   }
-  const problem = generateProblem(templateId, difficulty, s.recentKeys, rng);
+  const problem = generateProblem(templateId, difficulty, s.recentKeys, rng, ctx.basis);
   const base = getTemplate(templateId).timeLimit[difficulty];
   s.problem = problem;
   s.turn = state.turn + 1;

@@ -10,8 +10,9 @@ describe('問題の見本帳', () => {
   it('地点ごとに、戦闘で出る出題タイプと ★ の上限を 並べる', () => {
     const nodes = catalogNodes(c1);
     const road = nodes.find((n) => n.id === 'g1c1.road')!;
-    expect(road.templates).toEqual(['g1.sign.addsub']);
+    expect(road.templates).toEqual(['g1.sign.addsub', 'g1.sign.numberline']);
     expect(road.stars).toEqual([1]);
+    expect(road.basis).toBe('textbook');
     expect(nodes.find((n) => n.id === 'g1c1.marsh')!.stars).toEqual([1, 2]);
     // ボスは 段階ごとの出題タイプを すべて
     const boss = nodes.find((n) => n.id === 'g1c1.boss')!;
@@ -19,6 +20,8 @@ describe('問題の見本帳', () => {
     expect(boss.stars).toEqual([1, 2, 3]);
     // 修練の泉は 章の 全タイプ
     expect(nodes.at(-1)!.templates).toEqual(c1.templates);
+    // 修練の泉は チャレンジテスト基準(戦闘と同じ)
+    expect(nodes.at(-1)!.basis).toBe('challenge');
     // 町・会話だけの地点は 出さない
     expect(nodes.some((n) => n.id === 'g1c1.village' || n.id === 'g1c1.abs_stone')).toBe(false);
   });

@@ -581,7 +581,31 @@ function listIntegers(lo: number, hi: number): number[] {
 
 function genMixed(rng: Rng, d: Difficulty): Problem {
   // ★1 と ★2 の中身を入れかえた(先生の印 2026-09-27)。教科書でも 累乗 → 四則の混じった計算 の順
-  //   ★1: 累乗((−a)² と −a² の区別)・かっこの中を先に / ★2: a × b + c(× が先)
+  //   ★1: 累乗だけ((−a)² と −a² の区別。ほかの計算と まぜない) / ★2: a × b + c(× が先)・a × (b ± c)(かっこが先)
+  // 先生の方針(2026-09-28)「累乗の計算単体で出題されているのであれば そのままで」。
+  // かっこの式は ★1 だと 9 × (8 + 9) のように ★2 より重くなるので(Codex のレビュー)、数を小さくして ★2 へ
+  if (d === 2 && rng.int(0, 2) === 0) {
+    // a × (b ± c): かっこの中は 1けたで 0 にならない
+    const a = rng.nonZero(6, 2); // 1 × (…) は かっこを 先にする 意味が うすい
+    let b: number, c: number;
+    do {
+      b = rng.nonZero(9);
+      c = rng.nonZero(9);
+    } while (b + c === 0 || Math.abs(b + c) > 9);
+    const tex = `${paren(a)} \\times (${b} ${c < 0 ? '-' : '+'} ${Math.abs(c)})`;
+    return {
+      templateId: 'g1.sign.mixed',
+      difficulty: d,
+      prompt: `${tex} = ?`,
+      promptText: plainMinus(tex.replace('\\times', '×')) + ' = ?',
+      answer: { kind: 'number', value: rat(a * (b + c)) },
+      hint: 'かっこの中を 先に 計算しよう',
+      explanation: [`${b} ${c < 0 ? '-' : '+'} ${Math.abs(c)} = ${b + c}`, `${paren(a)} \\times ${paren(b + c)} = ${a * (b + c)}`, `${text('答え: ')} ${a * (b + c)}`],
+      tags: ['parentheses_first'],
+      key: `mixed:${tex}`,
+      verify: `(${a})*((${b})+(${c}))`,
+    };
+  }
   if (d === 2) {
     // a × b + c / a + b × c(× が先)
     const a = rng.nonZero(6);
@@ -604,45 +628,32 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
     };
   }
   if (d === 1) {
-    // 累乗: (−a)² と −a² の区別、または かっこつき
-    if (rng.bool()) {
-      const a = rng.int(2, 6);
-      const withParen = rng.bool();
-      // 3乗は 3 まで((−6)³ = −216 のような大きな数は 教科書に出ない)
-      const e = a <= 3 ? rng.pick([2, 3]) : 2;
-      const value = withParen ? pow(rat(-a), e) : neg(pow(rat(a), e));
-      const tex = withParen ? `(-${a})^{${e}}` : `-${a}^{${e}}`;
-      return {
-        templateId: 'g1.sign.mixed',
-        difficulty: d,
-        prompt: `${tex} = ?`,
-        promptText: plainMinus(withParen ? `(−${a})${sup(e)}` : `−${a}${sup(e)}`) + ' = ?',
-        answer: { kind: 'number', value },
-        hint: withParen ? 'かっこの中 ぜんぶを かける。(−a)² = (−a)×(−a)' : 'かっこが ないときは a² を 先に 計算して、あとで −',
-        explanation: withParen
-          ? [`(-${a})^{${e}} = ${Array(e).fill(`(-${a})`).join(' \\times ')} = ${toTex(value)}`, `${text('答え: ')} ${toTex(value)}`]
-          : [`-${a}^{${e}} = -(${a}^{${e}}) = -${a ** e}`, `${text('答え: ')} ${toTex(value)}`],
-        tags: [withParen ? 'power_of_negative' : 'negative_of_power'],
-        key: `mixed:${tex}`,
-        verify: withParen ? `(-${a})**${e}` : `-(${a}**${e})`,
-      };
+    // 累乗だけ: (−a)ⁿ と −aⁿ の区別。a は 6 まで、3 乗は a が 3 まで((−6)³ = −216 のような大きな数は 教科書に出ない)。
+    // (−1)ⁿ は 5 乗まで(偶数・奇数で 符号が決まることに 気づかせる)
+    const withParen = rng.bool();
+    let a: number, e: number;
+    if (withParen && rng.bool(0.2)) {
+      a = 1;
+      e = rng.int(2, 5);
+    } else {
+      a = rng.int(2, 6);
+      e = a <= 3 ? rng.pick([2, 3]) : 2;
     }
-    const a = rng.nonZero(9);
-    const b = rng.nonZero(9);
-    const c = rng.nonZero(9);
-    const tex = `${paren(a)} \\times (${b} ${c < 0 ? '-' : '+'} ${Math.abs(c)})`;
-    const value = rat(a * (b + c));
+    const value = withParen ? pow(rat(-a), e) : neg(pow(rat(a), e));
+    const tex = withParen ? `(-${a})^{${e}}` : `-${a}^{${e}}`;
     return {
       templateId: 'g1.sign.mixed',
       difficulty: d,
       prompt: `${tex} = ?`,
-      promptText: plainMinus(tex.replace('\\times', '×')) + ' = ?',
+      promptText: plainMinus(withParen ? `(−${a})${sup(e)}` : `−${a}${sup(e)}`) + ' = ?',
       answer: { kind: 'number', value },
-      hint: 'かっこの中を 先に 計算しよう',
-      explanation: [`${b} ${c < 0 ? '-' : '+'} ${Math.abs(c)} = ${b + c}`, `${paren(a)} \\times ${paren(b + c)} = ${a * (b + c)}`, `${text('答え: ')} ${a * (b + c)}`],
-      tags: ['parentheses_first'],
+      hint: withParen ? 'かっこの中 ぜんぶを かける。(−a)² = (−a)×(−a)' : 'かっこが ないときは a² を 先に 計算して、あとで −',
+      explanation: withParen
+        ? [`(-${a})^{${e}} = ${Array(e).fill(`(-${a})`).join(' \\times ')} = ${toTex(value)}`, `${text('答え: ')} ${toTex(value)}`]
+        : [`-${a}^{${e}} = -(${a}^{${e}}) = -${a ** e}`, `${text('答え: ')} ${toTex(value)}`],
+      tags: [withParen ? 'power_of_negative' : 'negative_of_power'],
       key: `mixed:${tex}`,
-      verify: `(${a})*((${b})+(${c}))`,
+      verify: withParen ? `(-${a})**${e}` : `-(${a}**${e})`,
     };
   }
   // ★3: 4 回に 3 回は チャレンジテストの形(乗除のかたまりを 加減でつなぐ)、1 回は 累乗 + 乗除
@@ -748,7 +759,7 @@ function genMixedChain(rng: Rng, d: Difficulty): Problem {
 }
 
 function sup(e: number): string {
-  return e === 2 ? '²' : e === 3 ? '³' : `^${e}`;
+  return e === 2 ? '²' : e === 3 ? '³' : e === 4 ? '⁴' : e === 5 ? '⁵' : `^${e}`;
 }
 
 // ---------------------------------------------------------------- 素因数分解
@@ -769,15 +780,16 @@ function productOf(rng: Rng, count: number, extra: number[] = []): number {
 
 function genPrimeFactor(rng: Rng, d: Difficulty): Problem {
   let n: number;
+  // ★1 と ★2 は 数の範囲を 分ける(以前は 30〜50 が どちらにも出た。先生の方針 2026-09-28「重なりを減らす」)
   if (d === 1) {
-    // 2〜3個の素数の積(12〜50)。例: 12, 18, 30, 42(4 や 6 は分解する手順の練習にならない)
+    // 2〜3個の素数の積(12〜40)。例: 12, 18, 28, 35(4 や 6 は分解する手順の練習にならない)
     do n = productOf(rng, rng.pick([2, 3]));
-    while (n > 50 || n < 12);
+    while (n > 40 || n < 12);
   } else if (d === 2) {
-    // 2 けた(30〜99)で、素因数は 3 つまで(先生の印「54 = 2×3×3×3 や 105 は まだ」2026-09-27)。
-    // 3 つめの素数に 11 も使う(44 = 2×2×11 など)。例: 42, 45, 63, 70, 98
-    do n = rng.bool(0.25) ? productOf(rng, rng.pick([1, 2]), [11]) : productOf(rng, rng.pick([2, 3]));
-    while (n > 99 || n < 30);
+    // 2 けた(42〜99)で、素因数は 3 つまで(先生の印「54 = 2×3×3×3 や 105 は まだ」2026-09-27)。
+    // 11・13 も使う(44 = 2×2×11、78 = 2×3×13 など)。例: 42, 45, 63, 70, 98
+    do n = rng.bool(0.35) ? productOf(rng, rng.pick([1, 2]), [rng.pick([11, 13])]) : productOf(rng, rng.pick([2, 3]));
+    while (n > 99 || n < 42);
   } else {
     // 4〜5個の積(≤ 300)。5 回に 1 回は 11 か 13 を 1 つ混ぜる。例: 126, 180, 252, 132
     const extra = rng.bool(0.2) ? [rng.pick([11, 13])] : [];

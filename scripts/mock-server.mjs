@@ -51,6 +51,12 @@ function handle(action, p) {
     if (p.op === 'reset') session.epoch = new Date().toISOString();
     if (p.op === 'close') session.open = false;
     if (p.op === 'open') session.open = true;
+    // 本物のメニュー「選んだ生徒のセーブを消す / 全員のセーブを消す」(key を省くと全員)
+    if (p.op === 'wipe') {
+      const now = new Date().toISOString();
+      for (const [k, row] of students) if (!p.key || p.key === k) Object.assign(row, { save: null, updatedAt: '', resetAt: now });
+      session.epoch = now;
+    }
     if (p.op === 'summary') {
       const list = [...students.entries()].filter(([k, r]) => !k.startsWith('teacher|') && r.save?.tally).map(([k, r]) => ({ cls: k.split('|')[0], tally: r.save.tally }));
       return { ok: true, students: list.length, ...gasSummary.summarizeTallies(list, gasSummary.SUMMARY_TARGETS, gasSummary.SUMMARY_MIN_ANSWERS) };
@@ -95,7 +101,7 @@ function handle(action, p) {
       row.salt = randomUUID();
       row.passHash = hash(pass, row.salt);
     } else if (!auth(row)) return { ok: false, error: 'bad_pass' };
-    return { ok: true, isNew: false, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher };
+    return { ok: true, isNew: false, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher, resetAt: row.resetAt ?? '' };
   }
   if (!row) return { ok: false, error: 'not_found' };
   if (!auth(row)) return { ok: false, error: 'bad_pass' };
@@ -121,7 +127,7 @@ function handleAccount(action, p, email) {
   if (action === 'login') {
     if (!students.has(k)) students.set(k, { passHash: '', salt: '', save: null, updatedAt: '' });
     const row = students.get(k);
-    return { ok: true, isNew: !row.save, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher, account: { class: cls, number: num } };
+    return { ok: true, isNew: !row.save, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher, account: { class: cls, number: num }, resetAt: row.resetAt ?? '' };
   }
   const row = students.get(k);
   if (!row) return { ok: false, error: 'not_registered' };
@@ -151,6 +157,8 @@ function storeFeedback(k, f) {
 function storeSave(row, save) {
   if (!save || typeof save !== 'object') return { ok: false, error: 'bad_save' };
   const incoming = String(save.updatedAt ?? '');
+  // 本物の isWipedSave と同じ: 消したあとに 端末から 古いセーブが 来ても 受け取らない
+  if (row.resetAt && (!save.createdAt || save.createdAt < row.resetAt)) return { ok: false, error: 'save_reset' };
   if (row.updatedAt && incoming && incoming < row.updatedAt) return { ok: true, stored: false, save: row.save };
   row.save = save;
   row.updatedAt = incoming || new Date().toISOString();

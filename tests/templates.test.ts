@@ -81,6 +81,9 @@ function numericOf(answer: AnswerSpec): number | number[] {
   }
 }
 
+/** 種類が少なくてよい テンプレート × ★(理由は各テンプレートのコメント) */
+const MIN_KEYS: Record<string, number> = { 'g1.sign.primefactor:1': 11 };
+
 describe('問題テンプレートの検証', () => {
   for (const t of allTemplates()) {
     for (const d of DIFFICULTIES) {
@@ -88,7 +91,8 @@ describe('問題テンプレートの検証', () => {
         const rng = createRng(12345 + d);
         const keys = new Set<string>();
         for (let i = 0; i < N; i++) {
-          const p = t.generate(rng, d);
+          // 道中(教科書)と 修練の泉(チャレンジテスト)の 両方の基準を 交互に
+          const p = t.generate(rng, d, i % 2 ? 'challenge' : 'textbook');
           expect(p.templateId).toBe(t.id);
           expect(p.prompt.length).toBeGreaterThan(0);
           expect(p.hint.length).toBeGreaterThan(0);
@@ -126,8 +130,9 @@ describe('問題テンプレートの検証', () => {
 
           keys.add(p.key);
         }
-        // 同じ問題ばかりにならない(★1 でも 15 種類以上。素因数分解 ★1 は 50 以下の合成数で 20 通り)
-        expect(keys.size).toBeGreaterThanOrEqual(15);
+        // 同じ問題ばかりにならない(★1 でも 15 種類以上)。
+        // 素因数分解 ★1 は ★2 と数を重ねないため 40 以下の 11 通りだけ(直近 6 問は避けるので 続けては出ない)
+        expect(keys.size).toBeGreaterThanOrEqual(MIN_KEYS[`${t.id}:${d}`] ?? 15);
       });
     }
   }

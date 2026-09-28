@@ -21,6 +21,13 @@ describe('save', () => {
     expect(s!.settings.fontScale).toBe(1);
   });
 
+  it('新しいセーブには はじめた日時(createdAt)が付く。古い版のセーブに migrate で 付け足さない(先生が消したあとに 残らないように)', () => {
+    expect(createNewSave('x').createdAt).toMatch(/^\d{4}-/);
+    const legacy: Record<string, unknown> = { ...createNewSave('x') };
+    delete legacy.createdAt;
+    expect(migrate(legacy)!.createdAt).toBeUndefined();
+  });
+
   it('migrate は版が違う・壊れたデータを null にする', () => {
     expect(migrate(null)).toBeNull();
     expect(migrate({ version: 999 })).toBeNull();

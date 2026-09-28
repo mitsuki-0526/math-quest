@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import '@/data/grade1/problems';
-import { generateProblem, type Difficulty, type Problem } from '@/math/template';
+import { generateProblem, judge, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
 import { toNumber } from '@/math/rational';
 import { createRng } from '@/math/rng';
 import { getEnemy } from '@/data/grade1/enemies';
@@ -14,12 +14,13 @@ import type { NumberLineSpec, TableSpec } from '@/math/figure';
  */
 const N = 400;
 
-function each(templateId: string, d: Difficulty, check: (p: Problem) => void) {
+function each(templateId: string, d: Difficulty, check: (p: Problem) => void, basis: ProblemBasis = 'textbook') {
   // 乱数の種を毎回変える(省略すると現在時刻が種になり、同じ問題ばかりになる)
-  for (let i = 0; i < N; i++) check(generateProblem(templateId, d, [], createRng(7919 * (i + 1))));
+  for (let i = 0; i < N; i++) check(generateProblem(templateId, d, [], createRng(7919 * (i + 1)), basis));
 }
 /** 問題文に出てくる数(符号なし) */
 const numbersIn = (p: Problem) => (p.promptText.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 const answerOf = (p: Problem) => (p.answer.kind === 'number' ? toNumber(p.answer.value) : NaN);
 
 describe('第1章 正の数と負の数', () => {
@@ -90,19 +91,26 @@ describe('第1章 正の数と負の数', () => {
     });
   });
 
-  it('四則混合: ★1 は 累乗・かっこ(3 乗は 3 まで)、★2 は ×が先(先生の印で入れかえ)。★3 は 20 までの数で、答えは整数', () => {
+  it('四則混合: ★1 は 累乗だけ(3 乗は 3 まで)、★2 は ×が先・かっこが先(1けた、答えは 54 まで)。★3 は 20 までの数で、答えは整数', () => {
     each('g1.sign.mixed', 1, (p) => {
-      expect(p.tags.some((t) => t.includes('power') || t === 'parentheses_first'), p.promptText).toBe(true);
+      expect(p.tags, p.promptText).toHaveLength(1);
+      expect(p.tags[0], p.promptText).toMatch(/power/);
       if (p.promptText.includes('³')) expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(3);
     });
-    each('g1.sign.mixed', 2, (p) => expect(p.tags, p.promptText).toEqual(['order_of_operations']));
+    const tags2 = new Set<string>();
+    each('g1.sign.mixed', 2, (p) => {
+      p.tags.forEach((t) => tags2.add(t));
+      expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(10);
+      expect(Math.abs(answerOf(p)), p.promptText).toBeLessThanOrEqual(54);
+    });
+    expect([...tags2].sort()).toEqual(['order_of_operations', 'parentheses_first']);
     each('g1.sign.mixed', 3, (p) => {
       expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(20);
       expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
     });
   });
 
-  it('素因数分解: ★1 は 50 まで、★2 は 2 けた(30〜99)で 素因数 3 つまで(11 も)、★3 は 300 まで', () => {
+  it('素因数分解: ★1 は 40 まで、★2 は 42〜99 で 素因数 3 つまで(11・13 も。★1 と重ならない)、★3 は 300 まで', () => {
     const factorCount = (n: number) => {
       let c = 0;
       for (let q = 2, m = n; m > 1; ) if (m % q === 0) (m /= q), c++;
@@ -112,14 +120,14 @@ describe('第1章 正の数と負の数', () => {
     for (const d of [1, 2, 3] as const) {
       each('g1.sign.primefactor', d, (p) => {
         const n = (p.answer as { n: number }).n;
-        expect(n).toBeLessThanOrEqual(d === 1 ? 50 : d === 2 ? 99 : 300);
+        expect(n).toBeLessThanOrEqual(d === 1 ? 40 : d === 2 ? 99 : 300);
         if (d === 2) {
-          expect(n, `${n}`).toBeGreaterThanOrEqual(30);
+          expect(n, `${n}`).toBeGreaterThanOrEqual(42);
           expect(factorCount(n), `${n}`).toBeLessThanOrEqual(3);
         }
         let m = n;
         for (const q of [2, 3, 5, 7]) while (m % q === 0) m /= q;
-        expect(d === 1 ? [1] : d === 2 ? [1, 11] : [1, 11, 13], `${n}`).toContain(m);
+        expect(d === 1 ? [1] : [1, 11, 13], `${n}`).toContain(m);
       });
     }
   });
@@ -174,6 +182,16 @@ describe('第1章 正の数と負の数', () => {
     });
   });
 
+  it('基準との差・平均: 表の数は 道中(教科書)で ★2 が 3〜4・★3 が 4〜5、修練の泉(チャレンジテスト)で ★2 が 5・★3 が 5〜6', () => {
+    const spec = { textbook: { 2: [3, 4], 3: [4, 5] }, challenge: { 2: [5], 3: [5, 6] } } as const;
+    for (const basis of ['textbook', 'challenge'] as const)
+      for (const d of [2, 3] as const) {
+        const seen = new Set<number>();
+        each('g1.sign.average', d, (p) => seen.add((p.figure as TableSpec).rows[0].length - 1), basis);
+        expect([...seen].sort(), `${basis} ★${d}`).toEqual([...spec[basis][d]]);
+      }
+  });
+
   it('基準との差・平均: 差は ±15 まで。★2・★3 は表つき、★3 の平均は整数', () => {
     for (const d of [2, 3] as const) {
       each('g1.sign.average', d, (p) => {
@@ -187,18 +205,76 @@ describe('第1章 正の数と負の数', () => {
 });
 
 describe('第2章 文字と式', () => {
-  it('同類項 ★2 は 1 文字の一次式の加減((ax + b) ± (cx + d))。2 文字の同類項は 2 年なので出さない', () => {
-    each('g1.expr.collect', 2, (p) => {
-      expect(p.promptText, p.promptText).toMatch(/^\(/);
-      expect(p.promptText, p.promptText).not.toMatch(/[ab]/);
+  /** ★ ごとに 出る tag の集まり */
+  const tagsOf = (id: string, d: Difficulty) => {
+    const set = new Set<string>();
+    each(id, d, (p) => p.tags.forEach((t) => set.add(t)));
+    return [...set].sort();
+  };
+  /** 問題文に出てくる 係数・数(符号なし)の最大 */
+  const maxNum = (p: Problem) => Math.max(...numbersIn(p));
+
+  it('同類項(教科書の順 2026-09-28): ★1 は 2 項をまとめる、★2 は 4 項と 一次式の加減、★3 は 約分した分数の係数。2 文字は 2 年なので出さない', () => {
+    expect(tagsOf('g1.expr.collect', 1)).toEqual(['collect_two_terms']);
+    each('g1.expr.collect', 1, (p) => expect(maxNum(p), p.promptText).toBeLessThanOrEqual(9));
+    expect(tagsOf('g1.expr.collect', 2)).toEqual(['add_expression', 'collect_like_terms', 'subtract_expression']);
+    for (const d of [1, 2, 3] as const) each('g1.expr.collect', d, (p) => expect(p.promptText, p.promptText).not.toMatch(/[ab]/));
+    each('g1.expr.collect', 3, (p) => {
+      // 4/4x・3/3x・1x のような 約分していない係数を 出さない
+      for (const [, n, q] of p.promptText.matchAll(/(\d+)\/(\d+)x/g)) {
+        expect(Number(n), p.promptText).toBeLessThan(Number(q));
+        expect(gcd(Number(n), Number(q)), p.promptText).toBe(1);
+      }
+      expect(p.promptText, p.promptText).not.toMatch(/(^|[^\d/])1x/);
     });
   });
 
-  it('かっこ ★2 は 一次式 ÷ 数、★3 は かっこが 2 つ(または 分数)', () => {
-    each('g1.expr.distribute', 2, (p) => expect(p.promptText, p.promptText).toContain('÷'));
-    const tags = new Set<string>();
-    each('g1.expr.distribute', 3, (p) => p.tags.forEach((t) => tags.add(t)));
-    expect([...tags].sort()).toEqual(['distribute_fraction', 'distribute_two']);
+  it('かっこ(教科書の順): ★1 は 項と数の乗除・小さい数の k(ax + b)(積は 25 まで)、★2 は ÷ 数が中心、★3 は かっこ 2 つ・分数', () => {
+    expect(tagsOf('g1.expr.distribute', 1)).toEqual(['distribute', 'term_div_number', 'term_times_number']);
+    each('g1.expr.distribute', 1, (p) => {
+      if (p.tags[0] === 'distribute') expect(maxNum(p), p.promptText).toBeLessThanOrEqual(5);
+    });
+    expect(tagsOf('g1.expr.distribute', 2)).toEqual(['distribute', 'divide_expression']);
+    expect(tagsOf('g1.expr.distribute', 3)).toEqual(['distribute_fraction', 'distribute_fraction_form', 'distribute_two']);
+    // 負の数を かっこの前に書くときは −3(2x − 5)。(−3)(2x − 5) とは書かない
+    for (const d of [1, 2, 3] as const) each('g1.expr.distribute', d, (p) => expect(p.promptText, p.promptText).not.toMatch(/\)\(/));
+  });
+
+  it('代入(教科書の順): ★1 は 正の数(x は 6 まで)、★2 は 負の数の代入(2x + 7、5 − 2x、−x、x²、−x²)', () => {
+    each('g1.expr.subst', 1, (p) => expect(Number(p.promptText.match(/x = (\d+)/)?.[1]), p.promptText).toBeLessThanOrEqual(6));
+    each('g1.expr.subst', 2, (p) => expect(p.promptText, p.promptText).toMatch(/^x = −[1-6] /));
+  });
+
+  it('係数の問題(同類項・かっこ・代入・規則性)では 分母に 文字が来る式を 出さない(先生の方針 2026-09-28。文字式で表す問題の 4/x は よい)', () => {
+    const letterDen = /\\frac\{[^{}]*\}\{[^{}]*[a-z][^{}]*\}|\/\s*\(?[a-z]/;
+    for (const id of ['g1.expr.subst', 'g1.expr.collect', 'g1.expr.distribute', 'g1.expr.pattern'])
+      for (const d of [1, 2, 3] as const)
+        each(id, d, (p) => {
+          const all = [p.prompt, p.promptText, ...p.explanation, ...(p.answer.kind === 'choice' ? p.answer.options : []), p.answer.kind === 'expression' ? p.answer.expected : ''];
+          for (const t of all) expect(t, `${p.promptText} / ${t}`).not.toMatch(letterDen);
+        });
+  });
+
+  it('分数の係数の答えは、解説で もう一方の 書き方(2/3 x ↔ 2x/3、x/4 ↔ 1/4 x)も 見せる。どちらの 入力も 正解', () => {
+    each('g1.expr.collect', 3, (p) => {
+      expect(p.explanation.at(-1), p.promptText).toMatch(/どちらも 正解/);
+      const exp = p.answer.kind === 'expression' ? p.answer.expected : '';
+      const m = p.explanation.at(-1)!.match(/(-?)\\frac\{(\d*)x\}\{(\d+)\}/)!;
+      // 2x/3 の形で 入れても 正解になる
+      expect(judge({ kind: 'expression', expected: exp }, `${m[1]}${m[2]}x/${m[3]}`).correct, `${p.promptText} / ${m[0]}`).toBe(true);
+    });
+    let seen = 0;
+    each('g1.expr.model', 1, (p) => {
+      if (!p.explanation.some((e) => e.includes('どちらも 正解'))) return;
+      seen++;
+      expect(p.explanation.at(-1), p.promptText).toMatch(/\\frac\{x\}\{\d+\}.*\\frac\{1\}\{\d+\}x/);
+    });
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('規則性: ★3 は ★2 と 形を変える(棒の本数・減っていく並び)', () => {
+    expect(tagsOf('g1.expr.pattern', 2)).toEqual(['pattern_expression']);
+    expect(tagsOf('g1.expr.pattern', 3)).toEqual(['pattern_decreasing', 'pattern_matchsticks']);
   });
 
   it('代入 ★3 に 負の数を 累乗の式に 代入する形がある(x は −2 か −3)', () => {

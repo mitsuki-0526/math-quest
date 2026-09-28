@@ -23,7 +23,8 @@ const g1c1: ChapterDef = {
       y: 66,
       next: ['marsh'],
       intro: 'C1-1',
-      enemies: [['minus_slime', 'minus_slime'], ['minus_slime', 'minus_slime'], ['minus_slime', 'minus_slime', 'minus_slime']],
+      // 数直線は 2 戦目から 1 匹ずつ(先生の方針 2026-09-28「数直線も小道に」)
+      enemies: [['minus_slime', 'minus_slime'], ['minus_slime', 'memori_shakutori'], ['minus_slime', 'minus_slime', 'memori_shakutori']],
       bg: 'bg_forest_road',
     },
     {

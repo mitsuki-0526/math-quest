@@ -105,4 +105,30 @@ describe('sync: アカウントの分離', () => {
     await sending;
     expect(saveStore.get()?.player.name).toBe('Aさん(最新)');
   });
+
+  it('先生が セーブを消したあと(resetAt)は、それより前に はじめた 端末内のセーブを 捨てて はじめから', async () => {
+    setIdentity(A);
+    const old = { ...saveOf('Aさん(消す前)', '2026-09-28T09:00:00.000Z'), createdAt: '2026-09-27T01:00:00.000Z' };
+    writeLocalSave(old);
+    mock.login.mockResolvedValueOnce({ ok: true, isNew: true, save: null, unlock: ['g1c1'], teacher: false, resetAt: '2026-09-28T10:00:00.000Z' });
+    const r = await login(A, loadLocalSave(ownerKey(A)));
+    expect(r.save).toBeNull();
+    expect(r.isNew).toBe(true);
+    // 端末からも 消える(次に開いても 送り直さない)
+    expect(loadLocalSave(ownerKey(A))).toBeNull();
+  });
+
+  it('消したあとに はじめた セーブ・createdAt のない 古い版のセーブ の扱い', async () => {
+    const resetAt = '2026-09-28T10:00:00.000Z';
+    setIdentity(A);
+    const fresh = { ...saveOf('Aさん(新しく)', '2026-09-28T11:00:00.000Z'), createdAt: '2026-09-28T10:30:00.000Z' };
+    mock.login.mockResolvedValueOnce({ ok: true, isNew: true, save: null, unlock: ['g1c1'], teacher: false, resetAt });
+    expect((await login(A, fresh)).save?.player.name).toBe('Aさん(新しく)');
+    await logout();
+    // createdAt の項目を足す前のセーブ(古い版)は 消す前のものとして 捨てる
+    const legacy = saveOf('Aさん(古い版)', '2026-09-28T11:00:00.000Z');
+    delete legacy.createdAt;
+    mock.login.mockResolvedValueOnce({ ok: true, isNew: true, save: null, unlock: ['g1c1'], teacher: false, resetAt });
+    expect((await login(A, legacy)).save).toBeNull();
+  });
 });

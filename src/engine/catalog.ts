@@ -1,6 +1,6 @@
 import type { ChapterDef } from './types';
 import { getEnemy } from '@/data/grade1/enemies';
-import { generateProblem, type Difficulty, type Problem } from '@/math/template';
+import { generateProblem, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
 import { createRng } from '@/math/rng';
 import { createStore } from './store';
 
@@ -16,6 +16,8 @@ export interface CatalogNode {
   name: string;
   templates: string[];
   stars: Difficulty[];
+  /** 修練の泉は チャレンジテスト基準(戦闘と同じ) */
+  basis: ProblemBasis;
 }
 
 const ALL_STARS: Difficulty[] = [1, 2, 3];
@@ -32,19 +34,19 @@ export function catalogNodes(chapter: ChapterDef): CatalogNode[] {
         if (n.type === 'boss' && e.phases) e.phases.forEach((p) => p.templates.forEach((t) => templates.add(t)));
         else templates.add(e.template);
       }
-    out.push({ id: `${chapter.id}.${n.id}`, name: n.name, templates: [...templates], stars: ALL_STARS.filter((s) => s <= (n.maxStar ?? 3)) });
+    out.push({ id: `${chapter.id}.${n.id}`, name: n.name, templates: [...templates], stars: ALL_STARS.filter((s) => s <= (n.maxStar ?? 3)), basis: 'textbook' });
   }
-  out.push({ id: `${chapter.id}.spring`, name: '修練の泉(全タイプ)', templates: chapter.templates ?? [], stars: ALL_STARS });
+  out.push({ id: `${chapter.id}.spring`, name: '修練の泉(全タイプ)', templates: chapter.templates ?? [], stars: ALL_STARS, basis: 'challenge' });
   return out;
 }
 
 /** 見本の問題。同じ種(seed)なら同じ問題が出る(印を付けた問題を あとで 特定できるように) */
-export function sampleProblems(templateId: string, star: Difficulty, count: number, seed: number): Problem[] {
+export function sampleProblems(templateId: string, star: Difficulty, count: number, seed: number, basis: ProblemBasis = 'textbook'): Problem[] {
   const rng = createRng(seed * 7919 + hash(`${templateId}:${star}`));
   const keys: string[] = [];
   const out: Problem[] = [];
   for (let i = 0; i < count; i++) {
-    const p = generateProblem(templateId, star, keys, rng);
+    const p = generateProblem(templateId, star, keys, rng, basis);
     keys.push(p.key);
     out.push(p);
   }

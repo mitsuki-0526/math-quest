@@ -1,7 +1,9 @@
 {
   "enemy_abs_golem": "assets/enemies/enemy_abs_golem.png",
   "enemy_cross_hopper": "assets/enemies/enemy_cross_hopper.png",
+  "enemy_heikin_tanuki": "assets/enemies/enemy_heikin_tanuki.png",
   "enemy_king_nega": "assets/enemies/enemy_king_nega.png",
+  "enemy_memori_shakutori": "assets/enemies/enemy_memori_shakutori.png",
   "enemy_minus_slime": "assets/enemies/enemy_minus_slime.png",
   "enemy_plusminus_bat": "assets/enemies/enemy_plusminus_bat.png",
   "enemy_prime_bee": "assets/enemies/enemy_prime_bee.png",

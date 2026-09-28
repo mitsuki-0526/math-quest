@@ -1,6 +1,6 @@
 import { registerTemplate, type Difficulty, type Problem } from '@/math/template';
 import type { Rng } from '@/math/rng';
-import { rat, toTex } from '@/math/rational';
+import { add, isZero, rat, sub, toTex } from '@/math/rational';
 import { paren, plainMinus, text } from '@/math/format';
 import { parseExpression, polyToTex } from '@/math/expr';
 
@@ -30,10 +30,10 @@ function signedTex(c: number, v = ''): string {
 
 function genSubst(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
-    // ax + b に正の数を代入
+    // ax + b に正の数を代入(x は 6 まで。章の最初の地点で出るので、かけ算は 九九の範囲)
     const a = rng.int(2, 9);
     const b = rng.nonZero(9);
-    const x = rng.int(2, 9);
+    const x = rng.int(2, 6);
     const value = a * x + b;
     const expr = `${coefTex(a, 'x')}${signedTex(b)}`;
     return {
@@ -50,27 +50,35 @@ function genSubst(rng: Rng, d: Difficulty): Problem {
     };
   }
   if (d === 2) {
-    // 負の数の代入、または 2乗を含む
-    const usePower = rng.bool();
-    const a = rng.nonZero(6);
-    const b = rng.nonZero(9);
-    const x = rng.nonZero(6);
-    const value = usePower ? a * x * x + b : a * x + b;
-    const expr = usePower ? `${coefTex(a, 'x^{2}')}${signedTex(b)}` : `${coefTex(a, 'x')}${signedTex(b)}`;
+    // 負の数の代入(教科書の「x = −3 のとき 2x + 7、5 − 2x、−x、x²、−x²」の形)。x は −1 〜 −6
+    const x = -rng.int(1, 6);
+    // 1 つの項だけの式(−x、x²、−x²)は やさしいので 少なめ
+    const form = rng.pick([0, 0, 1, 1, 2, 3, 4]);
+    const a = rng.int(2, 6);
+    const b = rng.int(1, 9);
+    // [式の TeX, 値, 代入した式の TeX, verify]
+    const [expr, value, work, verify]: [string, number, string, string] =
+      form === 0
+        ? [`${a}x + ${b}`, a * x + b, `${a} \\times (${x}) + ${b}`, `${a}*(${x})+${b}`]
+        : form === 1
+          ? [`${b} - ${a}x`, b - a * x, `${b} - ${a} \\times (${x})`, `${b}-${a}*(${x})`]
+          : form === 2
+            ? ['-x', -x, `-(${x})`, `-(${x})`]
+            : form === 3
+              ? ['x^{2}', x * x, `(${x})^{2}`, `(${x})**2`]
+              : ['-x^{2}', -(x * x), `-(${x})^{2}`, `-((${x})**2)`];
+    const power = form >= 3;
     return {
       templateId: 'g1.expr.subst',
       difficulty: d,
       prompt: `x = ${x} ${text('のとき、')} ${expr} ${text('の値は?')}`,
       promptText: `x = ${plainMinus(String(x))} のとき、${plainMinus(expr.replace('^{2}', '²'))} の値は?`,
       answer: { kind: 'number', value: rat(value) },
-      hint: usePower ? '負の数を 代入するときは かっこを つけて (−3)² のように' : 'x のところに かっこをつけて 入れよう',
-      explanation: [
-        usePower ? `${a} \\times ${paren(x)}^{2}${signedTex(b)} = ${a} \\times ${x * x}${signedTex(b)}` : `${a} \\times ${paren(x)}${signedTex(b)} = ${a * x}${signedTex(b)}`,
-        `${text('答え: ')} ${value}`,
-      ],
-      tags: usePower ? ['substitute_power'] : ['substitute_negative'],
-      key: `subst2:${a}:${b}:${x}:${usePower}`,
-      verify: usePower ? `${a}*(${x})**2+(${b})` : `${a}*(${x})+(${b})`,
+      hint: power ? '負の数を 代入するときは かっこを つけて (−3)² のように。−x² は −(x²)' : 'x のところに かっこを つけて 入れよう',
+      explanation: [`${work} = ${value}`, `${text('答え: ')} ${value}`],
+      tags: power ? ['substitute_power'] : ['substitute_negative'],
+      key: `subst2:${expr}:${x}`,
+      verify,
     };
   }
   // ★3: 半分は 負の数を 累乗の式に 代入(チャレンジテストの −2x²(x = −3)、5x³(x = −2) の形。正答率 52〜63%)
@@ -117,13 +125,42 @@ function genSubst(rng: Rng, d: Difficulty): Problem {
 
 // ---------------------------------------------------------------- 同類項
 
+/**
+ * 同類項。教科書の順(項をまとめる → 一次式の加法・減法)に合わせる(2026-09-28)。
+ *   ★1: 2 つの項をまとめる(5x + 3x、−x + 6x、4x − 7x)
+ *   ★2: 数の項もある 4 項(3x − 7 − 5x + 3)/ 一次式の加法・減法((ax + b) ± (cx + d))
+ *   ★3: 分数の係数(½x + ⅓x、¾x − x)。分数は 約分した形で出す
+ */
 function genCollect(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
-    // ax + bx + c + e
+    // 2 つの項: 先頭は 3 回に 1 回 負。まとめて 0 になる組は 作り直す
+    const a = rng.int(1, 9) * (rng.bool(0.3) ? -1 : 1);
+    const b = rng.nonZero(9);
+    if (a + b === 0) return genCollect(rng, d);
+    const expr = `${coefTex(a, 'x')}${signedTex(b, 'x')}`;
+    const expected = `${a + b}x`;
+    return {
+      templateId: 'g1.expr.collect',
+      difficulty: d,
+      prompt: `${expr} ${text('を 簡単にせよ')}`,
+      promptText: `${plainMinus(expr)} を 簡単にせよ`,
+      answer: { kind: 'expression', expected },
+      hint: '係数(x の前の数)どうしを 計算しよう。x だけのときは 1x',
+      explanation: [`${coefTex(a, 'x')}${signedTex(b, 'x')} = (${a}${b < 0 ? ' - ' : ' + '}${Math.abs(b)})x = ${coefTex(a + b, 'x')}`, `${text('答え: ')} ${coefTex(a + b, 'x')}`],
+      tags: ['collect_two_terms'],
+      key: `collect1:${a}:${b}`,
+      verify: expected,
+    };
+  }
+  if (d === 3) return genCollectFraction(rng, d);
+  if (rng.bool()) {
+    // ax + b + cx + e(数の項もある 4 項)
     const a = rng.int(2, 9);
     const b = rng.nonZero(8);
     const c = rng.nonZero(9);
     const e = rng.nonZero(9);
+    // x の項が 消える式は 作り直す(★2 の かっこの式と 同じ)
+    if (a + b === 0) return genCollect(rng, d);
     const expr = `${coefTex(a, 'x')}${signedTex(c)}${signedTex(b, 'x')}${signedTex(e)}`;
     const expected = `${a + b}x+${c + e}`;
     return {
@@ -143,65 +180,114 @@ function genCollect(rng: Rng, d: Difficulty): Problem {
       verify: expected,
     };
   }
-  if (d === 2) {
-    // 一次式の加法・減法: (ax + b) ± (cx + d)。教科書・学習プリントの形(docs/difficulty.md)。
-    // 2 文字の同類項(3a + 2b − a + 4b)は 2 年の「整式の加減」なので出さない
-    const a = rng.nonZero(6);
-    const b = rng.nonZero(9);
-    const c = rng.nonZero(6);
-    const e = rng.nonZero(9);
-    const minus = rng.bool();
-    const s = minus ? -1 : 1;
-    const inner = (p: number, q: number) => `${coefTex(p, 'x')}${signedTex(q)}`;
-    const expr = `(${inner(a, b)}) ${minus ? '-' : '+'} (${inner(c, e)})`;
-    // x の項が 消える式(答えが 数だけ)は 練習の ねらいから外れるので 作り直す
-    if (a + s * c === 0) return genCollect(rng, d);
-    const expected = `${a + s * c}x+${b + s * e}`;
-    return {
-      templateId: 'g1.expr.collect',
-      difficulty: d,
-      prompt: `${expr} ${text('を 計算せよ')}`,
-      promptText: `${plainMinus(expr)} を 計算せよ`,
-      answer: { kind: 'expression', expected },
-      hint: minus ? 'ひく式の かっこを はずすときは、中の 項の 符号を ぜんぶ 変える' : 'かっこを はずして、x の項どうし・数の項どうしを まとめよう',
-      explanation: [
-        minus ? `${text('符号を変えて かっこを はずす: ')} ${inner(a, b)}${signedTex(-c, 'x')}${signedTex(-e)}` : `${text('かっこを はずす: ')} ${inner(a, b)}${signedTex(c, 'x')}${signedTex(e)}`,
-        `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`,
-      ],
-      tags: [minus ? 'subtract_expression' : 'add_expression'],
-      key: `collect2:${expr}`,
-      verify: expected,
-    };
-  }
-  // ★3: 分数係数
-  const den = rng.pick([2, 3, 4]);
-  const a = rng.int(1, 5);
-  const b = rng.int(1, 5);
+  // 一次式の加法・減法: (ax + b) ± (cx + d)。教科書・学習プリントの形(docs/difficulty.md)。
+  // 2 文字の同類項(3a + 2b − a + 4b)は 2 年の「整式の加減」なので出さない
+  const a = rng.nonZero(6);
+  const b = rng.nonZero(9);
   const c = rng.nonZero(6);
-  const expr = `\\frac{${a}}{${den}}x${signedTex(b, 'x')}${signedTex(c)}`;
-  const expected = `(${a}/${den}+${b})x+${c}`;
+  const e = rng.nonZero(9);
+  const minus = rng.bool();
+  const s = minus ? -1 : 1;
+  const inner = (p: number, q: number) => `${coefTex(p, 'x')}${signedTex(q)}`;
+  const expr = `(${inner(a, b)}) ${minus ? '-' : '+'} (${inner(c, e)})`;
+  // x の項が 消える式(答えが 数だけ)は 練習の ねらいから外れるので 作り直す
+  if (a + s * c === 0) return genCollect(rng, d);
+  const expected = `${a + s * c}x+${b + s * e}`;
+  return {
+    templateId: 'g1.expr.collect',
+    difficulty: d,
+    prompt: `${expr} ${text('を 計算せよ')}`,
+    promptText: `${plainMinus(expr)} を 計算せよ`,
+    answer: { kind: 'expression', expected },
+    hint: minus ? 'ひく式の かっこを はずすときは、中の 項の 符号を ぜんぶ 変える' : 'かっこを はずして、x の項どうし・数の項どうしを まとめよう',
+    explanation: [
+      minus ? `${text('符号を変えて かっこを はずす: ')} ${inner(a, b)}${signedTex(-c, 'x')}${signedTex(-e)}` : `${text('かっこを はずす: ')} ${inner(a, b)}${signedTex(c, 'x')}${signedTex(e)}`,
+      `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`,
+    ],
+    tags: [minus ? 'subtract_expression' : 'add_expression'],
+    key: `collect2:${expr}`,
+    verify: expected,
+  };
+}
+
+/**
+ * 分数の係数の 2 つの書き方(\frac{2}{3}x と \frac{2x}{3}、\frac{x}{4} と \frac{1}{4}x)は どちらも 正解。
+ * 生徒が 片方しか 正しくないと 思わないように、解説に もう一方の 書き方を 添える(先生の要望 2026-09-28)。
+ * 判定は どちらの 入力も 正解にしている(src/math/expr.ts)
+ */
+function fractionForms(answerTex: string): string[] {
+  const coefFirst = answerTex.match(/^(-?)\\frac\{(\d+)\}\{(\d+)\}x$/);
+  const letterUp = answerTex.match(/^(-?)\\frac\{(\d*)x\}\{(\d+)\}$/);
+  let alt: string | null = null;
+  if (coefFirst) alt = `${coefFirst[1]}\\frac{${coefFirst[2] === '1' ? '' : coefFirst[2]}x}{${coefFirst[3]}}`;
+  else if (letterUp) alt = `${letterUp[1]}\\frac{${letterUp[2] || '1'}}{${letterUp[3]}}x`;
+  return alt ? [`${answerTex} ${text(' は ')} ${alt} ${text(' と 書いても 同じ(どちらも 正解)')}`] : [];
+}
+
+/** 真分数(約分ずみ)。分母は 2・3・4・6 */
+function properFraction(rng: Rng, avoidDen?: number): [number, number] {
+  const den = rng.pick([2, 3, 4, 6].filter((q) => q !== avoidDen));
+  const num = rng.pick([1, 2, 3, 4, 5].filter((p) => p < den && gcdOf(p, den) === 1));
+  return [num, den];
+}
+
+/**
+ * ★3: 分数の係数(½x + ⅓x、¾x − ½x、x − ⅔x)。以前は 4/4x・3/3x・1x のような 約分していない係数が出ていた(2026-09-28 修正)
+ */
+function genCollectFraction(rng: Rng, d: Difficulty): Problem {
+  const [p, q] = properFraction(rng);
+  // 2 つめの項: 4 回に 3 回は 分母のちがう分数、1 回は 整数(x、2x)
+  const [r, s] = rng.int(0, 3) > 0 ? properFraction(rng, q) : [rng.int(1, 2), 1];
+  const minus = rng.bool();
+  const firstInt = s !== 1 && rng.bool(0.2);
+  // たまに 整数の項を 先に(x − ⅔x)
+  const terms: [number, number][] = firstInt ? [[1, 1], [p, q]] : [[p, q], [r, s]];
+  const coef = (n: number, dd: number) => (dd === 1 ? coefTex(n, 'x') : `\\frac{${n}}{${dd}}x`);
+  // 文字の 見本(コピー)で 2/(3x) と 読まれないように かっこを つける
+  const coefText = (n: number, dd: number) => (dd === 1 ? (n === 1 ? 'x' : `${n}x`) : `(${n}/${dd})x`);
+  const [[n1, d1], [n2, d2]] = terms;
+  const value = minus ? sub(rat(n1, d1), rat(n2, d2)) : add(rat(n1, d1), rat(n2, d2));
+  if (isZero(value)) return genCollectFraction(rng, d);
+  const op = minus ? '-' : '+';
+  const expr = `${coef(n1, d1)} ${op} ${coef(n2, d2)}`;
+  const expected = `(${n1}/${d1}${op}${n2}/${d2})x`;
+  const lcm = (d1 * d2) / gcdOf(d1, d2);
+  const f = (n: number, dd: number) => `\\frac{${(n * lcm) / dd}}{${lcm}}`;
   return {
     templateId: 'g1.expr.collect',
     difficulty: d,
     prompt: `${expr} ${text('を 簡単にせよ')}`,
-    promptText: `${a}/${den}x ${b < 0 ? '-' : '+'} ${Math.abs(b)}x ${c < 0 ? '-' : '+'} ${Math.abs(c)} を 簡単にせよ`,
+    promptText: `${coefText(n1, d1)} ${op === '-' ? '−' : '+'} ${coefText(n2, d2)} を 簡単にせよ`,
     answer: { kind: 'expression', expected },
-    hint: '分数の 係数も 同じように 足せる。通分してから',
-    explanation: [`${text('x の項: ')} \\frac{${a}}{${den}} ${b < 0 ? '-' : '+'} ${Math.abs(b)} = ${toTex(rat(a + b * den, den))}`, `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`],
+    hint: '係数(分数)どうしを 通分して 計算しよう。x は 1x。答えは 2/3x と 入れても 2x/3 と 入れても 正解',
+    explanation: [
+      `${text('係数: ')} ${f(n1, d1)} ${op} ${f(n2, d2)} = ${toTex(value)}`,
+      `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`,
+      ...fractionForms(polyToTex(parseExpression(expected)!)),
+    ],
     tags: ['collect_fraction'],
-    key: `collect3:${a}/${den}:${b}:${c}`,
+    key: `collect3:${expr}`,
     verify: expected,
   };
 }
 
 // ---------------------------------------------------------------- 分配法則
 
+/**
+ * かっこをはずす(一次式と数の乗除)。教科書の順(項と数の乗除 → 数 × 一次式 → 一次式 ÷ 数 → かっこが 2 つ)に合わせる(2026-09-28)。
+ *   ★1: 項と数の乗除(4x × 3、12x ÷ (−4))/ 小さい数の k(ax + b)(−3(2x − 5)。積は 25 まで)
+ *   ★2: 一次式 ÷ 数 / 大きめの数の k(ax + b)
+ *   ★3: かっこが 2 つ / 分数 × 一次式 / 数 × 分数の形の式(6 × (2x − 1)/3)
+ * 負の数を かっこの前に書くときは 教科書どおり −3(2x − 5)((−3)(2x − 5) とは書かない)
+ */
 function genDistribute(rng: Rng, d: Difficulty): Problem {
-  if (d === 1) {
-    const k = rng.nonZero(6, 2);
-    const a = rng.nonZero(8);
-    const b = rng.nonZero(9);
-    const expr = `${paren(k)}(${coefTex(a, 'x')}${signedTex(b)})`;
+  if (d === 1 && rng.bool()) return genTermMulDiv(rng, d);
+  if (d === 1 || (d === 2 && rng.int(0, 2) === 0)) {
+    const small = d === 1;
+    const k = small ? rng.nonZero(5, 2) : rng.nonZero(6, 2);
+    const a = small ? rng.nonZero(5) : rng.nonZero(8);
+    const b = small ? rng.nonZero(5) : rng.nonZero(9);
+    const expr = `${k}(${coefTex(a, 'x')}${signedTex(b)})`;
     const expected = `${k * a}x+${k * b}`;
     return {
       templateId: 'g1.expr.distribute',
@@ -239,8 +325,10 @@ function genDistribute(rng: Rng, d: Difficulty): Problem {
       verify: expected,
     };
   }
-  // ★3: かっこが 2 つある式(チャレンジテストの −2(3x − 5) + (7x − 8) の形と、2(3x + 5) − 6(x − 5) の形)、または 分数をかける
-  const form = rng.int(0, 2);
+  // ★3: かっこが 2 つある式(チャレンジテストの −2(3x − 5) + (7x − 8) の形と、2(3x + 5) − 6(x − 5) の形)、
+  // 分数をかける、数 × 分数の形の式
+  const form = rng.int(0, 3);
+  if (form === 3) return genTimesFractionForm(rng, d);
   if (form < 2) {
     const k1 = rng.nonZero(4, 2);
     // form 0: 2 つめの かっこの前は ± だけ(チャレンジテスト) / form 1: 2 つめにも 数がつく(学習プリント)
@@ -293,6 +381,76 @@ function genDistribute(rng: Rng, d: Difficulty): Problem {
     ],
     tags: ['distribute_fraction'],
     key: `dist3:${num}/${den}:${a}:${b}`,
+    verify: expected,
+  };
+}
+
+/** ★1: 項と数の乗除(4x × 3、(−5x) × (−2)、12x ÷ 4、−18x ÷ 6)。教科書で かっこの前に 習う形 */
+function genTermMulDiv(rng: Rng, d: Difficulty): Problem {
+  const k = rng.nonZero(6, 2);
+  if (rng.bool()) {
+    const a = rng.nonZero(6, 2); // 1 × x・6 × x は 計算にならない
+    // 数を前に書く形(3 × 4x)と 後ろに書く形(4x × 3)
+    const front = rng.bool();
+    const term = a < 0 ? `(${coefTex(a, 'x')})` : coefTex(a, 'x');
+    const expr = front ? `${k} \\times ${term}` : `${term} \\times ${paren(k)}`;
+    const expected = `${k * a}x`;
+    return {
+      templateId: 'g1.expr.distribute',
+      difficulty: d,
+      prompt: `${expr} ${text('を 計算せよ')}`,
+      promptText: `${plainMinus(expr.replace('\\times', '×'))} を 計算せよ`,
+      answer: { kind: 'expression', expected },
+      hint: '数どうしを かけて、x を うしろに つける',
+      explanation: [`${paren(k)} \\times ${paren(a)} = ${k * a}`, `${text('答え: ')} ${coefTex(k * a, 'x')}`],
+      tags: ['term_times_number'],
+      key: `term:${expr}`,
+      verify: expected,
+    };
+  }
+  // わる: 係数が わり切れるように
+  const q = rng.nonZero(6);
+  const a = k * q;
+  const expr = `${coefTex(a, 'x')} \\div ${paren(k)}`;
+  const expected = `${q}x`;
+  return {
+    templateId: 'g1.expr.distribute',
+    difficulty: d,
+    prompt: `${expr} ${text('を 計算せよ')}`,
+    promptText: `${plainMinus(expr.replace('\\div', '÷'))} を 計算せよ`,
+    answer: { kind: 'expression', expected },
+    hint: '係数(x の前の数)を その数で わる',
+    explanation: [`${a} \\div ${paren(k)} = ${q}`, `${text('答え: ')} ${coefTex(q, 'x')}`],
+    tags: ['term_div_number'],
+    key: `term:${expr}`,
+    verify: expected,
+  };
+}
+
+/** ★3: 数 × 分数の形の式(6 × (2x − 1)/3 → 2(2x − 1) = 4x − 2)。教科書の「一次式と数の乗法」の最後の形 */
+function genTimesFractionForm(rng: Rng, d: Difficulty): Problem {
+  const den = rng.pick([2, 3, 4, 5]);
+  const m = rng.nonZero(3);
+  const k = den * m;
+  const a = rng.nonZero(5);
+  const b = rng.nonZero(7);
+  const inner = `${coefTex(a, 'x')}${signedTex(b)}`;
+  // 先頭の負の数は かっこなし(第1章と同じ: −8 × …)
+  const expr = `${k} \\times \\frac{${inner}}{${den}}`;
+  const expected = `${m * a}x+${m * b}`;
+  return {
+    templateId: 'g1.expr.distribute',
+    difficulty: d,
+    prompt: `${expr} ${text('を 計算せよ')}`,
+    promptText: `${plainMinus(`${k} × (${inner})/${den}`)} を 計算せよ`,
+    answer: { kind: 'expression', expected },
+    hint: `先に ${k} と 分母の ${den} を 約分して、かっこの 形に しよう`,
+    explanation: [
+      `${text('約分: ')} ${paren(k)} \\div ${den} = ${m} \\;\\to\\; ${m === 1 ? '' : m === -1 ? '-' : m}(${inner})`,
+      `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`,
+    ],
+    tags: ['distribute_fraction_form'],
+    key: `dist3f:${k}:${inner}:${den}`,
     verify: expected,
   };
 }
@@ -414,7 +572,7 @@ function genNotation(rng: Rng, d: Difficulty): Problem {
     promptText: `${task.fromText} を、× や ÷ を 使わずに 表すと?`,
     answer: { kind: 'choice', options, correct },
     hint: task.hint,
-    explanation: [`${task.from} = ${task.correct}`, `${text('答え: ')} ${task.correct}`],
+    explanation: [`${task.from} = ${task.correct}`, `${text('答え: ')} ${task.correct}`, ...fractionForms(task.correct)],
     tags: ['notation'],
     key: `notation:${task.fromText}`,
     verify: String(correct),
@@ -425,12 +583,13 @@ function genModel(rng: Rng, d: Difficulty): Problem {
   // 3 回に 1 回は 表し方・不等式
   if (rng.int(0, 2) === 0) return genNotation(rng, d);
   const c = modelCases(rng, d);
-  // 文字で わる式(5/x など)は 多項式として読めないので、分数の形で書く(文字式では ÷ を使わない)
+  // わる式は 分数の形で書く(文字式では ÷ を使わない)。x/3 は 表し方の問題と そろえて x/3 の形。
+  // 1/3 x と書いても 同じなので、解説で 両方の 書き方を 見せる(fractionForms)
   const tex = (s: string) => {
-    const p = parseExpression(s);
-    if (p) return polyToTex(p);
     const [num, den] = s.split('/');
-    return den ? `\\frac{${num}}{${den}}` : s;
+    if (den) return `\\frac{${num}}{${den}}`;
+    const p = parseExpression(s);
+    return p ? polyToTex(p) : s;
   };
   // 表示が同じになる誤答(x+3 と 3+x など)は除く。同じ選択肢が2つあると正解を選んでも不正解になりうる
   const seen = new Set([tex(c.correct)]);
@@ -444,7 +603,7 @@ function genModel(rng: Rng, d: Difficulty): Problem {
     promptText: `${c.story} を 文字式で 表すと?`,
     answer: { kind: 'choice', options: options.map(tex), correct },
     hint: '言葉を 前から 順に 式に 置きかえてみよう',
-    explanation: [`${text(c.story)}`, `${text('答え: ')} ${tex(c.correct)}`],
+    explanation: [`${text(c.story)}`, `${text('答え: ')} ${tex(c.correct)}`, ...fractionForms(tex(c.correct))],
     tags: ['model_expression'],
     key: `model:${c.story}`,
     verify: String(correct),
@@ -475,7 +634,9 @@ function genPattern(rng: Rng, d: Difficulty): Problem {
       verify: `${b}+${a}*${nth - 1}`,
     };
   }
-  // ★2〜3: n番目を式で
+  // ★3: 棒の本数(図形の並び)か 減っていく並び。以前は ★2 と 同じ形だった(2026-09-28)
+  if (d === 3) return rng.bool() ? genMatchsticks(rng, d) : genDecreasing(rng, d);
+  // ★2: n番目を式で
   return {
     templateId: 'g1.expr.pattern',
     difficulty: d,
@@ -486,6 +647,74 @@ function genPattern(rng: Rng, d: Difficulty): Problem {
     explanation: [`${text(`${a} ずつ 増える → ${a}n`)}`, `${text('1番目は ')} ${a} \\times 1 ${b - a < 0 ? '-' : '+'} ${Math.abs(b - a)} = ${b}`, `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`],
     tags: ['pattern_expression'],
     key: `patn:${a}:${b}`,
+    verify: expected,
+  };
+}
+
+/**
+ * 棒で 図形を 横に つなげて 並べるときの 本数(教科書の「マッチ棒の問題」。チャレンジテストの規則性は 正答率 21〜40%)。
+ * 1 個目は 辺の数、1 個 ふえるごとに 辺の数 − 1 本 ふえる
+ */
+const SHAPES = [
+  { name: '正三角形', sides: 3 },
+  { name: '正方形', sides: 4 },
+  { name: '正五角形', sides: 5 },
+  { name: '正六角形', sides: 6 },
+];
+
+function genMatchsticks(rng: Rng, d: Difficulty): Problem {
+  const shape = rng.pick(SHAPES);
+  const step = shape.sides - 1;
+  const counts = [1, 2, 3].map((k) => shape.sides + step * (k - 1));
+  const expected = `${step}n+1`;
+  const story = `棒で ${shape.name}を 横に つなげて 並べる。${shape.name}が 1 個なら ${counts[0]} 本、2 個なら ${counts[1]} 本、3 個なら ${counts[2]} 本。`;
+  // 半分は 式を、半分は 20 個などのときの 本数を 聞く
+  if (rng.bool()) {
+    return {
+      templateId: 'g1.expr.pattern',
+      difficulty: d,
+      prompt: text(`${story}${shape.name}を n 個 つくるのに 必要な 棒の 本数を n の式で 表せ`),
+      promptText: `${story}${shape.name}を n 個 つくるのに 必要な 棒の 本数を n の式で 表せ`,
+      answer: { kind: 'expression', expected },
+      hint: `1 個 ふえるごとに ${step} 本 ふえる。はじめの 1 本に、${step} 本の まとまりが n 個`,
+      explanation: [`${text(`1 個 ふえるごとに ${step} 本 → ${step}n`)}`, `${text('1 個のとき ')} ${step} \\times 1 + 1 = ${shape.sides}`, `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`],
+      tags: ['pattern_matchsticks'],
+      key: `match:${shape.sides}`,
+      verify: expected,
+    };
+  }
+  const n = rng.pick([10, 12, 15, 20, 25, 30]);
+  const value = step * n + 1;
+  return {
+    templateId: 'g1.expr.pattern',
+    difficulty: d,
+    prompt: text(`${story}${shape.name}を ${n} 個 つくるのに 必要な 棒は 何本?`),
+    promptText: `${story}${shape.name}を ${n} 個 つくるのに 必要な 棒は 何本?`,
+    answer: { kind: 'number', value: rat(value) },
+    hint: `n 個のときの 式を 先に 考えよう(1 個 ふえるごとに ${step} 本)`,
+    explanation: [`${text('n 個のとき ')} ${step}n + 1`, `${step} \\times ${n} + 1 = ${value}`, `${text('答え: ')} ${value} ${text('本')}`],
+    tags: ['pattern_matchsticks'],
+    key: `match:${shape.sides}:${n}`,
+    verify: `${step}*${n}+1`,
+  };
+}
+
+/** ★3: 減っていく並び(20, 17, 14, 11, … → −3n + 23) */
+function genDecreasing(rng: Rng, d: Difficulty): Problem {
+  const a = rng.int(2, 5);
+  const b = rng.int(15, 30);
+  const terms = [0, 1, 2, 3].map((i) => b - a * i);
+  const expected = `${-a}n+${b + a}`;
+  return {
+    templateId: 'g1.expr.pattern',
+    difficulty: d,
+    prompt: `${terms.join(', ')}, \\ldots \\quad ${text('この並びの n 番目の数を n の式で 表せ')}`,
+    promptText: `${terms.join(', ')}, … この並びの n 番目の数を n の式で 表せ`,
+    answer: { kind: 'expression', expected },
+    hint: `${a} ずつ 減っているから −${a}n。1 番目が ${b} になるように 数を たそう`,
+    explanation: [`${text(`${a} ずつ 減る → `)} -${a}n`, `${text('1番目は ')} -${a} \\times 1 + ${b + a} = ${b}`, `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`],
+    tags: ['pattern_decreasing'],
+    key: `patd:${a}:${b}`,
     verify: expected,
   };
 }

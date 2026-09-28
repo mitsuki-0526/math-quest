@@ -1,4 +1,4 @@
-import { registerTemplate, type Difficulty, type Problem } from '@/math/template';
+import { registerTemplate, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { rat } from '@/math/rational';
 import { plainMinus, text } from '@/math/format';
@@ -9,6 +9,8 @@ import { plainMinus, text } from '@/math/format';
  *   ★1: 実際の数 ↔ 目標との差(1 つ)
  *   ★2: 目標との差の表から、合計を求める
  *   ★3: 目標との差の表から、平均を求める / 平均から、表の ? を求める(道中では 1 戦に 1 問まで: hardPerBattle)
+ * 表の数: 道中は教科書に合わせて ★2 が 3〜4、★3 が 4〜5。修練の泉は チャレンジテストに合わせて ★2 が 5、★3 が 5〜6
+ * (先生の方針 2026-09-28「道中は教科書、修練の泉はチャレンジテスト基準」)
  * 差は ±15 まで。目標との差を先に足してから、目標の分を足す(大きな数を足さずにすむ)のが ねらい。
  * 先生の印(2026-09-27)「文章が長い」「文章と表の両方を見るのは難しい」を受けて、
  * 問題文は 短くし、目標や +・− の決まりは 表の見出しと 下の一言に まとめる
@@ -114,7 +116,8 @@ function ask(q: string) {
   return { prompt: text(q), promptText: q };
 }
 
-function gen(rng: Rng, d: Difficulty): Problem {
+function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem {
+  const challenge = basis === 'challenge';
   const s = rng.pick(SCENES);
   const target = rng.pick(s.targets);
 
@@ -148,7 +151,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
   }
 
   if (d === 2) {
-    const n = 5;
+    const n = challenge ? 5 : rng.pick([3, 4]);
     const ds = diffs(rng, n);
     const total = target * n + sum(ds);
     const actuals = ds.map((x) => target + x);
@@ -171,7 +174,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
   }
 
   // ★3: 差の合計が n で わり切れるように 最後の差を選ぶ
-  const n = rng.pick([5, 6]);
+  const n = challenge ? rng.pick([5, 6]) : rng.pick([4, 5]);
   let ds: number[];
   do {
     ds = diffs(rng, n - 1);

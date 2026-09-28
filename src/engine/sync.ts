@@ -1,6 +1,6 @@
 import { createStore } from './store';
 import { api, hasServer, saveBeacon, ApiFailure, type AccountInfo, type Identity } from './api';
-import { saveStore, writeLocalSave, saveChangedHooks, setSaveOwner, type SaveData } from './save';
+import { saveStore, writeLocalSave, clearLocalSave, saveChangedHooks, setSaveOwner, type SaveData } from './save';
 import { unlockedChapters } from './progress';
 import { applyConfigOverrides } from '@/data/config';
 
@@ -28,7 +28,7 @@ const IDENTITY_KEY = 'mathquest.identity';
 const UNLOCK_CACHE_KEY = 'mathquest.unlock';
 
 /** 再送しても直らない失敗(合言葉ちがい・ロック中など)。送り続けるとロックを延ばすだけなので止める */
-const FATAL_CODES = new Set(['bad_pass', 'locked', 'not_found', 'bad_token', 'bad_save', 'save_too_large', 'bad_identity', 'not_registered', 'not_in_roster', 'roster_conflict', 'closed']);
+const FATAL_CODES = new Set(['bad_pass', 'locked', 'not_found', 'bad_token', 'bad_save', 'save_too_large', 'bad_identity', 'not_registered', 'not_in_roster', 'roster_conflict', 'closed', 'save_reset']);
 
 let identity: Identity | null = loadIdentity();
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -127,6 +127,11 @@ export async function login(id: Identity, local: SaveData | null): Promise<{ sav
   setIdentity(who);
   applyUnlock(r.unlock);
   setStatus({ status: 'synced', lastSyncAt: new Date().toISOString(), teacher: r.teacher, lastError: undefined, googleAccount: !!r.account });
+  // 先生が セーブを消したあとなら、それより前に はじめた 端末内のセーブは 捨てる(送り直して 元に戻らないように)
+  if (local && r.resetAt && (!local.createdAt || local.createdAt < r.resetAt)) {
+    local = null;
+    clearLocalSave();
+  }
   const server = r.save;
   // ローカルセーブがサーバーより新しければローカルを採用して押し上げる
   if (local && (!server || local.updatedAt > server.updatedAt)) {

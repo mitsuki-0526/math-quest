@@ -21,7 +21,7 @@
  *   - 合言葉方式(予備): アカウントが取れない環境では、クラス・番号・合言葉で入る
  *
  * シート:
- *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at
+ *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at | reset_at
  *   roster   : email | class | number | memo (先生が貼る名簿。memo は自由記入でプログラムは読まない)
  *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
  *   config   : key | value
@@ -45,7 +45,8 @@
  */
 
 var SHEETS = {
-  students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at'],
+  // reset_at: 先生がセーブを消した日時。これより前に始めたセーブ(端末に残ったもの)は受け取らない
+  students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at', 'reset_at'],
   roster: ['email', 'class', 'number', 'memo'],
   feedback: ['time', 'class', 'number', 'fun', 'difficulty', 'comment', 'level', 'chapter', 'answered', 'correct'],
   review: ['time', 'node', 'template', 'star', 'rating', 'comment', 'flagged'],
@@ -107,6 +108,9 @@ function onOpen() {
     .addItem('受付を再開する', 'menuOpen')
     .addSeparator()
     .addItem('集計を更新する(summary シート)', 'menuSummary')
+    .addSeparator()
+    .addItem('選んだ生徒のセーブを消す(students シートで行を選ぶ)', 'menuWipeSelected')
+    .addItem('全員のセーブを消す', 'menuWipeAll')
     .addToUi();
 }
 
@@ -245,6 +249,86 @@ function menuResetSessions() {
   setConfig('session_epoch', literal(new Date().toISOString()));
   logRow('reset_sessions', '', '', '');
   SpreadsheetApp.getActiveSpreadsheet().toast('開いているゲームは 2分以内に 保存して タイトルに 戻ります', 'MathQuest');
+}
+
+// ------------------------------------------------------------------ セーブを消す(体験版のやり直し・テスト用アカウントの片づけ)
+
+/**
+ * students シートで選んだ行の生徒のセーブを消す。
+ * 行を削除するだけだと、生徒の端末に残ったセーブが 次に開いたとき 送り直されて 元に戻ってしまう。
+ * そこで 行は残して reset_at(消した日時)を書き、これより前に始めたセーブは 端末のものも 受け取らない(ゲーム側で 端末のセーブも消す)
+ */
+function menuWipeSelected() {
+  var ui = SpreadsheetApp.getUi();
+  var range = SpreadsheetApp.getActiveRange();
+  if (!range || range.getSheet().getName() !== 'students') {
+    ui.alert('students シートで、消したい生徒の行を選んでから もう一度 押してください(複数行も選べます)');
+    return;
+  }
+  var first = Math.max(2, range.getRow());
+  var last = range.getLastRow();
+  if (last < first) {
+    ui.alert('生徒の行(2 行目から下)を選んでください');
+    return;
+  }
+  var keys = sheet('students')
+    .getRange(first, 1, last - first + 1, 1)
+    .getValues()
+    .map(function (v) {
+      return String(v[0]);
+    })
+    .filter(function (k) {
+      return k;
+    });
+  var ans = ui.alert('セーブを消す', keys.length + ' 人(' + keys.slice(0, 10).join('、') + (keys.length > 10 ? ' …' : '') + ')のセーブを消します。元に戻せません。よろしいですか?', ui.ButtonSet.YES_NO);
+  if (ans !== ui.Button.YES) return;
+  wipeRows(first, last);
+  ui.alert(keys.length + ' 人のセーブを消しました。開いているゲームは 2分以内に タイトルに戻り、次は はじめから 始まります');
+}
+
+function menuWipeAll() {
+  var ui = SpreadsheetApp.getUi();
+  var last = sheet('students').getLastRow();
+  if (last < 2) {
+    ui.alert('消すセーブは ありません');
+    return;
+  }
+  var ans = ui.alert('全員のセーブを消す', '全員(' + (last - 1) + ' 行、先生用も ふくむ)のセーブを消します。元に戻せません。よろしいですか?', ui.ButtonSet.YES_NO);
+  if (ans !== ui.Button.YES) return;
+  wipeRows(2, last);
+  ui.alert('全員のセーブを消しました。開いているゲームは 2分以内に タイトルに戻り、次は はじめから 始まります');
+}
+
+/** rows first〜last のセーブを消し、reset_at を書く。開いているゲームは タイトルに戻す */
+function wipeRows(first, last) {
+  var sh = sheet('students');
+  var col = function (name) {
+    return SHEETS.students.indexOf(name) + 1;
+  };
+  // 古い版で作った students シートには reset_at の見出しがないので 足す
+  sh.getRange(1, col('reset_at')).setValue('reset_at');
+  var n = last - first + 1;
+  var now = new Date().toISOString();
+  var blank = [];
+  var stamp = [];
+  for (var i = 0; i < n; i++) {
+    blank.push(['']);
+    stamp.push(["'" + now]);
+  }
+  sh.getRange(first, col('player_name'), n, 1).setValues(blank);
+  sh.getRange(first, col('save_json'), n, 1).setValues(blank);
+  sh.getRange(first, col('updated_at'), n, 1).setValues(blank);
+  sh.getRange(first, col('reset_at'), n, 1).setValues(stamp);
+  setConfig('session_epoch', literal(now));
+  logRow('wipe_saves', '', '', String(n));
+}
+
+/** 消したあとの 古いセーブか(reset_at より前に始めた。createdAt のない 古い版のセーブも 古い扱い) */
+function isWipedSave(row, save) {
+  var resetAt = String(row.reset_at || '');
+  if (!resetAt) return false;
+  var created = String((save && save.createdAt) || '');
+  return !created || created < resetAt;
 }
 
 function menuClose() {
@@ -435,7 +519,7 @@ function login(cls, num, pass) {
   }
   setCell(row.rowIndex, 'last_seen', now);
   var save = row.save_json ? JSON.parse(row.save_json) : null;
-  return { ok: true, isNew: false, save: save, unlock: unlockFor(cls, teacher), teacher: teacher };
+  return { ok: true, isNew: false, save: save, unlock: unlockFor(cls, teacher), teacher: teacher, resetAt: String(row.reset_at || '') };
 }
 
 function saveGame(cls, num, pass, save) {
@@ -450,6 +534,8 @@ function storeSave(row, save) {
   if (!save || typeof save !== 'object') return { ok: false, error: 'bad_save' };
   var incoming = String(save.updatedAt || '');
   if (incoming && !/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(incoming)) return { ok: false, error: 'bad_save' };
+  // 先生が消したあと、端末に残っていた 古いセーブが 送られてきた → 受け取らない
+  if (isWipedSave(row, save)) return { ok: false, error: 'save_reset' };
   var stored = String(row.updated_at || '');
   // 競合: サーバーの方が新しければ上書きせず、サーバー側を返す(要件 F3「新しい方を採用」)
   if (stored && incoming && incoming < stored) {
@@ -658,7 +744,7 @@ function handleAccount(email, body) {
         return { ok: true, isNew: true, save: null, unlock: unlockFor(cls, teacher), teacher: teacher, account: account };
       }
       setCell(row.rowIndex, 'last_seen', now);
-      return { ok: true, isNew: !row.save_json, save: parseSave(row), unlock: unlockFor(cls, teacher), teacher: teacher, account: account };
+      return { ok: true, isNew: !row.save_json, save: parseSave(row), unlock: unlockFor(cls, teacher), teacher: teacher, account: account, resetAt: String(row.reset_at || '') };
     }
     if (!row) return { ok: false, error: 'not_registered' };
     if (body.action === 'save') return storeSave(row, body.save);

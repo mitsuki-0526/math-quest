@@ -86,6 +86,18 @@ export const enemies: Record<string, EnemyDef> = {
     gold: 12,
     lines: { appear: '素数バチが ブンブンと あらわれた!', hit: '「われた! われた!」', miss: '「われない! われない!」', defeat: '「ハチに もどって とんでいった」' },
   },
+  memori_shakutori: {
+    // 2026-09-28 追加: 数直線(以前はボス専用)。最初の地点(森の小道)で 数直線の読み方に なれておく(先生の方針)
+    id: 'memori_shakutori',
+    name: 'メモリシャクトリ',
+    template: 'g1.sign.numberline',
+    sprite: 'enemy_memori_shakutori',
+    hp: 30,
+    attack: 6,
+    exp: 12,
+    gold: 5,
+    lines: { appear: 'メモリシャクトリが くねくねと あらわれた!', hit: '「目盛り、数えられた!」', miss: '「0 は どこかな〜?」', defeat: '「ただの いもむしに もどった」' },
+  },
   heikin_tanuki: {
     // 2026-09-25 追加: 基準との差・平均(チャレンジテストで毎年出題。docs/difficulty.md)
     id: 'heikin_tanuki',

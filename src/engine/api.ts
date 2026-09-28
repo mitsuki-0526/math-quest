@@ -84,6 +84,8 @@ export interface LoginResult {
   teacher: boolean;
   /** 学校アカウント方式: 名簿で決まったクラス・番号(送ったものではなくこちらが正) */
   account?: { class: string; number: string };
+  /** 先生が この人の セーブを消した日時(ISO)。これより前に はじめた 端末内のセーブは 捨てる */
+  resetAt?: string;
 }
 export interface SaveResult {
   ok: true;
