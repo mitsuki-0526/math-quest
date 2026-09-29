@@ -5,6 +5,7 @@ import { grade1 } from '@/data/grade1/chapters';
 import { generateProblem, getTemplate, answerToText, type Difficulty, type Problem } from '@/math/template';
 import { primeFactors, factorsToText } from '@/math/factorization';
 import { createRng } from '@/math/rng';
+import { texToPlain } from '@/math/texPlain';
 
 /**
  * 先生の 一括判定用に、問題を まとめて CSV に 書き出す(先生の要望 2026-09-29「大量に出して 成否を 決めたい」)。
@@ -13,28 +14,6 @@ import { createRng } from '@/math/rng';
  * ID(テンプレート|★|種)から 同じ問題を 作り直せるので、× の問題を あとで 特定できる
  */
 const arg = process.env.MQ_EXPORT;
-
-/** 解説などの TeX を、シートで 読める 平文に */
-export function texToPlain(tex: string): string {
-  return tex
-    .replace(/\\text\{([^}]*)\}/g, '$1')
-    .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
-    .replace(/\\left\(|\\right\)/g, (m) => (m.includes('left') ? '(' : ')'))
-    .replace(/\\times/g, '×')
-    .replace(/\\div/g, '÷')
-    .replace(/\\leqq/g, '≦')
-    .replace(/\\geqq/g, '≧')
-    .replace(/\\(quad|;|,|\\ )/g, ' ')
-    .replace(/\\to/g, '→')
-    .replace(/\\ldots/g, '…')
-    .replace(/\^\{?2\}?/g, '²')
-    .replace(/\^\{?3\}?/g, '³')
-    .replace(/\\pi/g, 'π')
-    .replace(/[{}]/g, '')
-    .replace(/-/g, '−')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 const csvCell = (s: string) => `"${s.replace(/"/g, '""')}"`;
 const answerText = (p: Problem) =>

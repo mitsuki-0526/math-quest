@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'preact/hooks';
-import { popScene } from '@/engine/scenes';
+import { popScene, pushScene } from '@/engine/scenes';
 import { useStore } from '@/engine/store';
 import { grade1 } from '@/data/grade1/chapters';
 import '@/data/grade1/problems';
@@ -116,6 +116,7 @@ export function CatalogScene() {
           <Button disabled={marked.length === 0} onClick={() => confirm('印を すべて 消します。よろしいですか?') && clearMarks()}>
             印を 消す
           </Button>
+          <Button onClick={() => pushScene({ kind: 'judge' })}>⭕ 1問ずつ ○×判定</Button>
           <Button onClick={popScene}>◀ もどる</Button>
         </div>
         {status && <pre class="catalog-status">{status}</pre>}

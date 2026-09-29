@@ -1,6 +1,7 @@
 import { config } from '@/data/config';
 import type { EnemyDef } from '@/data/grade1/enemies';
 import { diagnose, generateProblem, getTemplate, judge, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
+import { shapeOf } from '@/math/quality/duplicateChecker';
 import type { Rng } from '@/math/rng';
 import { createRng } from '@/math/rng';
 
@@ -75,6 +76,8 @@ export interface BattleState {
   canFlee: boolean;
   /** 直近に出した問題のキー(重複回避) */
   recentKeys: string[];
+  /** 直近の 問題の 形(同じ形が 3 問 続かないように。src/math/quality/duplicateChecker.ts) */
+  recentShapes: string[];
   /** この戦闘(地点)で出した ★3 の数(テンプレートごと) */
   hardAsked: Record<string, number>;
   /** 答え合わせに使うため、テンプレートごとに出した問題の履歴(難易度調整用) */
@@ -130,6 +133,7 @@ export function createBattle(ctx: BattleContext): BattleState {
     isBoss: !!ctx.isBoss,
     canFlee: !ctx.isBoss,
     recentKeys: [],
+    recentShapes: [],
     hardAsked: {},
     levelUps: 0,
   };
@@ -175,7 +179,7 @@ export function ask(state: BattleState, ctx: BattleContext): BattleState {
     if (!lastWave || total >= ctx.hardPerBattle || (s.hardAsked[templateId] ?? 0) >= perTemplate) difficulty = 2;
     else s.hardAsked = { ...s.hardAsked, [templateId]: (s.hardAsked[templateId] ?? 0) + 1 };
   }
-  const problem = generateProblem(templateId, difficulty, s.recentKeys, rng, ctx.basis);
+  const problem = generateProblem(templateId, difficulty, s.recentKeys, rng, ctx.basis, s.recentShapes);
   const base = getTemplate(templateId).timeLimit[difficulty];
   s.problem = problem;
   s.turn = state.turn + 1;
@@ -184,6 +188,7 @@ export function ask(state: BattleState, ctx: BattleContext): BattleState {
   s.hintUsedForCurrent = false;
   s.phase = 'question';
   s.recentKeys = [...s.recentKeys, problem.key].slice(-6);
+  s.recentShapes = [...s.recentShapes, shapeOf(problem)].slice(-6);
   return s;
 }
 

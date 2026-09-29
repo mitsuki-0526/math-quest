@@ -28,7 +28,9 @@ export type Scene =
   | { kind: 'trialEnd'; chapterId: string }
   | { kind: 'feedback' }
   /** 問題の見本帳(先生用。難易度の確認) */
-  | { kind: 'catalog' };
+  | { kind: 'catalog' }
+  /** 1 問ずつ ○/× を 付ける 判定(先生用。品質の 仕組みの ものさし) */
+  | { kind: 'judge' };
 
 export type SceneKind = Scene['kind'];
 

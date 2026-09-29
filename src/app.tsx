@@ -14,6 +14,7 @@ import { SettingsScene } from '@/ui/scenes/SettingsScene';
 import { TrialEndScene } from '@/ui/scenes/TrialEndScene';
 import { FeedbackScene } from '@/ui/scenes/FeedbackScene';
 import { CatalogScene } from '@/ui/scenes/CatalogScene';
+import { JudgeScene } from '@/ui/scenes/JudgeScene';
 import { FullscreenButton } from '@/ui/components/FullscreenButton';
 
 const SYNC_LABEL: Record<string, string> = {
@@ -47,6 +48,8 @@ function renderScene(scene: Scene) {
       return <FeedbackScene />;
     case 'catalog':
       return <CatalogScene />;
+    case 'judge':
+      return <JudgeScene />;
   }
 }
 

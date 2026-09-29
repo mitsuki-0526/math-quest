@@ -74,6 +74,7 @@ export function SettingsScene() {
           <Button onClick={popScene}>◀ もどる</Button>
           {hasServer() && <Button onClick={() => pushScene({ kind: 'feedback' })}>✉ 感想を 送る</Button>}
           {(sync.teacher || import.meta.env.DEV) && <Button onClick={() => pushScene({ kind: 'catalog' })}>📖 問題の見本帳(先生用)</Button>}
+          {(sync.teacher || import.meta.env.DEV) && <Button onClick={() => pushScene({ kind: 'judge' })}>⭕ 1問ずつ ○×判定(先生用)</Button>}
           <Button onClick={() => resetScenes({ kind: 'title' })}>タイトルへ</Button>
         </div>
       </Panel>

@@ -4,6 +4,11 @@ import { eq, rat, parseRational, parseRationalList, normalizeInput, toString, ty
 import { parseFactorization } from './factorization';
 import { judgeExpression, parseExpression, polyToTex } from './expr';
 import type { FigureSpec } from './figure';
+import { validateMath, MATH_VALIDATOR_VERSION } from './quality/mathValidator';
+import { judgeProblem } from './quality/judge';
+import { validateSpec } from './quality/spec';
+import { checkDuplicate } from './quality/duplicateChecker';
+import { logGeneration } from './quality/generationLog';
 
 /** 難易度 ★1〜★3(要件 F45) */
 export type Difficulty = 1 | 2 | 3;
@@ -138,9 +143,16 @@ export function allTemplates(): ProblemTemplate[] {
   return [...registry.values()];
 }
 
+/** 1 問を 渡すまでに 作る 候補の 上限 */
+export const MAX_GENERATION_ATTEMPTS = 8;
+
 /**
- * 直近に出した問題のキーを避けて生成する(要件 F40)。
- * 何度試しても重複するテンプレート(選択肢が少ない ★1 など)は諦めて返す。
+ * 問題を 作って ゲームに 渡す(品質の 仕組み。docs/difficulty.md「問題の品質の 仕組み」):
+ *   Generator(テンプレート)→ MathValidator(数学)→ ProblemSpec(仕様の 範囲)→ Judge(教育的な ルール)→ DuplicateChecker(重複)
+ * 合格した 問題だけを 返す。不合格は 理由を ログに 残して 作り直す(最大 MAX_GENERATION_ATTEMPTS 回)。
+ * どれも 合格しないとき(フォールバック): 重複だけが 理由の 候補が あれば それを(選べる問題が 少ない ★1 など)、
+ * なければ ★ を 1 つ 下げて 作り直す。★1 でも だめなら 最後の 候補を 返し「検査なし」と 記録する(問題が 出ないよりは よい)
+ * recentShapes: 直近の 問題の 形(数を # に した 問題文)。同じ形が 3 問 続かないように
  */
 export function generateProblem(
   templateId: string,
@@ -148,11 +160,37 @@ export function generateProblem(
   recentKeys: readonly string[] = [],
   rng: Rng = createRng(),
   basis: ProblemBasis = 'textbook',
+  recentShapes: readonly string[] = [],
 ): Problem {
   const t = getTemplate(templateId);
-  let p = t.generate(rng, difficulty, basis);
-  for (let i = 0; i < 8 && recentKeys.includes(p.key); i++) p = t.generate(rng, difficulty, basis);
-  return cleanMistakes(p);
+  const base = { templateId, difficulty, basis, validatorVersion: MATH_VALIDATOR_VERSION };
+  let duplicateOnly: Problem | null = null;
+  let last: Problem | null = null;
+  for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+    let p: Problem;
+    try {
+      p = cleanMistakes(t.generate(rng, difficulty, basis));
+    } catch (e) {
+      logGeneration({ ...base, time: new Date().toISOString(), attempt, accepted: false, reason: 'GENERATOR_ERROR', detail: String(e) });
+      continue;
+    }
+    last = p;
+    const r = validateMath(p) ?? validateSpec(p) ?? judgeProblem(p) ?? checkDuplicate(p, { keys: recentKeys, shapes: recentShapes });
+    logGeneration({ ...base, time: new Date().toISOString(), attempt, accepted: !r, reason: r?.reason, detail: r?.detail, key: p.key, question: p.promptText });
+    if (!r) return p;
+    if ((r.reason === 'DUPLICATE' || r.reason === 'SAME_FORM') && !duplicateOnly) duplicateOnly = p;
+  }
+  const fallback = (p: Problem, kind: 'allow_duplicate' | 'unvalidated') => {
+    logGeneration({ ...base, time: new Date().toISOString(), attempt: MAX_GENERATION_ATTEMPTS + 1, accepted: true, fallback: kind, key: p.key, question: p.promptText });
+    return p;
+  };
+  if (duplicateOnly) return fallback(duplicateOnly, 'allow_duplicate');
+  if (difficulty > 1) {
+    logGeneration({ ...base, time: new Date().toISOString(), attempt: MAX_GENERATION_ATTEMPTS + 1, accepted: true, fallback: 'lower_star' });
+    return generateProblem(templateId, (difficulty - 1) as Difficulty, recentKeys, rng, basis, recentShapes);
+  }
+  if (last) return fallback(last, 'unvalidated');
+  throw new Error(`問題を 作れません: ${templateId} ★${difficulty}`);
 }
 
 export interface Judgement {

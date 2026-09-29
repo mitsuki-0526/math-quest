@@ -8,3 +8,6 @@ import './func';
 import './geometry';
 import './solid';
 import './data';
+// 先生の 一括判定で × の 問題(Judge が 出さない)と、問題の 仕様(MathValidator の あとで 確かめる)
+import '../rejected';
+import '../specs';
