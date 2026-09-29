@@ -95,6 +95,11 @@ const KEYS: Key[][] = [
   ],
 ];
 
+/** マウスや トラックパッドが なく、タッチだけで 使っている(hover が できない) */
+function touchOnly(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
+}
+
 /** 式入力のとき、その問題に出てくる文字だけをキーにする(問題ごとに変わる) */
 function letterKeys(answer: AnswerSpec): Key[] {
   if (answer.kind !== 'expression') return [];
@@ -166,7 +171,9 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
           value={value}
           disabled={disabled}
           autoComplete="off"
-          inputMode={answer.kind === 'factorization' ? 'text' : 'decimal'}
+          // タッチだけの 端末(タブレットの形の Chromebook)では 画面の キーボードを 出さない: 問題を 隠してしまうので、
+          // 下の キーパッドで 入れる(キーパッドだけで どの答えも 入れられる)。先輩の先生の意見 2026-09-29
+          inputMode={touchOnly() ? 'none' : answer.kind === 'factorization' ? 'text' : 'decimal'}
           placeholder={placeholderFor(answer)}
           aria-label="答え"
           onInput={(e) => onChange((e.target as HTMLInputElement).value)}

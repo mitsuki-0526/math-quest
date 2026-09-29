@@ -23,6 +23,12 @@ export const config = {
     expPerCorrect: { 1: 10, 2: 18, 3: 30 } as Record<1 | 2 | 3, number>,
     /** ヒントを使った問題の経験値倍率 */
     hintExpMul: 0.5,
+    /**
+     * 制限時間を 使うか(1 = 使う、0 = 使わない)。標準は 使わない: 安心して 考えられるように(先輩の先生の意見 2026-09-29)。
+     * 使わないときも、速く 正解すると 会心(下の quickRatio。問題ごとの目安の時間で 判定)。解いた 秒数は 集計に 残る。
+     * 授業で 使うときは スプレッドシートの config に battle.timeLimitOn = 1 と書く
+     */
+    timeLimitOn: 0,
     /** 制限時間の下限・上限(秒) */
     timeMin: 15,
     timeMax: 120,

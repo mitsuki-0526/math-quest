@@ -68,6 +68,12 @@ describe('第1章 正の数と負の数', () => {
         expect(Number(v.d), p.promptText).toBeLessThanOrEqual(20);
         return;
       }
+      // 符号だけを 判断する 選択問題(負の数は 2〜4 個。数えて 決める)
+      if (p.tags.includes('sign_judge')) {
+        const negs = (p.promptText.match(/−\d/g) ?? []).length;
+        expect(negs, p.promptText).toBeGreaterThanOrEqual(2);
+        return;
+      }
       expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
       expect(Math.abs(answerOf(p)), p.promptText).toBeLessThanOrEqual(360);
     });

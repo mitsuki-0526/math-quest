@@ -45,7 +45,7 @@ export const items: Record<string, ItemDef> = {
   miner_helmet: { id: 'miner_helmet', name: '山師の兜', kind: 'armor', emoji: '⛑️', description: 'ぼうぎょ +6', stat: { defense: 6 } },
 
   // --- 装飾品 ---
-  travel_boots: { id: 'travel_boots', name: '旅人のブーツ', kind: 'accessory', emoji: '👢', description: '制限時間 +5秒', stat: { timeBonus: 5 } },
+  travel_boots: { id: 'travel_boots', name: '旅人のブーツ', kind: 'accessory', emoji: '👢', description: '考える時間 +5秒(会心も 出やすくなる)', stat: { timeBonus: 5 } },
   guardian_bracelet: { id: 'guardian_bracelet', name: '番人の腕輪', kind: 'accessory', emoji: '📿', description: 'ヒントの回数 +1', stat: { hintBonus: 1 } },
   recorder_pen: { id: 'recorder_pen', name: '記録者のペン', kind: 'accessory', emoji: '🖋️', description: '経験値 +10%', stat: { expMul: 1.1 } },
 };

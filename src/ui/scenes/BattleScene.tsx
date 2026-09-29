@@ -35,7 +35,7 @@ import { type Difficulty, type Problem } from '@/math/template';
 import { Bar, Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 import { Tex } from '@/ui/components/Tex';
-import { ProblemPrompt, answerTex, isProse } from '@/ui/components/ProblemView';
+import { ProblemPrompt, answerTex, givenTex, isProse } from '@/ui/components/ProblemView';
 import { Figure } from '@/ui/components/Figure';
 import { AnswerInput } from '@/ui/components/AnswerInput';
 
@@ -68,7 +68,8 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   const [cmd, setCmd] = useState<Cmd>('attack');
   const [menu, setMenu] = useState<'none' | 'item'>('none');
   const [hintText, setHintText] = useState<string | null>(null);
-  const [explain, setExplain] = useState<{ problem: Problem; note?: string; timeout: boolean } | null>(null);
+  /** given: 生徒が 入れた答え(時間切れは なし)。正解と 並べて 見せる */
+  const [explain, setExplain] = useState<{ problem: Problem; note?: string; timeout: boolean; given?: string } | null>(null);
   const [result, setResult] = useState<{ exp: number; gold: number; levelUps: number; overflowGold?: number; cap?: number; item?: string; goldLost?: number; perks?: Perk[]; next?: Perk; quest?: { done: boolean; exp: number; gold: number } } | null>(null);
   const [tutorialSaid, setTutorialSaid] = useState<{ correct: boolean; wrong: boolean }>({ correct: false, wrong: false });
   const askedAt = useRef<number>(Date.now());
@@ -113,8 +114,9 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
 
   // 制限時間(チュートリアルは無し)。
   // タイマーは問題ごとに張り直す。時間切れの処理は最新の状態で行う(ヒントやアイテムを使った後の状態を巻き戻さないため)
+  const timed = !tutorial && config.battle.timeLimitOn === 1;
   useEffect(() => {
-    if (!state || state.phase !== 'question' || tutorial) return;
+    if (!state || state.phase !== 'question' || !timed) return;
     const limit = state.timeLimit;
     const t = setInterval(() => {
       const left = limit - (Date.now() - askedAt.current) / 1000;
@@ -149,6 +151,43 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [cmd, state, explain]);
+
+  // Enter で えらんだ コマンドを 実行する(ヒント・アイテム・にげる も キーボードだけで。先輩の先生の意見 2026-09-29)。
+  // 答えの 入力欄の Enter(送信)より 先に 受けたいので、捕捉(capture)で 聞く。
+  // アイテムの 窓では ↑↓ で えらび、Enter で 使い、Esc で 閉じる
+  const [itemCursor, setItemCursor] = useState(0);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!state || state.phase !== 'question' || explain || e.isComposing) return;
+      const owned = Object.entries(saveStore.get()?.inventory ?? {}).filter(
+        ([id, n]) => n > 0 && getItem(id).kind === 'consumable' && (timed || !getItem(id).use?.time),
+      );
+      if (menu === 'item') {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          if (owned.length) setItemCursor((i) => (i + (e.key === 'ArrowDown' ? 1 : owned.length - 1)) % owned.length);
+        } else if (e.key === 'Enter') {
+          const pick = owned[Math.min(itemCursor, owned.length - 1)];
+          if (pick) useItem(pick[0]);
+          else setMenu('none');
+        } else if (e.key === 'Escape') setMenu('none');
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.key === 'Enter' && cmd !== 'attack') {
+        e.preventDefault();
+        e.stopPropagation();
+        runCommand(cmd);
+        setItemCursor(0);
+        // ヒント・にげる の あとは カーソルを「たたかう」に 戻す(次の Enter で 答えを 送れるように)
+        if (cmd !== 'item') setCmd('attack');
+      }
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cmd, state, explain, menu, itemCursor]);
 
   if (!save || !state || !ctxRef.current) return null;
   const ctx = ctxRef.current;
@@ -211,7 +250,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     } else {
       setFx((f) => [...f, { id: Date.now(), kind: 'player', amount: last.damage }]);
       setShake((n) => n + 1);
-      setExplain({ problem: before.problem!, note: last.note, timeout: false });
+      setExplain({ problem: before.problem!, note: last.note, timeout: false, given: value });
     }
     commit(next);
   }
@@ -349,7 +388,8 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     }
   }
 
-  const consumables = Object.entries(save.inventory).filter(([id, n]) => n > 0 && getItem(id).kind === 'consumable');
+  // 制限時間が ないときは 時間を のばす 道具は 出さない(使っても 意味がない)
+  const consumables = Object.entries(save.inventory).filter(([id, n]) => n > 0 && getItem(id).kind === 'consumable' && (timed || !getItem(id).use?.time));
   const timeRatio = state.timeLimit > 0 ? remaining / state.timeLimit : 1;
   const commands: { id: Cmd; label: string; enabled: boolean; extra?: string }[] = [
     { id: 'attack', label: 'たたかう', enabled: true },
@@ -436,8 +476,8 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
           ))}
           {menu === 'item' && (
             <div class="item-menu">
-              {consumables.map(([id, n]) => (
-                <button type="button" key={id} class="cmd-item" onClick={() => useItem(id)}>
+              {consumables.map(([id, n], i) => (
+                <button type="button" key={id} class={`cmd-item ${i === itemCursor ? 'selected' : ''}`} onClick={() => useItem(id)}>
                   <span class="cursor">▶</span>
                   {getItem(id).emoji} {getItem(id).name} <small>×{n}</small>
                 </button>
@@ -455,10 +495,10 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                   {'☆'.repeat(3 - problem.difficulty)}
                 </span>
                 <span>
-                  {tutorial ? '時間制限なし' : `⏱ ${Math.ceil(remaining)}秒`} ・ 正解 {state.totals.correct}/{state.totals.asked}
+                  {timed ? `⏱ ${Math.ceil(remaining)}秒` : '時間制限なし'} ・ 正解 {state.totals.correct}/{state.totals.asked}
                 </span>
               </div>
-              {!tutorial && (
+              {timed && (
                 <div class="time-bar">
                   <i style={{ width: `${timeRatio * 100}%`, background: timeRatio < 0.25 ? 'var(--ember)' : 'var(--gold)' }} />
                 </div>
@@ -528,9 +568,23 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
               {explain.timeout ? '「あっ、時間…。次は ゆっくりでいいから、確実に!」' : '「まちがえたら、言い直せばいい」'}
             </h3>
             {tutorial && !tutorialSaid.wrong && <p class="muted">下に 解き方が 出てるよ。読んだら「つぎへ」</p>}
-            {explain.note && <p class="warn">{explain.note}</p>}
+            {explain.note && (
+              <p class="warn mistake-note">
+                <Sprite id="char_pita_icon" size={28} class="inline-icon" alt="" /> {characters.pita.name}「{explain.note}」
+              </p>
+            )}
             <p>
-              <b>問題:</b> <ProblemPrompt problem={explain.problem} /> <b>正解:</b> <Tex tex={answerTex(explain.problem)} />
+              <b>問題:</b> <ProblemPrompt problem={explain.problem} />
+            </p>
+            <p class="answer-compare">
+              {explain.given !== undefined && (
+                <span>
+                  <b>きみの答え:</b> <Tex tex={givenTex(explain.problem, explain.given)} />
+                </span>
+              )}
+              <span>
+                <b>正解:</b> <Tex tex={answerTex(explain.problem)} />
+              </span>
             </p>
             <ol class="explain-steps">
               {explain.problem.explanation.map((line, i) => (

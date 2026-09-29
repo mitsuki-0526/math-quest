@@ -135,7 +135,8 @@ export function TownScene({ townId }: { townId: string }) {
                 <span>{tab === 'tools' ? '道具屋' : '武具屋'}</span>
                 <span class="gold">{save.player.gold} G</span>
               </div>
-              {(tab === 'tools' ? town.shop.tools : town.shop.gear).map((id) => {
+              {/* 制限時間を 使わないときは、時間を のばす 道具は 売らない */}
+              {(tab === 'tools' ? town.shop.tools : town.shop.gear).filter((id) => config.battle.timeLimitOn === 1 || !getItem(id).use?.time).map((id) => {
                 const it = getItem(id);
                 const have = save.inventory[id] ?? 0;
                 return (

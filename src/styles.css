@@ -1156,6 +1156,19 @@ img.sprite {
     0 0 40px rgba(230, 194, 92, 0.12);
   animation: rise 0.3s var(--ease) both;
 }
+/* 解説: きみの答え と 正解 を 横に 並べる */
+.answer-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 28px;
+}
+/* よくある まちがいへの ピタの 一言(解説の いちばん上) */
+.mistake-note {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(240, 112, 92, 0.1);
+  line-height: 1.6;
+}
 .overlay-box h3 {
   margin: 0 0 10px;
   font-family: var(--font-serif-jp);

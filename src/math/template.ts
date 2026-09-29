@@ -1,6 +1,6 @@
 import type { Rng } from './rng';
 import { createRng } from './rng';
-import { eq, parseRational, parseRationalList, normalizeInput, toString, type Rational } from './rational';
+import { eq, rat, parseRational, parseRationalList, normalizeInput, toString, type Rational } from './rational';
 import { parseFactorization } from './factorization';
 import { judgeExpression, parseExpression, polyToTex } from './expr';
 import type { FigureSpec } from './figure';
@@ -29,6 +29,47 @@ export type AnswerSpec =
 
 export type AnswerKind = AnswerSpec['kind'];
 
+/** よくある まちがいの 答えと、それを 入れた子への 一言(ピタのせりふ) */
+export interface Mistake {
+  answer: AnswerSpec;
+  say: string;
+}
+
+/** 数で答える問題の まちがい(value は 小数・分数も 可) */
+export function mistakeNum(value: number | Rational, say: string): Mistake {
+  return { answer: { kind: 'number', value: typeof value === 'number' ? numToRat(value) : value }, say };
+}
+
+function numToRat(v: number): Rational {
+  if (Number.isInteger(v)) return rat(v);
+  // 0.5 きざみ・小数第 1 位までの数(絶対値・平均で 使う)
+  return rat(Math.round(v * 10), 10);
+}
+
+/** 誤答が どの「よくある まちがい」か。当てはまらなければ undefined */
+export function diagnose(p: Problem, input: string): string | undefined {
+  for (const m of p.mistakes ?? []) if (judge(m.answer, input).correct) return m.say;
+  return undefined;
+}
+
+function sameAnswer(a: AnswerSpec, b: AnswerSpec): boolean {
+  if (a.kind === 'number' && b.kind === 'number') return eq(a.value, b.value);
+  if (a.kind === 'choice' && b.kind === 'choice') return a.correct === b.correct;
+  if (a.kind === 'numbers' && b.kind === 'numbers') {
+    const key = (xs: Rational[]) => xs.map(toString).sort().join(',');
+    return key(a.values) === key(b.values);
+  }
+  return false;
+}
+
+/** 正解と 同じ答えになる「まちがい」、同じ答えの 2 つめ以降を 取り除く(数の組み合わせで たまたま 一致する) */
+function cleanMistakes(p: Problem): Problem {
+  if (!p.mistakes) return p;
+  const kept: Mistake[] = [];
+  for (const m of p.mistakes) if (!sameAnswer(m.answer, p.answer) && !kept.some((k) => sameAnswer(k.answer, m.answer))) kept.push(m);
+  return { ...p, mistakes: kept };
+}
+
 export interface Problem {
   templateId: string;
   difficulty: Difficulty;
@@ -52,6 +93,11 @@ export interface Problem {
   key: string;
   /** 図(数直線・座標平面など)。SVG で描く(要件 F48) */
   figure?: FigureSpec;
+  /**
+   * よくある まちがい。この答えを 入れた生徒には、正解と 解説の前に その子に合った 一言を 出す
+   * (例: (−7) − (−2) に −9 → 「−(−2) は +2」)。正解と 同じ答えのものは 生成のあとで 取り除く
+   */
+  mistakes?: Mistake[];
   /**
    * 検証用: 別の方法で答えを計算する JS 式(テスト専用、UI では使わない)。
    * number/numbers は数値(配列)、choice は正解選択肢の数値、factorization は n を返す式。
@@ -106,7 +152,7 @@ export function generateProblem(
   const t = getTemplate(templateId);
   let p = t.generate(rng, difficulty, basis);
   for (let i = 0; i < 8 && recentKeys.includes(p.key); i++) p = t.generate(rng, difficulty, basis);
-  return p;
+  return cleanMistakes(p);
 }
 
 export interface Judgement {

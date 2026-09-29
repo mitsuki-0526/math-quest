@@ -160,7 +160,8 @@
 |---|---|---|
 | `battle.hintsPerNode` | 1ノードで使えるヒント回数 | 3 |
 | `battle.baseDamage` | 基礎ダメージ | 8 |
-| `battle.timeMin` / `battle.timeMax` | 制限時間の下限/上限(秒) | 15 / 120 |
+| `battle.timeLimitOn` | 制限時間を 使うか(1 = 使う / 0 = 使わない)。使わないときも 速く正解すると「会心」、解いた秒数は 集計に 残る。使わないときは 砂時計の砂(時間を のばす道具)は 店に 出ない | 0 |
+| `battle.timeMin` / `battle.timeMax` | 制限時間の下限/上限(秒)(`battle.timeLimitOn` = 1 のとき) | 15 / 120 |
 | `defeat.goldLossRatio` | 敗北時に失うゴールドの割合 | 0.1 |
 | `level.base` | レベルアップに必要な経験値の基準 | 50 |
 | `adaptive.upAt` / `adaptive.downAt` | 直近6問中の正答数で ★ を上げる/下げる境目 | 5 / 2 |

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { grade1, findChapter } from '@/data/grade1/chapters';
 import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
@@ -47,6 +47,14 @@ export function MapScene() {
   });
   const [selected, setSelected] = useState<string | null>(null);
   const chapter = findChapter(chapterId);
+  // キーボード: ←→(↑↓)で 地点を えらび、Enter で 出発(タッチと 同じことが キーボードだけで できるように。先輩の先生の意見 2026-09-29)。
+  // 押したときの 最新の 画面の 状態で 動くよう、処理は 毎回の 描画で 差しかえる
+  const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => onKeyRef.current(e);
+    window.addEventListener('keydown', f);
+    return () => window.removeEventListener('keydown', f);
+  }, []);
   // 今日のクエストを用意(日付が変わっていれば新しく)
   useEffect(() => {
     updateSave((d) => void ensureDailyQuest(d, practiceTemplates(d)));
@@ -87,6 +95,31 @@ export function MapScene() {
     setSelected(null);
     updateSave((d) => (d.progress.chapter = id));
   }
+
+  onKeyRef.current = (e) => {
+    if (sceneStack.get().at(-1)?.kind !== 'map') return;
+    const el = e.target as HTMLElement | null;
+    if (el?.closest('input, textarea, select')) return;
+    const visible = chapter.nodes.filter((n) => nodeState(chapter, n, save) !== 'hidden');
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+      const i = visible.findIndex((n) => n.id === selected);
+      // まだ えらんでいなければ、次に 行ける 地点から
+      const start = visible.findIndex((n) => nodeState(chapter, n, save) === 'available');
+      const nextIdx = i < 0 ? Math.max(0, start) : (i + step + visible.length) % visible.length;
+      setSelected(visible[nextIdx].id);
+      return;
+    }
+    // Enter: えらんだ 地点へ 出発(ボタンに フォーカスが あるときは ボタン自身に まかせる)
+    if (e.key === 'Enter' && !el?.closest('button, [role="button"]')) {
+      if (!selectedNode) {
+        const avail = visible.find((n) => nodeState(chapter, n, save) === 'available');
+        if (avail) setSelected(avail.id);
+      } else if (unlocked && selectedState !== 'locked') enter(selectedNode);
+      e.preventDefault();
+    }
+  };
 
   function enter(node: NodeDef) {
     const id = qualify(chapter!, node);

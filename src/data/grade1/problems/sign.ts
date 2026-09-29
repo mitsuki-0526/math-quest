@@ -1,4 +1,4 @@
-import { registerTemplate, type Difficulty, type Problem, type ProblemTemplate } from '@/math/template';
+import { mistakeNum, registerTemplate, type Difficulty, type Mistake, type Problem, type ProblemTemplate } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { rat, add, sub, mul, div, pow, neg, toTex, toNumber } from '@/math/rational';
 import { paren, plainMinus, text } from '@/math/format';
@@ -113,14 +113,27 @@ function genAddSubTextbook(rng: Rng, d: Difficulty): Problem {
   const value = tokens.reduce((s, tk) => (tk.op === '-' ? s - tk.value : s + tk.value), 0);
   const asTerms = tokens.map((tk) => (tk.op === '-' ? -tk.value : tk.value));
 
-  const explanation: string[] = [];
-  if (tokens.some((tk) => tk.paren)) explanation.push(`${text('項だけの式に: ')} ${asTerms.map((t, i) => (i === 0 ? `${t}` : t < 0 ? ` - ${-t}` : ` + ${t}`)).join('')}`);
-  const pos = asTerms.filter((t) => t > 0);
   const negs = asTerms.filter((t) => t < 0);
-  if (pos.length && negs.length && asTerms.length > 2) {
-    explanation.push(`${text('正の項: ')} ${pos.join(' + ')} = ${sumOf(pos)} \\quad ${text('負の項: ')} ${negs.map((n) => `(${n})`).join(' + ')} = ${sumOf(negs)}`);
-  }
-  explanation.push(`${text('答え: ')} ${value}`);
+  const explanation = addSubSteps(tex, tokens, asTerms, value);
+
+  // よくある まちがい(その子に合った 一言を 出す)
+  const mistakes: Mistake[] = [];
+  tokens.forEach((tk) => {
+    if (!tk.paren || tk.op === null || tk.value === 0) return;
+    const a = Math.abs(tk.value);
+    // −(−2) を −2 のまま / +(−5) を +5 / −(+3) を +3 と 計算した。
+    // ひく項 −v を +v と 取りちがえると 答えが 2v ずれる(たす項 +v を −v なら −2v)
+    const wrong = value + (tk.op === '-' ? 2 * tk.value : -2 * tk.value);
+    if (tk.op === '-' && tk.value < 0) mistakes.push(mistakeNum(wrong, `−(−${a}) は +${a}。負の数を ひくときは、符号を 変えて たし算に なるよ`));
+    if (tk.op === '+' && tk.value < 0) mistakes.push(mistakeNum(wrong, `+(−${a}) は −${a} と 同じ。負の数を たすと 小さく なるよ`));
+    if (tk.op === '-' && tk.value > 0) mistakes.push(mistakeNum(wrong, `−(+${a}) は −${a}。正の数を ひくと 小さく なるよ`));
+  });
+  mistakes.push(
+    mistakeNum(
+      -value,
+      asTerms.filter((t) => t !== 0).length > 2 ? '数の 大きさは 合ってる! 正の項の 合計と 負の項の 合計、大きいほうの 符号に なるよ' : '数の 大きさは 合ってる! 符号は 絶対値の 大きいほうの 符号に なるよ',
+    ),
+  );
 
   const tags: string[] = [];
   if (tokens.some((tk) => tk.op === '-' && tk.value < 0)) tags.push('minus_minus');
@@ -139,6 +152,7 @@ function genAddSubTextbook(rng: Rng, d: Difficulty): Problem {
           : '同じ符号なら 絶対値を たして その符号。ちがう符号なら 大きいほうから 小さいほうを ひく'
         : '正の項どうし、負の項どうしを 先に まとめてみよう。−(−3) は +3',
     explanation,
+    mistakes,
     tags,
     key: `addsub:${tex}`,
     verify: tokens.map((tk) => `${tk.op ?? ''}(${tk.value})`).join(''),
@@ -146,6 +160,55 @@ function genAddSubTextbook(rng: Rng, d: Difficulty): Problem {
 }
 
 const sumOf = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+/** 項の式: −1 + 8 − 3 */
+const termsTex = (ts: number[]) => ts.map((t, i) => (i === 0 ? `${t}` : t < 0 ? ` - ${-t}` : ` + ${t}`)).join('');
+
+/**
+ * 加減の解説。教科書の 手順に そろえる(先生の要望 2026-09-29「解説の手順を ていねいに」):
+ *   ① ひき算を たし算に: (−1) − (−8) = (−1) + (+8)
+ *   ② かっこを はずす(項だけの式に): −1 + 8
+ *   ③ 正の項・負の項を まとめる: 8 + 3 − 2 − 7 = 11 − 9(項が 3 つ以上のとき)
+ *   ④ 計算: 大きいほうの 絶対値から 小さいほうを ひき、大きいほうの 符号を つける
+ */
+function addSubSteps(tex: string, tokens: AddSubToken[], asTerms: number[], value: number): string[] {
+  const steps: string[] = [];
+  const signed = (v: number) => (v === 0 ? '0' : v > 0 ? `(+${v})` : `(${v})`);
+  // ① かっこの前が − の数が あれば、たし算の 形に
+  if (tokens.some((tk) => tk.paren && tk.op === '-')) {
+    steps.push(`${text('ひき算を たし算に: ')} ${tex} = ${asTerms.map((t, i) => (i === 0 ? signed(t) : ` + ${signed(t)}`)).join('')}`);
+  }
+  // ② かっこを はずす
+  if (tokens.some((tk) => tk.paren)) steps.push(`${text('かっこを はずす: ')} ${termsTex(asTerms)}`);
+  const nz = asTerms.filter((t) => t !== 0);
+  const pos = nz.filter((t) => t > 0);
+  const negAbs = nz.filter((t) => t < 0).map((t) => -t);
+  const P = sumOf(pos);
+  const N = sumOf(negAbs);
+  // ③ 正の項・負の項を まとめる(並べかえて それぞれ たす)
+  if (nz.length > 2 && pos.length && negAbs.length) {
+    const grouped = [...pos.map((p, i) => (i === 0 ? `${p}` : ` + ${p}`)), ...negAbs.map((n) => ` - ${n}`)].join('');
+    steps.push(`${text('正の項・負の項を まとめる: ')} ${grouped} = ${P} - ${N}`);
+  }
+  // ④ 計算
+  let calc: string;
+  if (P === N && pos.length && negAbs.length) {
+    // 反数どうし((+5) + (−5))は 0
+    calc = `${nz.length === 2 ? termsTex(nz) : `${P} - ${N}`} = 0`;
+  } else if (pos.length && negAbs.length) {
+    // 符号の ちがう 2 数: 絶対値の 大きいほうから 小さいほうを ひいて、大きいほうの 符号(教科書の 書き方)
+    const rule = P >= N ? `+(${P} - ${N})` : `-(${N} - ${P})`;
+    calc = `${nz.length === 2 ? termsTex(nz) : `${P} - ${N}`} = ${rule} = ${value}`;
+  }
+  else if (negAbs.length > 1) calc = `${termsTex(nz)} = -(${negAbs.join(' + ')}) = ${value}`;
+  else if (pos.length > 1) calc = `${termsTex(nz)} = ${value}`;
+  else calc = `${nz.length ? termsTex(nz) : '0'} = ${value}`;
+  if (nz.length < asTerms.length) steps.push(text('0 は たしても ひいても 変わらない'));
+  // 0 以外の 項が 1 つなら、計算は いらない(「−6 = −6」と 書かない)
+  if (nz.length > 1) steps.push(`${text('計算: ')} ${calc}`);
+  steps.push(`${text('答え: ')} ${value}`);
+  return steps;
+}
 
 /** ボス(符号王ネガ)専用: 50 までの 2 けたの数の加減 */
 function addSubTerms(rng: Rng, d: Difficulty): number[] {
@@ -178,6 +241,25 @@ function genAddSubFraction(rng: Rng, d: Difficulty): Problem {
   };
   const tex = `${show(nums[0])} ${op} ${show(nums[1])}`;
   const signed = op === '+' ? nums[1] : neg(nums[1]);
+  const valText = decimal ? String(toNumber(value)) : toTex(value);
+  // 分数は 通分した 形を 見せる(教科書の 手順)
+  const lcd = decimal ? 1 : Number(nums[0].d * nums[1].d) / gcdOf(Number(nums[0].d), Number(nums[1].d));
+  const common = (r: (typeof nums)[number]) => {
+    const n = (Number(r.n) * lcd) / Number(r.d);
+    return n < 0 ? `\\left(-\\frac{${-n}}{${lcd}}\\right)` : `\\left(+\\frac{${n}}{${lcd}}\\right)`;
+  };
+  const steps = [
+    ...(op === '-' ? [`${text('ひき算を たし算に: ')} ${show(nums[0])} + ${show(signed)}`] : []),
+    ...(!decimal && nums[0].d !== nums[1].d ? [`${text('通分する: ')} ${common(nums[0])} + ${common(signed)}`] : []),
+    `${text('計算: ')} = ${valText}`,
+    `${text('答え: ')} ${valText}`,
+  ];
+  const mistakes: Mistake[] = [mistakeNum(neg(value), '数の 大きさは 合ってる! 符号は 絶対値の 大きいほうの 符号に なるよ')];
+  if (toNumber(nums[1]) < 0) {
+    // −(−b) を −b のまま / +(−b) を +b と 計算した
+    if (op === '-') mistakes.push(mistakeNum(add(nums[0], nums[1]), '負の数を ひくときは、符号を 変えて たし算に なるよ(−(−a) は +a)'));
+    else mistakes.push(mistakeNum(sub(nums[0], nums[1]), '負の数を たすと 小さく なるよ(+(−a) は −a)'));
+  }
   return {
     templateId: 'g1.sign.addsub',
     difficulty: d,
@@ -185,10 +267,8 @@ function genAddSubFraction(rng: Rng, d: Difficulty): Problem {
     promptText: `${plain(nums[0])} ${op === '+' ? '+' : '−'} ${plain(nums[1])} = ?`,
     answer: { kind: 'number', value },
     hint: decimal ? '小数でも 整数と 同じ。符号を 決めてから 絶対値を 計算' : '分数は 通分してから。符号の 決め方は 整数と 同じ',
-    explanation: [
-      `${text('ひき算は 符号を 変えて たし算に: ')} ${show(nums[0])} + ${show(signed)}`,
-      `${text('答え: ')} ${decimal ? String(toNumber(value)) : toTex(value)}`,
-    ],
+    explanation: steps,
+    mistakes,
     // 小数の問題の正解は 小数で 見せる(26/5 ではなく 5.2)
     ...(decimal ? { answerLabel: String(toNumber(value)) } : {}),
     tags: [decimal ? 'decimal_addsub' : 'fraction_addsub'],
@@ -229,16 +309,22 @@ function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
   let value = rat(terms[0]);
   for (let i = 1; i < terms.length; i++) value = ops[i - 1] === '+' ? add(value, rat(terms[i])) : sub(value, rat(terms[i]));
 
-  // 解説: 項に直す → 正の項・負の項をまとめる → 計算
+  // 解説: 雑魚の加減と 同じ 手順(ひき算を たし算に → かっこを はずす → 正の項・負の項 → 計算)
   const signedTerms = terms.map((t, i) => (i === 0 ? t : ops[i - 1] === '+' ? t : -t));
-  const pos = signedTerms.filter((t) => t > 0);
-  const negs = signedTerms.filter((t) => t < 0);
-  const explanation: string[] = [];
-  if (!termForm) explanation.push(`${text('項に直す: ')} ${signedTerms.map((t, i) => (i === 0 ? `${t}` : t < 0 ? ` - ${-t}` : ` + ${t}`)).join('')}`);
-  if (pos.length && negs.length && signedTerms.length > 2) {
-    explanation.push(`${text('正の項: ')} ${pos.join(' + ')} = ${pos.reduce((a, b) => a + b, 0)} \\quad ${text('負の項: ')} ${negs.map((n) => `(${n})`).join(' + ')} = ${negs.reduce((a, b) => a + b, 0)}`);
-  }
-  explanation.push(`${text('答え: ')} ${toTex(value)}`);
+  const tokens: AddSubToken[] = termForm
+    ? signedTerms.map((t, i) => (i === 0 ? { op: null, value: t, paren: false } : { op: t < 0 ? '-' : '+', value: Math.abs(t), paren: false }))
+    : terms.map((t, i) => ({ op: i === 0 ? null : ops[i - 1], value: t, paren: true }));
+  const v = toNumber(value);
+  const explanation = addSubSteps(tex, tokens, signedTerms, v);
+  const mistakes: Mistake[] = [];
+  tokens.forEach((tk) => {
+    if (!tk.paren || tk.op === null) return;
+    const a = Math.abs(tk.value);
+    const wrong = v + (tk.op === '-' ? 2 * tk.value : -2 * tk.value);
+    if (tk.op === '-' && tk.value < 0) mistakes.push(mistakeNum(wrong, `−(−${a}) は +${a}。負の数を ひくときは、符号を 変えて たし算に なるよ`));
+    if (tk.op === '+' && tk.value < 0) mistakes.push(mistakeNum(wrong, `+(−${a}) は −${a} と 同じ。負の数を たすと 小さく なるよ`));
+  });
+  mistakes.push(mistakeNum(-v, '数の 大きさは 合ってる! 正の項の 合計と 負の項の 合計、大きいほうの 符号に なるよ'));
 
   const tags: string[] = [];
   if (ops.includes('-') && terms.slice(1).some((t, i) => t < 0 && ops[i] === '-')) tags.push('minus_minus');
@@ -253,6 +339,7 @@ function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
     answer: { kind: 'number', value },
     hint: termForm ? '正の項どうし、負の項どうしを 先に まとめてみよう' : 'まず かっこを はずして、項だけの式に してみよう。−(−3) は +3',
     explanation,
+    mistakes,
     tags,
     key: `${big ? 'addsub_big' : 'addsub'}:${tex}`,
     verify: verifyExpr,
@@ -260,6 +347,9 @@ function genAddSub(rng: Rng, d: Difficulty, big = false): Problem {
 }
 
 // ---------------------------------------------------------------- 乗除
+
+/** 乗除の 符号の まちがいへの 一言(負の数の 個数で 決まる) */
+const SIGN_SAY = (k: number) => `絶対値は 合ってる! 符号を もう一度。負の数が ${k} 個 → ${k % 2 ? '奇数個なので −' : '偶数個なので +'}`;
 
 function genMulDiv(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
@@ -281,6 +371,7 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
         `${text('絶対値の積: ')} ${Math.abs(a)} \\times ${Math.abs(b)} = ${Math.abs(a * b)}`,
         `${text('答え: ')} ${toTex(value)}`,
       ],
+      mistakes: [mistakeNum(-a * b, SIGN_SAY([a, b].filter((x) => x < 0).length))],
       tags: a < 0 && b < 0 ? ['neg_times_neg'] : ['sign_of_product'],
       key: `muldiv:${a}*${b}`,
       verify: `(${a})*(${b})`,
@@ -306,6 +397,7 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
           `${Math.abs(a)} \\div ${Math.abs(b)} = ${Math.abs(q)}`,
           `${text('答え: ')} ${toTex(value)}`,
         ],
+        mistakes: [mistakeNum(-q, SIGN_SAY([a, b].filter((x) => x < 0).length))],
         tags: ['sign_of_quotient'],
         key: `muldiv:${a}/${b}`,
         verify: `(${a})/(${b})`,
@@ -314,6 +406,8 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
   }
   // ★3 の 4 回に 1 回は 分数の乗除(学習プリントの 3/4 × (−5/6) ÷ 15/4 の形)
   if (rng.int(0, 3) === 0) return genMulDivFraction(rng, d);
+  // 5 回に 1 回は 計算しないで 符号だけを 判断する(教科書・チャレンジテストの「積の符号」。2026-09-29 追加)
+  if (rng.int(0, 4) === 0) return genSignJudge(rng, d);
   // ★3: 答えが整数になる ×÷ の混合(例: (−24) ÷ (−8) × 3)、または 1けたの 4数の積(docs/difficulty.md)
   const form = rng.int(0, 2);
   if (form === 2) {
@@ -336,6 +430,7 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
         `${ns.map((x) => Math.abs(x)).join(' \\times ')} = ${Math.abs(prod)}`,
         `${text('答え: ')} ${prod}`,
       ],
+      mistakes: [mistakeNum(-prod, SIGN_SAY(ns.filter((x) => x < 0).length))],
       tags: ['count_negatives'],
       key: `muldiv:${ns.join('*')}`,
       verify: ns.map((x) => `(${x})`).join('*'),
@@ -365,9 +460,54 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
       `${paren(mid)} ${ops[1]} ${paren(nums[2])} = ${toTex(value)}`,
       `${text('答え: ')} ${toTex(value)}`,
     ],
+    mistakes: [
+      mistakeNum(neg(value), SIGN_SAY(nums.filter((x) => x < 0).length)),
+      // a ÷ b × c を a ÷ (b × c) と 計算した(× を 先に)
+      ...(divFirst ? [mistakeNum(div(rat(a), rat(divisor * other)), '× と ÷ だけの 式は、左から 順に 計算するよ(× を 先に しない)')] : []),
+    ],
     tags: ['count_negatives'],
     key: `muldiv:${tex}`,
     verify: divFirst ? `(${a})/(${divisor})*(${other})` : `(${a})*(${other})/(${divisor})`,
+  };
+}
+
+/**
+ * 積・商の符号だけを 判断する(選択式)。5〜6 個の 数の ×÷ で、計算すると 大きくなる式にして「数える」ほうが 早いと 気づかせる。
+ * 累乗(−2)³ を 1 つ 入れることも ある(−2 が 3 個 と 数える)
+ */
+function genSignJudge(rng: Rng, d: Difficulty): Problem {
+  const n = rng.int(5, 6);
+  // 負の数は 2〜4 個(1 個だけだと 見た瞬間に 分かる)
+  const negAt = new Set(rng.shuffle(Array.from({ length: n }, (_, i) => i)).slice(0, rng.int(2, 4)));
+  const nums = Array.from({ length: n }, (_, i) => rng.int(2, 9) * (negAt.has(i) ? -1 : 1));
+  const ops = nums.slice(1).map(() => (rng.bool(0.25) ? '÷' : '×'));
+  const withPow = rng.bool(0.3);
+  const powExp = rng.pick([2, 3]);
+  // 負の数の 個数(累乗は 指数の 数だけ 数える)
+  const negCount = nums.reduce((c, x, i) => c + (x < 0 ? (withPow && i === 0 ? powExp : 1) : 0), 0);
+  const positive = negCount % 2 === 0;
+  const TEX = { '×': '\\times', '÷': '\\div' } as const;
+  const first = withPow ? `(${nums[0]})^{${powExp}}` : paren(nums[0]);
+  const tex = first + nums.slice(1).map((x, i) => ` ${TEX[ops[i] as '×' | '÷']} ${paren(x)}`).join('');
+  const plain = plainMinus((withPow ? `(${nums[0]})${sup(powExp)}` : paren(nums[0])) + nums.slice(1).map((x, i) => ` ${ops[i]} ${paren(x)}`).join(''));
+  const options = ['\\text{正の数(+)}', '\\text{負の数(−)}'];
+  const correct = positive ? 0 : 1;
+  return {
+    templateId: 'g1.sign.muldiv',
+    difficulty: d,
+    prompt: `${tex} \\quad ${text('の 答えの 符号は?(計算しなくて よい)')}`,
+    promptText: `${plain} の 答えの 符号は?(計算しなくて よい)`,
+    answer: { kind: 'choice', options, correct },
+    hint: '負の数が いくつ あるかを 数えよう。÷ も × と 同じ。偶数個なら +、奇数個なら −',
+    explanation: [
+      ...(withPow && nums[0] < 0 ? [`(${nums[0]})^{${powExp}} ${text(` は ${nums[0]} を ${powExp} 回 かける → 負の数 ${powExp} 個`)}`] : []),
+      `${text(`負の数は ぜんぶで ${negCount} 個 → ${positive ? '偶数個なので +' : '奇数個なので −'}`)}`,
+      `${text('答え: ')} ${options[correct]}`,
+    ],
+    mistakes: [{ answer: { kind: 'choice', options, correct: 1 - correct }, say: `負の数を もう一度 数えよう。${withPow && nums[0] < 0 ? '累乗は かける回数だけ 数えるよ。' : ''}${negCount} 個なら ${positive ? '偶数個で +' : '奇数個で −'}` }],
+    tags: ['sign_judge'],
+    key: `muldiv:sign:${tex}`,
+    verify: String(correct),
   };
 }
 
@@ -417,6 +557,11 @@ function genMulDivFraction(rng: Rng, d: Difficulty): Problem {
       `${text('負の数が ')}${negatives}${text(' 個 → 符号は ')}${toNumber(value) < 0 ? '-' : '+'}`,
       `${text('答え: ')} ${toTex(value)}`,
     ],
+    mistakes: [
+      mistakeNum(neg(value), SIGN_SAY(negatives)),
+      // ÷ を 逆数に しないで そのまま かけた
+      ...(ops.includes('÷') ? [mistakeNum(fs.reduce((acc, f, i) => (i === 0 ? f : mul(acc, f))), '÷ は わる数の 逆数を かけるよ(÷ 3/4 → × 4/3)')] : []),
+    ],
     tags: ['fraction_muldiv'],
     key: `muldiv:frac:${plain}`,
     verify: fs.map((f, i) => `${i === 0 ? '' : ops[i - 1] === '×' ? '*' : '/'}(${Number(f.n)}/${Number(f.d)})`).join(''),
@@ -442,12 +587,15 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       answerLabel: String(abs),
       hint: '絶対値は 0 からの 距離。符号を とった 数だよ',
       explanation: [`${text(`${plainMinus(String(n))} は 0 から ${abs} はなれている`)}`, `${text('答え: ')} ${abs}`],
+      mistakes: n !== 0 ? [mistakeNum(-abs, '絶対値は 0 からの 距離なので、負の数に ならないよ')] : [],
       tags: ['abs_value'],
       key: `abs:${n}`,
       verify: `Math.abs(${n})`,
     };
   }
-  if (d === 2 && rng.bool(0.35)) {
+  // ★2 の 10 回に 3 回は 数の大小を 不等号で 表す(教科書の「数の大小」。2026-09-29 追加)
+  if (d === 2 && rng.bool(0.3)) return genInequality(rng, d);
+  if (d === 2 && rng.bool(0.4)) {
     // 絶対値が a である数を すべて(±a)。以前は ★3 だったが 易しいので ★2 へ(Codex のレビュー)
     const a = rng.int(1, 10);
     return {
@@ -458,6 +606,10 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'numbers', values: [rat(a), rat(-a)] },
       hint: '0 から 同じ 距離の 数は、右と左に 1つずつ',
       explanation: [`${text('0 から')} ${a} ${text('はなれた数は')} ${a} ${text('と')} -${a}`, `${text('答え: ')} ${a}, -${a}`],
+      mistakes: [
+        { answer: { kind: 'numbers', values: [rat(a)] }, say: `もう 1 つ あるよ。0 から 左にも ${a} はなれた 数が ある` },
+        { answer: { kind: 'numbers', values: [rat(-a)] }, say: `もう 1 つ あるよ。0 から 右にも ${a} はなれた 数が ある` },
+      ],
       tags: ['abs_two_values'],
       key: `abs:both:${a}`,
       verify: `[${a}, -${a}]`,
@@ -477,6 +629,8 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
     const target = wantMin ? Math.min(...options) : Math.max(...options);
     const correct = options.indexOf(target);
     const optTex = options.map((o) => plainMinus(String(o)));
+    // 絶対値で 比べてしまう まちがい(−5 と −0.5 で、−0.5 のほうが 小さいと 思う)
+    const absPick = options.reduce((best, o, i) => ((wantMin ? Math.abs(o) < Math.abs(options[best]) : Math.abs(o) > Math.abs(options[best])) ? i : best), 0);
     return {
       templateId: 'g1.sign.abs',
       difficulty: d,
@@ -488,6 +642,7 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
         `${text('小さい順に並べると: ')} ${[...options].sort((a, b) => a - b).map((o) => plainMinus(String(o))).join(' < ')}`,
         `${text('答え: ')} ${plainMinus(String(target))}`,
       ],
+      mistakes: [{ answer: { kind: 'choice', options: optTex, correct: absPick }, say: '絶対値で 比べて いないかな? 負の数は 絶対値が 大きいほど 小さいよ(−5 < −1)' }],
       tags: ['compare_negative'],
       key: `abs:cmp:${options.join(',')}:${wantMin}`,
       // 選択式は「正解の番号」を照合する。選択肢の配列から独立に求める
@@ -508,6 +663,10 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'numbers', values: list.map((k) => rat(k)) },
       hint: '負の整数だけ。0 は ふくまない。−' + a + ' は ちょうど ' + a + ' なので ふくまない',
       explanation: [`${text(`0 より左で、0 からの 距離が ${a} より 小さい 整数`)}`, `${text('答え: ')} ${list.join(', ')}`],
+      mistakes: [
+        { answer: { kind: 'numbers', values: [...list, 0].map((k) => rat(k)) }, say: '0 は 負の数では ないよ' },
+        { answer: { kind: 'numbers', values: [...list, -a].map((k) => rat(k)) }, say: `「${a} より小さい」は ${a} ちょうどを ふくまないよ。−${a} の 絶対値は ${a}` },
+      ],
       tags: ['abs_negative_list'],
       key: `abs:negless:${a}`,
       verify: `[${list.join(',')}]`,
@@ -523,6 +682,7 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value: rat(2 * a + 1) },
       hint: `−${a} から ${a} まで。0 も 数えるのを わすれずに`,
       explanation: [`${text(`−${a}, …, −1, 0, 1, …, ${a}`)}`, `${a} \\times 2 + 1 = ${2 * a + 1}`, `${text('答え: ')} ${2 * a + 1} ${text('個')}`],
+      mistakes: [mistakeNum(2 * a, '0 も 整数だよ。数えるのを わすれずに'), mistakeNum(a + 1, '負の数の 側も 数えよう。0 から 右にも 左にも ある')],
       tags: ['abs_count'],
       key: `abs:atmost:${a}`,
       verify: `${2 * a}+1`,
@@ -541,6 +701,10 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       explanation: [
         `${text(`0 からの 距離が ${a} より 小さい 整数`)}`,
         `${text('答え: ')} ${list.join(', ')} ${text(`(${list.length} 個)`)}`,
+      ],
+      mistakes: [
+        { answer: { kind: 'numbers', values: list.filter((k) => k !== 0).map((k) => rat(k)) }, say: '0 も 整数だよ。0 の 絶対値は 0' },
+        { answer: { kind: 'numbers', values: list.filter((k) => k >= 0).map((k) => rat(k)) }, say: '負の数も あるよ。0 から 左にも 同じだけ' },
       ],
       tags: ['abs_range_list'],
       key: `abs:less:${a}`,
@@ -562,9 +726,68 @@ function genAbs(rng: Rng, d: Difficulty): Problem {
       `${text('あてはまる整数: ')} ${listIntegers(lo, hi).map((k) => plainMinus(String(k))).join(', ')}`,
       `${text('答え: ')} ${count} ${text('個')}`,
     ],
+    mistakes: lo < 0 && hi > 0 ? [mistakeNum(count - 1, '0 も 整数だよ。数えるのを わすれずに')] : [],
     tags: ['count_integers'],
     key: `abs:count:${lo}:${hi}`,
     verify: `(()=>{let c=0;for(let k=Math.ceil(${lo});k<=Math.floor(${hi});k++) if(k>${lo}&&k<${hi}) c++;return c;})()`,
+  };
+}
+
+/**
+ * 数の大小を 不等号で 表す(選択式)。2 数: −3 と −5 → −3 > −5 / 3 数: −2, 0, −5 を 小さい順に → −5 < −2 < 0。
+ * まちがいの 選択肢は 絶対値で 比べた 並び(負の数どうしで 起きやすい)
+ */
+function genInequality(rng: Rng, d: Difficulty): Problem {
+  const show = (v: number) => plainMinus(String(v));
+  if (rng.bool()) {
+    // 2 数。半分は 負の数どうし
+    let a: number, b: number;
+    do {
+      a = rng.nonZero(9);
+      b = rng.bool() ? -rng.int(1, 9) : rng.nonZero(9);
+    } while (a === b || (rng.bool(0.5) && (a > 0 || b > 0)));
+    const options = [`${a} < ${b}`, `${a} > ${b}`];
+    const correct = a < b ? 0 : 1;
+    const absWrong = Math.abs(a) < Math.abs(b) ? 0 : 1;
+    return {
+      templateId: 'g1.sign.abs',
+      difficulty: d,
+      prompt: text(`${show(a)} と ${show(b)} の 大小を、不等号を 使って 表すと?`),
+      promptText: `${show(a)} と ${show(b)} の 大小を、不等号を 使って 表すと?`,
+      answer: { kind: 'choice', options, correct },
+      hint: '数直線で 右に あるほうが 大きい。不等号は 大きいほうに 口を 開く',
+      explanation: [`${text('数直線で 右に あるのは ')} ${Math.max(a, b)}`, `${text('答え: ')} ${options[correct]}`],
+      mistakes: [{ answer: { kind: 'choice', options, correct: absWrong }, say: '絶対値で 比べて いないかな? 負の数は 絶対値が 大きいほど 小さいよ' }],
+      tags: ['inequality_sign'],
+      key: `abs:ineq2:${a}:${b}`,
+      verify: String(correct),
+    };
+  }
+  // 3 数を 小さい順に(負の数を 2 つ以上)
+  const nums = new Set<number>();
+  while (nums.size < 3) nums.add(nums.size < 2 ? -rng.int(1, 9) : rng.int(-9, 9));
+  const vs = rng.shuffle([...nums]);
+  const chain = (xs: number[]) => xs.join(' < ');
+  const sorted = [...vs].sort((x, y) => x - y);
+  const byAbs = [...vs].sort((x, y) => Math.abs(x) - Math.abs(y) || x - y);
+  const cands = [chain(sorted), chain(byAbs), chain([...sorted].reverse()), chain(vs)];
+  const options = rng.shuffle([...new Set(cands)]);
+  // 4 つ そろわなければ 並べかえを 足す
+  for (const p of [[sorted[1], sorted[0], sorted[2]], [sorted[0], sorted[2], sorted[1]]]) if (options.length < 4 && !options.includes(chain(p))) options.push(chain(p));
+  const correct = options.indexOf(chain(sorted));
+  const absIdx = options.indexOf(chain(byAbs));
+  return {
+    templateId: 'g1.sign.abs',
+    difficulty: d,
+    prompt: text(`${vs.map(show).join('、')} を、不等号を 使って 小さい順に 表すと?`),
+    promptText: `${vs.map(show).join('、')} を、不等号を 使って 小さい順に 表すと?`,
+    answer: { kind: 'choice', options, correct },
+    hint: '数直線に 3 つの 点を 置いて、左から 順に 読もう',
+    explanation: [`${text('数直線で 左から: ')} ${sorted.join(',\\ ')}`, `${text('答え: ')} ${chain(sorted)}`],
+    mistakes: absIdx >= 0 ? [{ answer: { kind: 'choice', options, correct: absIdx }, say: '絶対値の 小さい順に なって いないかな? 負の数は 絶対値が 大きいほど 小さいよ' }] : [],
+    tags: ['inequality_sign'],
+    key: `abs:ineq3:${vs.join(',')}`,
+    verify: String(correct),
   };
 }
 
@@ -601,6 +824,7 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value: rat(a * (b + c)) },
       hint: 'かっこの中を 先に 計算しよう',
       explanation: [`${b} ${c < 0 ? '-' : '+'} ${Math.abs(c)} = ${b + c}`, `${paren(a)} \\times ${paren(b + c)} = ${a * (b + c)}`, `${text('答え: ')} ${a * (b + c)}`],
+      mistakes: [mistakeNum(a * b + c, 'かっこの 中を 先に 計算しよう'), mistakeNum(-a * (b + c), SIGN_SAY([a, b + c].filter((x) => x < 0).length))],
       tags: ['parentheses_first'],
       key: `mixed:${tex}`,
       verify: `(${a})*((${b})+(${c}))`,
@@ -622,6 +846,11 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value },
       hint: 'かけ算が 先。足し算は あと',
       explanation: [`${paren(a)} \\times ${paren(b)} = ${a * b}`, `${a * b} + ${paren(c)} = ${a * b + c}`, `${text('答え: ')} ${a * b + c}`],
+      mistakes: [
+        // c + a × b を 左から (c + a) × b と 計算した
+        ...(first ? [] : [mistakeNum((c + a) * b, 'かけ算が 先。たし算は あとで するよ')]),
+        mistakeNum(-a * b + c, `かけ算の 符号を もう一度。${paren(a)} × ${paren(b)} = ${a * b}`.replace(/-/g, '−')),
+      ],
       tags: ['order_of_operations'],
       key: `mixed:${tex}`,
       verify: `(${a})*(${b})+(${c})`,
@@ -651,6 +880,15 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       explanation: withParen
         ? [`(-${a})^{${e}} = ${Array(e).fill(`(-${a})`).join(' \\times ')} = ${toTex(value)}`, `${text('答え: ')} ${toTex(value)}`]
         : [`-${a}^{${e}} = -(${a}^{${e}}) = -${a ** e}`, `${text('答え: ')} ${toTex(value)}`],
+      mistakes: [
+        // (−a)ⁿ と −aⁿ の 取りちがえ
+        mistakeNum(
+          withParen ? neg(pow(rat(a), e)) : pow(rat(-a), e),
+          withParen ? `(−${a})${sup(e)} は (−${a}) を ${e} 回 かける。− も いっしょに かけるよ` : `−${a}${sup(e)} は −(${a}${sup(e)})。${e} 乗するのは ${a} だけで、− は あとから つけるよ`,
+        ),
+        // 累乗を「a × n」と した(3² を 6 に)
+        ...(a > 1 ? [mistakeNum(withParen ? (e % 2 ? -a * e : a * e) : -a * e, `${a}${sup(e)} は ${a}×${e} では なく、${a} を ${e} 回 かけるよ`)] : []),
+      ],
       tags: [withParen ? 'power_of_negative' : 'negative_of_power'],
       key: `mixed:${tex}`,
       verify: withParen ? `(-${a})**${e}` : `-(${a}**${e})`,
@@ -680,6 +918,12 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       `${paren(b)} \\times ${paren(k)} \\div ${paren(c)} = ${toTex(mul(rat(b), div(rat(k), rat(c))))}`,
       `${toTex(powVal)} + (${toTex(mul(rat(b), div(rat(k), rat(c))))}) = ${toTex(value)}`,
       `${text('答え: ')} ${toTex(value)}`,
+    ],
+    mistakes: [
+      mistakeNum(
+        add(withParen ? neg(pow(rat(Math.abs(a)), e)) : pow(rat(-Math.abs(a)), e), mul(rat(b), div(rat(k), rat(c)))),
+        withParen ? `(−${Math.abs(a)})² は +${Math.abs(a) ** 2}。− も いっしょに 2 回 かけるよ` : `−${Math.abs(a)}² は −${Math.abs(a) ** 2}。2 乗するのは ${Math.abs(a)} だけ`,
+      ),
     ],
     tags: ['order_of_operations', withParen ? 'power_of_negative' : 'negative_of_power'],
     key: `mixed:${tex}`,
@@ -748,14 +992,28 @@ function genMixedChain(rng: Rng, d: Difficulty): Problem {
     answer: { kind: 'number', value: rat(value) },
     hint: '× と ÷ の かたまりを 先に 計算して、あとで 足し引き',
     explanation: [
-      ...blocks.filter((b) => b.ops.length > 0).map((b) => `${blockTex(b, false)} = ${b.value}`),
-      `${sumTex} = ${value}`,
+      ...blocks.filter((b) => b.ops.length > 0).map((b) => `${text('× ÷ を 先に: ')} ${blockTex(b, false)} = ${b.value}`),
+      `${text('たし算・ひき算: ')} ${sumTex} = ${termsTex(blocks.map((b) => b.sign * b.value))} = ${value}`,
       `${text('答え: ')} ${value}`,
     ],
+    mistakes: [mistakeNum(leftToRight(blocks), '× と ÷ が 先。左から 順に ぜんぶ 計算すると ちがう 答えに なるよ')],
     tags: ['order_of_operations'],
     key: `mixed:${tex}`,
     verify,
   };
+}
+
+/** 四則の 順番を 守らず、左から 順に 計算したときの 答え(よくある まちがい) */
+function leftToRight(blocks: { sign: 1 | -1; nums: number[]; ops: ('×' | '÷')[] }[]) {
+  let acc = rat(blocks[0].nums[0]);
+  blocks.forEach((b, i) => {
+    b.nums.forEach((n, k) => {
+      if (i === 0 && k === 0) return;
+      if (k === 0) acc = b.sign > 0 ? add(acc, rat(n)) : sub(acc, rat(n));
+      else acc = b.ops[k - 1] === '×' ? mul(acc, rat(n)) : div(acc, rat(n));
+    });
+  });
+  return acc;
 }
 
 function sup(e: number): string {

@@ -1,4 +1,4 @@
-import { registerTemplate, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
+import { mistakeNum, registerTemplate, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { rat } from '@/math/rational';
 import { plainMinus, text } from '@/math/format';
@@ -121,6 +121,8 @@ function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem
   const s = rng.pick(SCENES);
   const target = rng.pick(s.targets);
 
+  // ★1 の 3 回に 1 回は 反対の性質の ことば(東へ ↔ 西へ、増える ↔ 減る)。教科書の 最初の 単元(2026-09-29 追加)
+  if (d === 1 && rng.int(0, 2) === 0) return genOpposite(rng, d);
   if (d === 1) {
     const diff = rng.nonZero(MAX_DIFF);
     const actual = target + diff;
@@ -132,6 +134,7 @@ function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem
         answer: { kind: 'number', value: rat(diff) },
         hint: `${s.baseWord}より 多い? 少ない? 少ないなら 負の数`,
         explanation: [`${actual} - ${target} = ${diff}`, `${text(`${s.baseWord}より ${Math.abs(diff)} ${s.unit} ${diff > 0 ? '多い' : '少ない'} → `)} ${signed(diff).replace('−', '-')}`],
+        mistakes: [mistakeNum(-diff, `${s.baseWord}より 多いときは +、少ないときは −。${actual} は ${s.baseWord}の ${target} より ${diff > 0 ? '多い' : '少ない'}よ`)],
         tags: ['base_difference'],
         key: `avg:diff:${s.unit}:${target}:${actual}`,
         verify: `${actual}-${target}`,
@@ -144,6 +147,10 @@ function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem
       answer: { kind: 'number', value: rat(actual) },
       hint: `${s.baseWord}の ${target} に 差を たそう。負の数なら 減る`,
       explanation: [`${target} + ${diff < 0 ? `(${diff})` : diff} = ${actual}`, `${text('答え: ')} ${actual} ${text(s.unit)}`],
+      mistakes: [
+        mistakeNum(target - diff, `差が ${diff > 0 ? '+ なら 目標より 多い' : '− なら 目標より 少ない'}。${s.baseWord}に 差を そのまま たそう`),
+        mistakeNum(diff, `差は ${s.baseWord}からの ずれ。${s.baseWord}の ${target} に たすと 実際の 数に なるよ`),
+      ],
       tags: ['base_difference'],
       key: `avg:actual:${s.unit}:${target}:${diff}`,
       verify: `${target}+(${diff})`,
@@ -165,6 +172,10 @@ function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem
         `${text('① 差を ぜんぶ たす: ')} ${addTex(ds)} = ${sum(ds)}`,
         `${text(`② ${s.baseWord}の ${n} つ分に たす: `)} ${target} \\times ${n} + (${sum(ds)}) = ${total}`,
         `${text('答え: ')} ${total} ${text(s.unit)}`,
+      ],
+      mistakes: [
+        mistakeNum(sum(ds), `それは 差の 合計。${s.baseWord}の ${target} × ${n} を たすと ${s.noun}の 合計に なるよ`),
+        mistakeNum(target * n, `${s.baseWord} × ${n} に、差の 合計(${sum(ds)})も たそう`),
       ],
       tags: ['base_total'],
       key: `avg:total:${s.unit}:${target}:${ds.join(',')}`,
@@ -200,6 +211,10 @@ function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem
         `${text(`③ ${s.baseWord}に たす: `)} ${target} + (${mean}) = ${average}`,
         `${text('答え: ')} ${average} ${text(s.unit)}`,
       ],
+      mistakes: [
+        mistakeNum(mean, `それは 差の 平均。${s.baseWord}の ${target} に たすと ${s.noun}の 平均に なるよ`),
+        mistakeNum(target * n + sum(ds), `それは 合計。${n} で わると 平均に なるよ`),
+      ],
       tags: ['base_average'],
       key: `avg:mean:${s.unit}:${target}:${ds.join(',')}`,
       figure: table(s, target, ds),
@@ -223,6 +238,7 @@ function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem
       `${text('④ ? = 差の合計 − ③: ')} ${sum(ds)} - (${sum(others)}) = ${ds[hole]}`,
       `${text('答え: ')} ${ds[hole]}`,
     ],
+    mistakes: [mistakeNum(-ds[hole], '符号に 気をつけて。差の 合計から ? 以外の 差を ひいた 数が そのまま 答え')],
     tags: ['base_average_missing'],
     key: `avg:hole:${s.unit}:${target}:${ds.join(',')}:${hole}`,
     figure: table(
@@ -231,6 +247,62 @@ function gen(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem
       ds.map((x, i) => (i === hole ? null : x)),
     ),
     verify: `${average}*${n}-[${others.map((x) => target + x).join(',')}].reduce((a,b)=>a+b,0)-${target}`,
+  };
+}
+
+/** 反対の性質を もつ ことばの 組。phrase(ことば, 数) で 「東へ 5 m 進む」「700 円の 支出」の形にする */
+const OPPOSITES: { pos: string; neg: string; unit: string; max: number; step?: number; phrase: (w: string, n: string | number) => string }[] = [
+  { pos: '東', neg: '西', unit: 'm', max: 20, phrase: (w, n) => `${w}へ ${n} m 進む` },
+  { pos: '北', neg: '南', unit: 'km', max: 12, phrase: (w, n) => `${w}へ ${n} km 進む` },
+  { pos: '増える', neg: '減る', unit: 'kg', max: 9, phrase: (w, n) => `${n} kg ${w}` },
+  { pos: '収入', neg: '支出', unit: '円', max: 900, step: 100, phrase: (w, n) => `${n} 円の ${w}` },
+  { pos: '後', neg: '前', unit: '分', max: 30, phrase: (w, n) => `${n} 分${w}` },
+  { pos: '上がる', neg: '下がる', unit: '℃', max: 9, phrase: (w, n) => `${n} ℃ ${w}` },
+];
+
+/**
+ * 反対の性質の ことばを 正の数・負の数で 表す(教科書「正の数・負の数で 量を表す」)。
+ *   「東へ 5 m 進む」を +5 m と表すとき、「西へ 3 m 進む」は?  → −3
+ *   「西へ 3 m 進む」を、「東」を使って 言いかえると「東へ □ m 進む」 → −3
+ */
+function genOpposite(rng: Rng, d: Difficulty): Problem {
+  const o = rng.pick(OPPOSITES);
+  const step = o.step ?? 1;
+  const num = () => rng.int(1, Math.floor(o.max / step)) * step;
+  const a = num();
+  const b = num();
+  const say = `反対の 性質の ことばは、符号を 反対に して 表すよ(${o.pos} ↔ ${o.neg})`;
+  const minus = (n: number) => `−${n}`;
+  if (rng.bool()) {
+    const q = `「${o.phrase(o.pos, a)}」を +${a} ${o.unit} と 表すとき、「${o.phrase(o.neg, b)}」は?`;
+    return {
+      templateId: 'g1.sign.average',
+      difficulty: d,
+      prompt: text(q),
+      promptText: q,
+      answer: { kind: 'number', value: rat(-b) },
+      hint: '反対の 向き・性質なら 符号を 反対に。数(大きさ)は そのまま',
+      explanation: [text(`「${o.pos}」が +。反対の「${o.neg}」は −`), `${text('答え: ')} -${b} ${text(o.unit)}`],
+      mistakes: [{ answer: { kind: 'number', value: rat(b) }, say }],
+      tags: ['opposite_quantity'],
+      key: `avg:opp:${o.unit}:${a}:${b}`,
+      verify: `-${b}`,
+    };
+  }
+  // 言いかえ: 西へ 3 m 進む = 東へ −3 m 進む
+  const q = `「${o.phrase(o.neg, b)}」を、「${o.pos}」を 使って 言いかえると「${o.phrase(o.pos, '□')}」。□ に 入る数は?`;
+  return {
+    templateId: 'g1.sign.average',
+    difficulty: d,
+    prompt: text(q),
+    promptText: q,
+    answer: { kind: 'number', value: rat(-b) },
+    hint: '反対の ことばに 言いかえると、符号が 反対に なる',
+    explanation: [text(`「${o.phrase(o.neg, b)}」=「${o.phrase(o.pos, minus(b))}」`), `${text('答え: ')} -${b}`],
+    mistakes: [{ answer: { kind: 'number', value: rat(b) }, say }],
+    tags: ['opposite_quantity'],
+    key: `avg:oppsay:${o.unit}:${b}`,
+    verify: `-${b}`,
   };
 }
 

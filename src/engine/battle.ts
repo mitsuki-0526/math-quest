@@ -1,6 +1,6 @@
 import { config } from '@/data/config';
 import type { EnemyDef } from '@/data/grade1/enemies';
-import { generateProblem, getTemplate, judge, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
+import { diagnose, generateProblem, getTemplate, judge, type Difficulty, type Problem, type ProblemBasis } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { createRng } from '@/math/rng';
 
@@ -211,7 +211,8 @@ export function answer(state: BattleState, input: string, elapsedSec: number, ct
   const s = { ...state, totals: { ...state.totals }, player: { ...state.player } };
   const result = judge(state.problem.answer, input);
   s.totals.asked += 1;
-  return result.correct ? resolveCorrect(s, elapsedSec, ctx) : resolveWrong(s, false, result.note, ctx);
+  // 書き方の指摘(judge の note)が なければ、よくある まちがいかを 見て その子に合った 一言を 出す
+  return result.correct ? resolveCorrect(s, elapsedSec, ctx) : resolveWrong(s, false, result.note ?? diagnose(state.problem, input), ctx);
 }
 
 /** 時間切れ。誤答と同じ扱いだが、メッセージが変わる */

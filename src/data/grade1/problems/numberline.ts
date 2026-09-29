@@ -1,4 +1,4 @@
-import { registerTemplate, type Difficulty, type Problem } from '@/math/template';
+import { mistakeNum, registerTemplate, type Difficulty, type Problem } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { rat } from '@/math/rational';
 import { plainMinus, text } from '@/math/format';
@@ -38,6 +38,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value: rat(a) },
       hint: '0 の目盛りを 見つけて、そこから 左なら マイナス、右なら プラス',
       explanation: [`${text(`0 から ${a < 0 ? '左' : '右'}へ ${Math.abs(a)} 目盛り`)}`, `${text('答え: ')} ${a}`],
+      mistakes: [mistakeNum(-a, '0 より 右は +、左は −。A は 0 の どちら側かな?')],
       tags: ['numberline_read'],
       key: `nl:read:${a}`,
       figure: line([{ value: a, label: 'A' }]),
@@ -66,6 +67,8 @@ function gen(rng: Rng, d: Difficulty): Problem {
           `${text('距離 = 大きい数 − 小さい数 = ')} ${Math.max(a, b)} - (${Math.min(a, b)}) = ${dist}`,
           `${text('答え: ')} ${dist}`,
         ],
+        // 0 を またぐのに 絶対値の 差を 答えた(−3 と 5 の 距離を 2 に)
+        mistakes: a * b < 0 ? [mistakeNum(Math.abs(Math.abs(a) - Math.abs(b)), '0 を またぐときは、それぞれ 0 までの 距離を たすよ')] : [],
         tags: ['numberline_distance'],
         key: `nl:dist:${a}:${b}`,
         figure: line([
@@ -87,6 +90,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value: rat(end) },
       hint: move > 0 ? '右へ 進む = たす。A の数に たそう' : '左へ 進む = ひく。A の数から ひこう',
       explanation: [`${text(`A = ${pm(start)}`)}`, `${start} ${move > 0 ? '+' : '-'} ${Math.abs(move)} = ${end}`, `${text('答え: ')} ${end}`],
+      mistakes: [mistakeNum(start - move, '右へ 進むと 大きく(+)、左へ 進むと 小さく(−)なるよ。向きを 確かめよう')],
       tags: [move > 0 ? 'numberline_add' : 'numberline_sub'],
       key: `nl:move:${start}:${move}`,
       // 矢印を描くと答えの位置が見えてしまうので、図には点 A だけを置く
@@ -112,6 +116,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value: rat(end) },
       hint: '右は +、左は −。A の数に 2 回ぶんを 順に たそう',
       explanation: [`${text(`A = ${pm(start)}`)}`, `${start} ${m1 > 0 ? '+' : '-'} ${Math.abs(m1)} ${m2 > 0 ? '+' : '-'} ${Math.abs(m2)} = ${end}`, `${text('答え: ')} ${end}`],
+      mistakes: [mistakeNum(start - m1 - m2, '右へ 進むと 大きく(+)、左へ 進むと 小さく(−)なるよ。向きを 確かめよう'), mistakeNum(start + m1, 'もう 1 回 進むのを わすれずに')],
       tags: ['numberline_two_moves'],
       key: `nl:two:${start}:${m1}:${m2}`,
       figure: line([{ value: start, label: 'A' }]),
@@ -130,6 +135,7 @@ function gen(rng: Rng, d: Difficulty): Problem {
     answer: { kind: 'number', value: rat(start) },
     hint: `A から 逆向き(${dir(-move)})へ ${Math.abs(move)} 目盛り もどろう`,
     explanation: [`${text(`A = ${pm(end)}。逆向きに ${Math.abs(move)} 目盛り もどる`)}`, `${end} ${move > 0 ? '-' : '+'} ${Math.abs(move)} = ${start}`, `${text('答え: ')} ${start}`],
+    mistakes: [mistakeNum(end + move, `はじめの 点は、A から 逆向きに もどった ところ。${dir(move)}へ 進んで A に 着いたなら、A から ${dir(-move)}へ もどる`)],
     tags: ['numberline_reverse'],
     key: `nl:back:${end}:${move}`,
     figure: line([{ value: end, label: 'A' }]),

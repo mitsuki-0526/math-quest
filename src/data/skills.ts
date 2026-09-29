@@ -17,11 +17,11 @@ export interface Perk {
 
 export const perks: Perk[] = [
   { level: 2, name: 'ピタのささやき +1', description: '1ノードで使える ヒントが 1回 増える', hintBonus: 1 },
-  { level: 3, name: '集中', description: '制限時間が 5秒 のびる', timeBonus: 5 },
+  { level: 3, name: '集中', description: '考える時間が 5秒 のびる(会心も 出やすくなる)', timeBonus: 5 },
   { level: 4, name: '修練の心得', description: '修練の泉の 経験値 +25%', practiceMul: 1.25 },
   { level: 5, name: '商人の友', description: '手に入る ゴールド +20%', goldMul: 1.2 },
   { level: 7, name: 'ピタのささやき +2', description: 'ヒントが さらに 1回 増える', hintBonus: 1 },
-  { level: 8, name: '深い集中', description: '制限時間が さらに 5秒 のびる', timeBonus: 5 },
+  { level: 8, name: '深い集中', description: '考える時間が さらに 5秒 のびる(会心も 出やすくなる)', timeBonus: 5 },
   { level: 10, name: '碑守の弟子', description: '経験値 +10%', expMul: 1.1 },
   { level: 13, name: '修練の達人', description: '修練の泉の 経験値 +50%', practiceMul: 1.5 },
   { level: 15, name: 'ピタのささやき +3', description: 'ヒントが さらに 1回 増える', hintBonus: 1 },
