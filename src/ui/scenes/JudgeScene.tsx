@@ -6,7 +6,7 @@ import '@/data/grade1/problems';
 import { answerToText, getTemplate } from '@/math/template';
 import { texToPlain } from '@/math/texPlain';
 import {
-  buildJudgeQueue,
+  buildChapterJudgeQueue,
   judgeStore,
   setJudgment,
   clearJudgment,
@@ -36,7 +36,7 @@ export function JudgeScene() {
   const [chapterIdx, setChapterIdx] = useState(0);
   const [per, setPer] = useState(10);
   const chapter = grade1.chapters[chapterIdx];
-  const queue = useMemo(() => buildJudgeQueue(chapter, per), [chapter, per]);
+  const queue = useMemo(() => buildChapterJudgeQueue(chapter, per), [chapter, per]);
   const firstOpen = () => Math.max(0, queue.findIndex((q) => !judgeStore.get()[q.id]));
   // 位置・履歴・× の 理由は ref に 持つ。キーを 速く 続けて 押しても、いつも 最新の 状態で 動くように
   // (state だと 次の 描画まで 古い 問題を 指していて、2 回目の ○ が 前の 問題を 判定しなおしていた)

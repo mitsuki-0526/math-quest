@@ -42,6 +42,23 @@ describe('ProblemSpec', () => {
     expect(validateSpec(p({ answer: { kind: 'number', value: rat(1, 2) } }))?.reason).toBe('SPEC_VIOLATION');
   });
 
+  it('出題の 形(tags)ごとの 上書き: 分配法則の 工夫だけ 2 けた・大きい 答えを 許す', () => {
+    const p = (tags: string[]): Problem => ({
+      templateId: 'g1.sign.mixed',
+      difficulty: 3,
+      prompt: '',
+      promptText: '(−6) × 58 + (−6) × 42 = ?',
+      answer: { kind: 'number', value: rat(-600) },
+      hint: '',
+      explanation: [],
+      tags,
+      key: 'k',
+      verify: '',
+    });
+    expect(validateSpec(p(['order_of_operations']))?.reason).toBe('SPEC_VIOLATION');
+    expect(validateSpec(p(['distributive', 'distributive_combine']))).toBeNull();
+  });
+
   it('問題文の 数の 読み取り(入力の 例は 数えない)', () => {
     expect(numbersInText('(−3/4) − (+1.5) = ?')).toEqual([3, 4, 1.5]);
     expect(numbersInText('21 を 素因数分解せよ(例: 2×2×3 または 2^2×3)')).toEqual([21]);

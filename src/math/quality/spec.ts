@@ -27,6 +27,11 @@ export interface ProblemSpec {
   factorRange?: [number, number];
   /** 使ってはいけない 書き方(未習の 記号 など) */
   forbid?: { pattern: RegExp; why: string }[];
+  /**
+   * 出題の 形(問題の tags)ごとの 上書き。同じ ★ に 形の ちがう 問題を まぜるとき
+   * (例: 分配法則の 工夫は 63・37 のような 2 けたを 使う)、その形だけ 範囲を 変える
+   */
+  forms?: Record<string, Partial<Pick<ProblemSpec, 'maxNumber' | 'numberCount' | 'maxAnswer' | 'integerAnswer'>>>;
   /** 根拠(教科書・チャレンジテスト・先生の印) */
   source: string;
 }
@@ -54,8 +59,10 @@ export function numbersInText(text: string): number[] {
 }
 
 /** 仕様から はみ出していないか。仕様が ない テンプレートは 見ない */
-export function validateSpec(p: Problem, spec: ProblemSpec | undefined = getSpec(p.templateId, p.difficulty)): Rejection | null {
-  if (!spec) return null;
+export function validateSpec(p: Problem, base: ProblemSpec | undefined = getSpec(p.templateId, p.difficulty)): Rejection | null {
+  if (!base) return null;
+  const form = Object.keys(base.forms ?? {}).find((t) => p.tags.includes(t));
+  const spec: ProblemSpec = form ? { ...base, ...base.forms![form] } : base;
   const nums = numbersInText(p.promptText);
   if (spec.maxNumber !== undefined) {
     const big = nums.find((n) => n > spec.maxNumber!);

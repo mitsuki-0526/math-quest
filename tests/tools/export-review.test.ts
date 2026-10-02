@@ -2,9 +2,9 @@ import { describe, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import '@/data/grade1/problems';
 import { grade1 } from '@/data/grade1/chapters';
-import { generateProblem, getTemplate, answerToText, type Difficulty, type Problem } from '@/math/template';
+import { getTemplate, answerToText, type Problem } from '@/math/template';
 import { primeFactors, factorsToText } from '@/math/factorization';
-import { createRng } from '@/math/rng';
+import { buildJudgeQueue } from '@/math/quality/judging';
 import { texToPlain } from '@/math/texPlain';
 
 /**
@@ -23,34 +23,26 @@ describe.skipIf(!arg)('問題の一括書き出し', () => {
   it('CSV', () => {
     const [ch, per] = (arg ?? '1,20').split(',').map(Number);
     const chapter = grade1.chapters[ch - 1];
-    const rows: string[][] = [['ID', '章', '出題タイプ', '★', '問題', '選択肢', '正解', '解説', 'よくある まちがい(誤答 → ピタの一言)', '判定(○/×)', '理由']];
-    for (const id of chapter.templates ?? [])
-      for (const star of [1, 2, 3] as Difficulty[]) {
-        const keys: string[] = [];
-        for (let i = 0, made = 0; made < per && i < per * 5; i++) {
-          const seed = 1000 * ch + i + 1;
-          const p = generateProblem(id, star, keys, createRng(seed * 7919 + star));
-          // 同じ問題は 1 回だけ(判定の 手間を へらす)
-          if (keys.includes(p.key)) continue;
-          keys.push(p.key);
-          made++;
-          const table = p.figure?.kind === 'table' ? ` [表: ${p.figure.head.join(' | ')} / ${p.figure.rows.map((r) => r.join(' | ')).join(' / ')}]` : '';
-          const line = p.figure?.kind === 'numberline' ? ` [数直線 ${p.figure.min}〜${p.figure.max}、点 ${p.figure.points.map((q) => `${q.label}=${q.value}`).join('、')}]` : '';
-          rows.push([
-            `${id}|${star}|${seed}`,
-            String(ch),
-            getTemplate(id).title,
-            String(star),
-            p.promptText + table + line,
-            p.answer.kind === 'choice' ? p.answer.options.map(texToPlain).join(' / ') : '',
-            answerText(p),
-            p.explanation.map(texToPlain).join('\n'),
-            (p.mistakes ?? []).map((m) => `${m.answer.kind === 'choice' ? texToPlain(m.answer.options[m.answer.correct]) : texToPlain(answerToText(m.answer))} → ${m.say}`).join('\n'),
-            '',
-            '',
-          ]);
-        }
-      }
+    const rows: string[][] = [['ID', '章', '単元', '出題タイプ', '★', '問題', '選択肢', '正解', '解説', 'よくある まちがい(誤答 → ピタの一言)', '判定(○/×)', '理由']];
+    // ゲームの「1問ずつ ○×判定」と 同じ 問題・同じ ID(どちらで 判定しても 記録が そろう)
+    for (const { id, templateId, star, problem: p } of buildJudgeQueue(chapter.templates ?? [], ch * 1000, per)) {
+      const table = p.figure?.kind === 'table' ? ` [表: ${p.figure.head.join(' | ')} / ${p.figure.rows.map((r) => r.join(' | ')).join(' / ')}]` : '';
+      const line = p.figure?.kind === 'numberline' ? ` [数直線 ${p.figure.min}〜${p.figure.max}、点 ${p.figure.points.map((q) => `${q.label}=${q.value}`).join('、')}]` : '';
+      rows.push([
+        id,
+        String(ch),
+        getTemplate(templateId).unit,
+        getTemplate(templateId).title,
+        String(star),
+        p.promptText + table + line,
+        p.answer.kind === 'choice' ? p.answer.options.map(texToPlain).join(' / ') : '',
+        answerText(p),
+        p.explanation.map(texToPlain).join('\n'),
+        (p.mistakes ?? []).map((m) => `${m.answer.kind === 'choice' ? texToPlain(m.answer.options[m.answer.correct]) : texToPlain(answerToText(m.answer))} → ${m.say}`).join('\n'),
+        '',
+        '',
+      ]);
+    }
     mkdirSync('refs/review', { recursive: true });
     const file = `refs/review/g1c${ch}-review.csv`;
     // Excel でも 文字化けしないよう BOM を 付ける

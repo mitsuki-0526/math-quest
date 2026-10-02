@@ -1,6 +1,6 @@
 import { mistakeNum, registerTemplate, type Difficulty, type Mistake, type Problem, type ProblemTemplate } from '@/math/template';
 import type { Rng } from '@/math/rng';
-import { rat, add, sub, mul, div, pow, neg, toTex, toNumber } from '@/math/rational';
+import { rat, add, sub, mul, div, pow, neg, toTex, toNumber, toString } from '@/math/rational';
 import { paren, plainMinus, text } from '@/math/format';
 import { primeFactors, factorsToTex } from '@/math/factorization';
 
@@ -22,8 +22,8 @@ const UNIT = '正の数と負の数';
  * 加減(マイナススライム)。教科書の練習問題の形に合わせ、先生の見本帳の印で直した(2026-09-27。docs/difficulty.md)。
  *   ★1: 加法・減法の 2 項。正の数も (+7) と符号つき。0 を含む式・反数どうしも出る。1 けただけ(「2けたはまだ早い」)
  *   ★2: かっこつきの数 3 つ((+3) + (−5) − (−2))が基本。ときどき かっこなしの 2〜3 項(−2 − 6、6 − 7 + 5)。
- *       2 けたは 4 回に 1 回ほど・1 つだけ(18 まで)。「数字 4 つは多い」ので 3 つまで
- *   ★3: 加法と減法の混じった 3〜4 項(項だけの式・かっこ混じり)。2 けたは 23 まで・1 問に 2 つまで。5 回に 1 回は 小数・分数
+ *       2 けたは 2 回に 1 回ほど・1 つだけ(30 まで)。「数字 4 つは多い」ので 3 つまで
+ *   ★3: 加法と減法の混じった 3〜4 項(項だけの式・かっこ混じり)。2 けたは 35 まで・1 問に 2 つまで。5 回に 1 回は 小数・分数
  * 2 けたの数ばかりの計算は、ボス(符号王ネガ)専用の addsub_big で出す
  */
 interface AddSubToken {
@@ -37,8 +37,10 @@ interface AddSubToken {
 
 const ADDSUB_SPEC: Record<Difficulty, { terms: number[]; bigMax: number; bigProb: number; maxBig: number; zeroProb: number }> = {
   1: { terms: [2], bigMax: 9, bigProb: 0, maxBig: 0, zeroProb: 0.12 },
-  2: { terms: [3], bigMax: 18, bigProb: 0.25, maxBig: 1, zeroProb: 0.08 },
-  3: { terms: [3, 4], bigMax: 23, bigProb: 0.4, maxBig: 2, zeroProb: 0.08 },
+  // ★2・★3 の 2 けたは 授業の プリント(第1章 84 ページ、2026-10-02)に 合わせて 増やした:
+  // 加法・減法は 2 けたを ふくむ 問題が 4〜5 割(53 まで)、加減の混じった計算は 35 まで(先生の方針「★2 から 2 けたを 増やす」)
+  2: { terms: [3], bigMax: 30, bigProb: 0.5, maxBig: 1, zeroProb: 0.08 },
+  3: { terms: [3, 4], bigMax: 35, bigProb: 0.5, maxBig: 2, zeroProb: 0.08 },
 };
 
 /** 符号つきの項(+7, −2, 0 …)を 教科書の形に 並べる */
@@ -378,6 +380,8 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
     };
   }
   if (d === 2) {
+    // 5 回に 1 回は 逆数(授業の プリント。2026-10-02)
+    if (rng.int(0, 4) === 0) return genReciprocal(rng, d);
     // 割り切れる除算だけ(先生の印「★2 は わり算のみ」2026-09-27。3 数の積は ★3 へ)
     {
       // 教科書・学習プリントの割り算は わられる数が 48 程度まで(docs/difficulty.md)
@@ -408,6 +412,8 @@ function genMulDiv(rng: Rng, d: Difficulty): Problem {
   if (rng.int(0, 3) === 0) return genMulDivFraction(rng, d);
   // 5 回に 1 回は 計算しないで 符号だけを 判断する(教科書・チャレンジテストの「積の符号」。2026-09-29 追加)
   if (rng.int(0, 4) === 0) return genSignJudge(rng, d);
+  // 4 回に 1 回は 小数・分数を 入れかえて 工夫する かけ算(授業の プリント「乗法の計算法則」。2026-10-02)
+  if (rng.int(0, 3) === 0) return genMulLaw(rng, d);
   // ★3: 答えが整数になる ×÷ の混合(例: (−24) ÷ (−8) × 3)、または 1けたの 4数の積(docs/difficulty.md)
   const form = rng.int(0, 2);
   if (form === 2) {
@@ -565,6 +571,122 @@ function genMulDivFraction(rng: Rng, d: Difficulty): Problem {
     tags: ['fraction_muldiv'],
     key: `muldiv:frac:${plain}`,
     verify: fs.map((f, i) => `${i === 0 ? '' : ops[i - 1] === '×' ? '*' : '/'}(${Number(f.n)}/${Number(f.d)})`).join(''),
+  };
+}
+
+type Rat = ReturnType<typeof rat>;
+
+/** 負の数は かっこつき: (−0.25)、\left(-\frac{3}{4}\right)。小数で 見せるか 分数で 見せるか を 選ぶ */
+function ratTex(r: Rat, decimal: boolean, withParen = true): string {
+  const t = decimal ? String(toNumber(r)) : toTex(r);
+  return toNumber(r) < 0 && withParen ? `\\left(${t}\\right)` : t;
+}
+function ratPlain(r: Rat, decimal: boolean, withParen = true): string {
+  const t = plainMinus(decimal || r.d === 1n ? String(toNumber(r)) : `${r.n}/${r.d}`);
+  return toNumber(r) < 0 && withParen ? `(${t})` : t;
+}
+
+/**
+ * 逆数(乗除 ★2 の 5 回に 1 回、2026-10-02)。授業の プリント「逆数」(定着・標準)に 合わせて、整数・分数・小数の 逆数を 聞く。
+ * 逆数は かけて 1 に なる数。符号は そのまま(反数と 取りちがえやすい)
+ */
+const RECIPROCAL_DECIMALS: Rat[] = [rat(1, 2), rat(1, 4), rat(1, 5), rat(2, 5), rat(3, 2), rat(5, 2)];
+
+function genReciprocal(rng: Rng, d: Difficulty): Problem {
+  const kind = rng.pick(['integer', 'fraction', 'fraction', 'decimal'] as const);
+  let x: Rat;
+  if (kind === 'integer') x = rat(rng.int(2, 9));
+  else if (kind === 'decimal') x = rng.pick(RECIPROCAL_DECIMALS);
+  else {
+    const den = rng.int(2, 9);
+    let num = rng.int(1, 9);
+    while (gcdOf(num, den) !== 1 || num === den) num = rng.int(1, 9);
+    x = rat(num, den);
+  }
+  // 負の数を 多めに(符号の 取りちがえが いちばん 多い)
+  if (rng.bool(0.6)) x = neg(x);
+  const decimal = kind === 'decimal';
+  const value = div(rat(1), x);
+  const xTex = ratTex(x, decimal, false);
+  return {
+    templateId: 'g1.sign.muldiv',
+    difficulty: d,
+    prompt: `${xTex} ${text(' の 逆数は?')}`,
+    promptText: `${ratPlain(x, decimal, false)} の 逆数は?`,
+    answer: { kind: 'number', value },
+    hint: '逆数は かけて 1 に なる数。分数なら 分子と 分母を 入れかえる。符号は そのまま',
+    explanation: [
+      ...(decimal ? [`${text('小数を 分数に: ')} ${xTex} = ${toTex(x)}`] : []),
+      ...(kind === 'integer' ? [`${toTex(x)} = \\frac{${toTex(x)}}{1}`] : []),
+      `${text('分子と 分母を 入れかえる(符号は そのまま): ')} ${toTex(value)}`,
+      `${text('確かめ: ')} ${ratTex(x, decimal)} \\times ${ratTex(value, false)} = 1`,
+      `${text('答え: ')} ${toTex(value)}`,
+    ],
+    mistakes: [
+      mistakeNum(neg(value), '逆数は 符号は そのまま。負の数の 逆数は 負の数だよ(かけて +1 に なる)'),
+      mistakeNum(neg(x), 'それは 反数(符号を 変えた数)。逆数は かけて 1 に なる数だよ'),
+    ],
+    tags: ['reciprocal'],
+    key: `muldiv:recip:${toString(x)}${decimal ? 'd' : ''}`,
+    verify: `1/((${Number(x.n)})/(${Number(x.d)}))`,
+  };
+}
+
+/**
+ * 計算法則を 使って 工夫する かけ算(乗除 ★3 の 一部、2026-10-02)。授業の プリント「乗法の計算法則」は 小数が 35%・分数が 23%。
+ * かけると 整数に なる 組(0.25 と 4、3/4 と 8 など)を 離して 置き、入れかえて 先に かけると 楽に なる 式にする
+ */
+const MUL_LAW_PAIRS: { a: Rat; b: number; decimal: boolean }[] = [
+  { a: rat(1, 2), b: 2, decimal: true },
+  { a: rat(1, 2), b: 4, decimal: true },
+  { a: rat(1, 2), b: 6, decimal: true },
+  { a: rat(1, 4), b: 4, decimal: true },
+  { a: rat(1, 4), b: 8, decimal: true },
+  { a: rat(1, 5), b: 5, decimal: true },
+  { a: rat(2, 5), b: 5, decimal: true },
+  { a: rat(3, 2), b: 2, decimal: true },
+  { a: rat(5, 2), b: 4, decimal: true },
+  { a: rat(3, 4), b: 8, decimal: false },
+  { a: rat(2, 3), b: 6, decimal: false },
+  { a: rat(5, 6), b: 12, decimal: false },
+  { a: rat(3, 5), b: 10, decimal: false },
+];
+
+function genMulLaw(rng: Rng, d: Difficulty): Problem {
+  const pair = rng.pick(MUL_LAW_PAIRS);
+  const other = rng.int(3, 9);
+  // [組の 片方, ほかの数, 組の もう片方](入れかえないと 楽に ならない 並び)
+  const raw: Rat[] = rng.bool() ? [pair.a, rat(other), rat(pair.b)] : [rat(pair.b), rat(other), pair.a];
+  let fs = raw.map((f) => (rng.bool(0.4) ? neg(f) : f));
+  if (fs.every((f) => toNumber(f) > 0)) {
+    const j = rng.int(0, 2);
+    fs = fs.map((f, i) => (i === j ? neg(f) : f));
+  }
+  const isPairPart = (i: number) => i !== 1;
+  const value = fs.reduce((acc, f) => mul(acc, f), rat(1));
+  const negatives = fs.filter((f) => toNumber(f) < 0).length;
+  const showDec = (f: Rat) => pair.decimal && f.d !== 1n;
+  const tex = fs.map((f) => ratTex(f, showDec(f))).join(' \\times ');
+  const plain = fs.map((f) => ratPlain(f, showDec(f))).join(' × ');
+  const absTex = (f: Rat) => ratTex(f.n < 0n ? neg(f) : f, showDec(f));
+  const pairAbs = fs.filter((_, i) => isPairPart(i)).map(absTex);
+  const pairProduct = pair.a.n * BigInt(pair.b) / pair.a.d;
+  return {
+    templateId: 'g1.sign.muldiv',
+    difficulty: d,
+    prompt: `${tex} = ?`,
+    promptText: `${plain} = ?`,
+    answer: { kind: 'number', value },
+    hint: '符号を 先に 決めよう。かけると きりの よい 数に なる 組を さがして、入れかえて 先に かける',
+    explanation: [
+      `${text('負の数が ')}${negatives}${text(' 個 → 符号は ')}${toNumber(value) < 0 ? '-' : '+'}`,
+      `${text('入れかえて 組を 先に(計算法則): ')} (${pairAbs.join(' \\times ')}) \\times ${other} = ${pairProduct} \\times ${other} = ${Math.abs(toNumber(value))}`,
+      `${text('答え: ')} ${toTex(value)}`,
+    ],
+    mistakes: [mistakeNum(neg(value), SIGN_SAY(negatives))],
+    tags: ['mul_law', pair.decimal ? 'decimal_mul' : 'fraction_mul'],
+    key: `muldiv:law:${plain}`,
+    verify: fs.map((f) => `((${Number(f.n)})/(${Number(f.d)}))`).join('*'),
   };
 }
 
@@ -856,6 +978,8 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       verify: `(${a})*(${b})+(${c})`,
     };
   }
+  // ★1 の 4 回に 1 回は 同じ数の かけ算を 累乗で 表す(授業の プリント「累乗」。2026-10-02)
+  if (d === 1 && rng.int(0, 3) === 0) return genPowerNotation(rng, d);
   if (d === 1) {
     // 累乗だけ: (−a)ⁿ と −aⁿ の区別。a は 6 まで、3 乗は a が 3 まで((−6)³ = −216 のような大きな数は 教科書に出ない)。
     // (−1)ⁿ は 5 乗まで(偶数・奇数で 符号が決まることに 気づかせる)
@@ -894,7 +1018,9 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
       verify: withParen ? `(-${a})**${e}` : `-(${a}**${e})`,
     };
   }
-  // ★3: 4 回に 3 回は チャレンジテストの形(乗除のかたまりを 加減でつなぐ)、1 回は 累乗 + 乗除
+  // ★3: 5 回に 1 回は 分配法則を 使う 工夫(授業の プリント。2026-10-02)。
+  // のこりの 4 回に 3 回は チャレンジテストの形(乗除のかたまりを 加減でつなぐ)、1 回は 累乗 + 乗除
+  if (rng.int(0, 4) === 0) return genDistributive(rng, d);
   if (rng.int(0, 3) > 0) return genMixedChain(rng, d);
   const a = rng.nonZero(4, 2);
   const b = rng.nonZero(9);
@@ -928,6 +1054,164 @@ function genMixed(rng: Rng, d: Difficulty): Problem {
     tags: ['order_of_operations', withParen ? 'power_of_negative' : 'negative_of_power'],
     key: `mixed:${tex}`,
     verify: `${withParen ? `(-${Math.abs(a)})**${e}` : `-(${Math.abs(a)}**${e})`} + (${b})*(${k})/(${c})`,
+  };
+}
+
+/**
+ * 同じ数の かけ算を 累乗で 表す(四則 ★1 の 4 回に 1 回、選択式)。授業の プリント「累乗」に 7 問ある形。
+ * 入力式に すると (−3)⁴ の かわりに 81 でも 同じ値に なり、表し方を 確かめられないので 選ばせる。
+ * まちがいの 選択肢は (−a)ⁿ と −aⁿ の 取りちがえ、指数と 底の 入れかえ(aⁿ と nᵃ)
+ */
+function genPowerNotation(rng: Rng, d: Difficulty): Problem {
+  const form = rng.pick(['neg', 'pos', 'negOutside', 'two', 'fraction'] as const);
+  const a = rng.int(2, 6);
+  let n = rng.int(2, 4);
+  if (n === a) n = a === 2 ? 3 : 2;
+  const rep = (s: string, k: number, sep: string) => Array(k).fill(s).join(sep);
+  let tex: string;
+  let plain: string;
+  let options: string[];
+  let say: string[];
+  if (form === 'neg') {
+    tex = rep(`(-${a})`, n, ' \\times ');
+    plain = rep(`(−${a})`, n, '×');
+    options = [`(-${a})^{${n}}`, `-${a}^{${n}}`, `(-${n})^{${a}}`];
+    say = ['', `−${a}${sup(n)} は −(${a}${sup(n)})。−${a} を ${n} 回 かけるときは かっこを つけて (−${a})${sup(n)}`, `かける 数が 底(${a})、かける 回数が 指数(${n})だよ`];
+  } else if (form === 'pos') {
+    tex = rep(`${a}`, n, ' \\times ');
+    plain = rep(`${a}`, n, '×');
+    options = [`${a}^{${n}}`, `${n}^{${a}}`, `${a} \\times ${n}`];
+    say = ['', `かける 数が 底(${a})、かける 回数が 指数(${n})だよ`, `${a}×${n} は ${a} を ${n} 回 たした 数。かける 回数は 指数で 書くよ`];
+  } else if (form === 'negOutside') {
+    tex = `-(${rep(`${a}`, n, ' \\times ')})`;
+    plain = `−(${rep(`${a}`, n, '×')})`;
+    options = [`-${a}^{${n}}`, `(-${a})^{${n}}`, `-${n}^{${a}}`];
+    say = ['', `(−${a})${sup(n)} は −${a} を ${n} 回 かける 数。ここは ${a} を ${n} 回 かけてから − を つけるので −${a}${sup(n)}`, `かける 数が 底(${a})、かける 回数が 指数(${n})だよ`];
+  } else if (form === 'two') {
+    // 2 種類の 数: 3 × 3 × 7 × 7 × 7 = 3² × 7³(素因数分解の 書き方に つながる)
+    const [p, q] = rng.shuffle([2, 3, 5, 7]).slice(0, 2).sort((x, y) => x - y);
+    const [i, j] = rng.pick([[2, 3], [3, 2], [2, 4], [3, 4]] as const);
+    tex = `${rep(`${p}`, i, ' \\times ')} \\times ${rep(`${q}`, j, ' \\times ')}`;
+    plain = `${rep(`${p}`, i, '×')}×${rep(`${q}`, j, '×')}`;
+    options = [`${p}^{${i}} \\times ${q}^{${j}}`, `${p}^{${j}} \\times ${q}^{${i}}`, `(${p} \\times ${q})^{${i + j}}`];
+    say = ['', `${p} は ${i} 個、${q} は ${j} 個。数ごとに かける 回数を 数えよう`, `ちがう 数は まとめられない。${p} と ${q} を 別々に 累乗で 書くよ`];
+  } else {
+    // 分数: (−2/3) × (−2/3) = (−2/3)²
+    const den = rng.pick([3, 4, 5]);
+    let num = rng.int(1, den - 1);
+    while (gcdOf(num, den) !== 1) num = rng.int(1, den - 1);
+    n = 2;
+    tex = rep(`\\left(-\\frac{${num}}{${den}}\\right)`, n, ' \\times ');
+    plain = rep(`(−${num}/${den})`, n, '×');
+    options = [`\\left(-\\frac{${num}}{${den}}\\right)^{2}`, `-\\frac{${num}^{2}}{${den}}`, `-\\frac{${num}}{${den}} \\times 2`];
+    say = ['', `分数 全体を かけるので、かっこを つけて ( )² と 書くよ`, `× 2 は 2 回 たした 数。2 回 かける ときは 指数 2 で 書くよ`];
+  }
+  // 選択肢の 順番を まぜる(正解は いつも 1 番目に ならないように)
+  const order = rng.shuffle([0, 1, 2]);
+  const shown = order.map((k) => options[k]);
+  const correct = order.indexOf(0);
+  return {
+    templateId: 'g1.sign.mixed',
+    difficulty: d,
+    prompt: `${tex} \\quad ${text('を 累乗の 指数を 使って 表すと?')}`,
+    promptText: `${plain} を 累乗の 指数を 使って 表すと?`,
+    answer: { kind: 'choice', options: shown, correct },
+    hint: '同じ 数を かけた 回数を 右上に 小さく 書く。負の数や 分数 全体を かけるときは かっこを つける',
+    explanation: [`${text('同じ 数を かけた 回数を 数える → ')} ${options[0]}`, `${text('答え: ')} ${options[0]}`],
+    mistakes: order
+      .filter((k) => k !== 0)
+      .map((k) => ({ answer: { kind: 'choice' as const, options: shown, correct: order.indexOf(k) }, say: say[k] })),
+    tags: ['power_notation'],
+    key: `mixed:pownot:${tex}`,
+    verify: String(correct),
+  };
+}
+
+/**
+ * 分配法則を 使う 工夫(四則 ★3 の 5 回に 1 回)。授業の プリント「分配法則」は 分数が 55%、
+ * (−6) × 58 + (−6) × 42 のように まとめて 100 に する 形も ある。
+ *   ・k × (p/q ± r/s): k が 分母の 公倍数なので、分配すると 整数どうしの 計算に なる
+ *   ・a × b + a × c(b + c = 100)/ a × b − a × c(b − c = 10, 20): まとめると 楽に なる
+ */
+const DIST_DENS: [number, number][] = [
+  [2, 3],
+  [2, 6],
+  [3, 4],
+  [3, 6],
+  [4, 6],
+  [2, 5],
+];
+
+function genDistributive(rng: Rng, d: Difficulty): Problem {
+  if (rng.bool()) {
+    const [q, s] = rng.pick(DIST_DENS);
+    const l = (q * s) / gcdOf(q, s);
+    const k = l * rng.int(1, Math.max(1, Math.floor(36 / l))) * (rng.bool() ? -1 : 1);
+    const pick = (den: number) => {
+      let num = rng.int(1, den - 1);
+      while (gcdOf(num, den) !== 1) num = rng.int(1, den - 1);
+      return num;
+    };
+    const p = pick(q);
+    const r = pick(s);
+    const op = rng.pick(['+', '-'] as const);
+    const A = (k * p) / q;
+    const B = (k * r) / s;
+    const value = op === '+' ? A + B : A - B;
+    const inner = `\\frac{${p}}{${q}} ${op} \\frac{${r}}{${s}}`;
+    const kFirst = rng.bool();
+    const tex = kFirst ? `${paren(k)} \\times \\left(${inner}\\right)` : `\\left(${inner}\\right) \\times ${paren(k)}`;
+    const innerPlain = `${p}/${q} ${op === '+' ? '+' : '−'} ${r}/${s}`;
+    const plain = plainMinus(kFirst ? `${paren(k)} × (${innerPlain})` : `(${innerPlain}) × ${paren(k)}`);
+    return {
+      templateId: 'g1.sign.mixed',
+      difficulty: d,
+      prompt: `${tex} = ?`,
+      promptText: `${plain} = ?`,
+      answer: { kind: 'number', value: rat(value) },
+      hint: `分配法則で かっこの 中の 両方に ${k} を かけると、分数が 消えて 楽に なるよ`,
+      explanation: [
+        `${text('分配法則: ')} ${paren(k)} \\times \\frac{${p}}{${q}} ${op} ${paren(k)} \\times \\frac{${r}}{${s}}`,
+        `= ${paren(A)} ${op} ${paren(B)} = ${value}`,
+        `${text('答え: ')} ${value}`,
+      ],
+      mistakes: [
+        // かっこの 中の 1 つめにだけ かけた
+        mistakeNum(op === '+' ? add(rat(A), rat(r, s)) : sub(rat(A), rat(r, s)), `かっこの 中の どちらにも ${k} を かけるよ`.replace(/-/g, '−')),
+      ],
+      tags: ['distributive', 'distributive_fraction'],
+      key: `mixed:dist:${tex}`,
+      verify: `(${k})*((${p})/(${q}))${op}(${k})*((${r})/(${s}))`,
+    };
+  }
+  // まとめて 楽に する: a × b ± a × c = a × (b ± c)
+  const a = rng.int(2, 9) * (rng.bool(0.6) ? -1 : 1);
+  const plus = rng.bool(0.6);
+  let b: number, c: number;
+  if (plus) {
+    do b = rng.int(11, 89);
+    while (b % 10 === 0);
+    c = 100 - b;
+  } else {
+    c = rng.int(11, 79);
+    b = c + rng.pick([10, 20]);
+  }
+  const op = plus ? '+' : '-';
+  const sum = plus ? b + c : b - c;
+  const value = a * sum;
+  const tex = `${paren(a)} \\times ${b} ${op} ${paren(a)} \\times ${c}`;
+  return {
+    templateId: 'g1.sign.mixed',
+    difficulty: d,
+    prompt: `${tex} = ?`,
+    promptText: plainMinus(`${paren(a)} × ${b} ${op} ${paren(a)} × ${c}`) + ' = ?',
+    answer: { kind: 'number', value: rat(value) },
+    hint: `どちらも ${paren(a)} を かけている。分配法則で ${paren(a)} × (${b} ${op} ${c}) に まとめると 楽`.replace(/-/g, '−'),
+    explanation: [`${text('分配法則で まとめる: ')} ${paren(a)} \\times (${b} ${op} ${c})`, `= ${paren(a)} \\times ${sum} = ${value}`, `${text('答え: ')} ${value}`],
+    mistakes: [mistakeNum(-value, SIGN_SAY(a < 0 ? 1 : 0))],
+    tags: ['distributive', 'distributive_combine'],
+    key: `mixed:dist:${tex}`,
+    verify: `(${a})*(${b})${op}(${a})*(${c})`,
   };
 }
 

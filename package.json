@@ -14,7 +14,8 @@
     "assets": "python scripts/process_assets.py",
     "review:export": "node scripts/review-export.mjs",
     "quality:report": "node scripts/quality-report.mjs",
-    "review:import": "node scripts/review-import.mjs"
+    "review:import": "node scripts/review-import.mjs",
+    "print:extract": "node scripts/print-extract.mjs"
   },
   "dependencies": {
     "@fontsource/cinzel": "^5.3.0",

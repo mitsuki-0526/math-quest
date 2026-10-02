@@ -24,11 +24,13 @@ const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 const answerOf = (p: Problem) => (p.answer.kind === 'number' ? toNumber(p.answer.value) : NaN);
 
 describe('第1章 正の数と負の数', () => {
-  it('加減(先生の印 2026-09-27): ★1 は 1 けたの 2 項、★2 は かっこつき 3 項が基本(ときどき かっこなし 2〜3 項)、★3 は 3〜4 項', () => {
-    const spec = { 1: { terms: [2], max: 9, bigs: 0 }, 2: { terms: [2, 3], max: 18, bigs: 1 }, 3: { terms: [3, 4], max: 23, bigs: 2 } } as const;
+  it('加減(先生の印 2026-09-27、2 けたは 授業の プリントで 2026-10-02): ★1 は 1 けたの 2 項、★2 は かっこつき 3 項が基本・2 けたは 半分ほど(30 まで)、★3 は 3〜4 項(35 まで)', () => {
+    const spec = { 1: { terms: [2], max: 9, bigs: 0 }, 2: { terms: [2, 3], max: 30, bigs: 1 }, 3: { terms: [3, 4], max: 35, bigs: 2 } } as const;
     for (const d of [1, 2, 3] as const) {
       let zero = 0;
       let paren = 0;
+      let withBig = 0;
+      let total = 0;
       each('g1.sign.addsub', d, (p) => {
         if (p.tags.some((t) => t.startsWith('decimal') || t.startsWith('fraction'))) return;
         const nums = numbersIn(p);
@@ -37,11 +39,18 @@ describe('第1章 正の数と負の数', () => {
         expect(nums.filter((n) => n >= 10).length, p.promptText).toBeLessThanOrEqual(spec[d].bigs);
         if (nums.includes(0)) zero++;
         if (p.promptText.startsWith('(')) paren++;
+        if (nums.some((n) => n >= 10)) withBig++;
+        total++;
       });
       // 0 を含む式も出る(教科書の (−4) + 0、0 − (−3))
       expect(zero, `★${d}`).toBeGreaterThan(0);
       // ★2 は かっこつき 3 項が基本
       if (d === 2) expect(paren, '★2 の かっこつき').toBeGreaterThan(N / 2);
+      // ★2 は 2 けたを ふくむ 問題が 4〜6 割(授業の プリントは 4〜5 割)
+      if (d === 2) {
+        expect(withBig / total, '★2 の 2 けた').toBeGreaterThan(0.4);
+        expect(withBig / total, '★2 の 2 けた').toBeLessThan(0.6);
+      }
     }
     // ★1・★2 の かっこの中の 正の数は (+7) と符号つき
     for (const d of [1, 2] as const) {
@@ -52,14 +61,33 @@ describe('第1章 正の数と負の数', () => {
     expect(getEnemy('king_nega').phases![0].templates).toEqual(['g1.sign.addsub_big']);
   });
 
-  it('乗除: ★2 は わり算だけ(わられる数 81 まで)。★3 は答えが整数(分数の乗除を除く)', () => {
+  it('乗除: ★2 は わり算だけ(わられる数 81 まで。5 回に 1 回は 逆数)。★3 は答えが整数(分数の乗除を除く)', () => {
+    let reciprocals = 0;
     each('g1.sign.muldiv', 2, (p) => {
+      if (p.tags.includes('reciprocal')) {
+        // 逆数: かけて 1。符号は そのまま
+        reciprocals++;
+        const x = p.promptText.replace(/ の 逆数は\?$/, '').replace('−', '-');
+        const [n, dd] = x.includes('/') ? x.split('/').map(Number) : [Number(x), 1];
+        expect(Math.abs((n / dd) * answerOf(p) - 1), p.promptText).toBeLessThan(1e-9);
+        return;
+      }
       expect(p.promptText, p.promptText).toContain('÷');
       expect(p.promptText, p.promptText).not.toContain('×');
       expect(numbersIn(p)[0], p.promptText).toBeLessThanOrEqual(81);
     });
+    expect(reciprocals).toBeGreaterThan(N / 10);
+    expect(reciprocals).toBeLessThan(N / 3);
     let fractions = 0;
+    let laws = 0;
     each('g1.sign.muldiv', 3, (p) => {
+      if (p.tags.includes('mul_law')) {
+        // 工夫する かけ算: 3 数(組を 入れかえると 整数)。答えは 整数
+        laws++;
+        expect(p.promptText.split('×'), p.promptText).toHaveLength(3);
+        expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+        return;
+      }
       if (p.tags.includes('fraction_muldiv')) {
         // 分数の乗除: 答えは 約分して 分子・分母とも 20 以下
         fractions++;
@@ -78,6 +106,7 @@ describe('第1章 正の数と負の数', () => {
       expect(Math.abs(answerOf(p)), p.promptText).toBeLessThanOrEqual(360);
     });
     expect(fractions).toBeGreaterThan(N / 8);
+    expect(laws).toBeGreaterThan(N / 20);
   });
 
   it('各章の 最初の戦闘は ★1 まで、2 つめは ★2 まで', () => {
@@ -97,12 +126,20 @@ describe('第1章 正の数と負の数', () => {
     });
   });
 
-  it('四則混合: ★1 は 累乗だけ(3 乗は 3 まで)、★2 は ×が先・かっこが先(1けた、答えは 54 まで)。★3 は 20 までの数で、答えは整数', () => {
+  it('四則混合: ★1 は 累乗だけ(3 乗は 3 まで。4 回に 1 回は 累乗で 表す 選択式)、★2 は ×が先・かっこが先(1けた、答えは 54 まで)。★3 は 20 までの数で、答えは整数(分配法則の 工夫を 除く)', () => {
+    let notations = 0;
     each('g1.sign.mixed', 1, (p) => {
       expect(p.tags, p.promptText).toHaveLength(1);
       expect(p.tags[0], p.promptText).toMatch(/power/);
+      if (p.tags[0] === 'power_notation') {
+        notations++;
+        expect(p.answer.kind, p.promptText).toBe('choice');
+        return;
+      }
       if (p.promptText.includes('³')) expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(3);
     });
+    expect(notations).toBeGreaterThan(N / 8);
+    expect(notations).toBeLessThan(N / 2.5);
     const tags2 = new Set<string>();
     each('g1.sign.mixed', 2, (p) => {
       p.tags.forEach((t) => tags2.add(t));
@@ -110,10 +147,17 @@ describe('第1章 正の数と負の数', () => {
       expect(Math.abs(answerOf(p)), p.promptText).toBeLessThanOrEqual(54);
     });
     expect([...tags2].sort()).toEqual(['order_of_operations', 'parentheses_first']);
+    let dists = 0;
     each('g1.sign.mixed', 3, (p) => {
-      expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(20);
       expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+      if (p.tags.includes('distributive')) {
+        // 分配法則の 工夫: 分数は 分母の 公倍数を かける / まとめると 100・10・20 に なる
+        dists++;
+        return;
+      }
+      expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(20);
     });
+    expect(dists).toBeGreaterThan(N / 10);
   });
 
   it('素因数分解: ★1 は 40 まで、★2 は 42〜99 で 素因数 3 つまで(11・13 も。★1 と重ならない)、★3 は 300 まで', () => {

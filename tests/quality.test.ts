@@ -61,7 +61,10 @@ describe('Judge(教育的な ルール)', () => {
     expect(judgeProblem(good({ promptText: '|−7| = ?' }))?.reason).toBe('OUT_OF_SCOPE');
     expect(judgeProblem(good({ templateId: 'g1.expr.collect', explanation: ['\\frac{3}{x} + 1'] }))?.reason).toBe('OUT_OF_SCOPE');
     // 文字式で 表す 問題(model)は 4/x で よい(先生の方針 2026-09-28)
-    expect(judgeProblem(good({ templateId: 'g1.expr.model', explanation: ['\\frac{4}{x}'] }))).toBeNull();
+    expect(judgeProblem(good({ templateId: 'g1.expr.model', answer: { kind: 'choice', options: ['\\frac{4}{x}', '4x'], correct: 0 }, explanation: ['\\frac{4}{x}'] }))).toBeNull();
+    // 2 文字の 式の 計算は 2 年(代入は 1 年で よい)。単元で 当てるので、出題タイプの 名前に よらない
+    expect(judgeProblem(good({ templateId: 'g1.expr.collect', answer: { kind: 'expression', expected: '2a+6b' } }))?.reason).toBe('OUT_OF_SCOPE');
+    expect(judgeProblem(good({ templateId: 'g1.expr.collect', answer: { kind: 'expression', expected: '2x+6' } }))).toBeNull();
     addTeacherRejected({ 'good:bad-one': '文が 不自然' });
     expect(judgeProblem(good({ key: 'good:bad-one' }))?.reason).toBe('TEACHER_REJECTED');
   });

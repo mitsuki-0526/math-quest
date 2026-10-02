@@ -3,7 +3,8 @@
 //   npm run review:import -- refs/review/judge.txt              (ゲームの「1問ずつ ○×判定」の コピーを 貼った ファイル)
 // 結果: 画面と refs/review/<元の名前>-summary.md。Claude は これを 見て、問題を 作る ルール・Judge の ルール・
 // src/data/grade1/rejected.ts(1 問だけの ×)・テストに 書き直す(docs/difficulty.md「問題の品質の 仕組み」)
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const file = process.argv[2];
 if (!file) {
@@ -68,3 +69,36 @@ const dest = file.replace(/\.csv$/i, '') + '-summary.md';
 writeFileSync(dest, out.join('\n'));
 console.log(out.slice(0, 4 + groups.size + 2).join('\n'));
 console.log(`→ ${dest}`);
+
+// 判定の 記録(持っていける 財産)に 足す。同じ ID は 新しい 判定で 上書き。個人情報は 入れない(問題と 判定と 理由だけ)。
+// 次の ゲームで 同じ 単元の 手本にしたり、AI の 下見と 先生の 一致率を 測ったり する(docs/quality-kit.md)
+const DATASET = process.env.MQ_JUDGMENTS ?? 'quality/judgments.jsonl'; // テストでは 別の 場所に
+const iUnit = col('単元');
+const records = new Map();
+if (existsSync(DATASET))
+  for (const line of readFileSync(DATASET, 'utf8').split('\n'))
+    if (line.trim()) {
+      const r = JSON.parse(line);
+      records.set(r.id, r);
+    }
+const today = new Date().toISOString().slice(0, 10);
+for (const r of judged) {
+  const id = r[iId];
+  if (!id) continue;
+  records.set(id, {
+    id,
+    templateId: id.split('|')[0],
+    unit: iUnit >= 0 ? r[iUnit] : '',
+    type: r[iType] ?? '',
+    star: Number(r[iStar]) || null,
+    verdict: isNg(r) ? 'ng' : 'ok',
+    reasons: ((r[iWhy] ?? '').trim() ? r[iWhy].split(' / ').map((s) => s.trim()) : []),
+    question: (r[iQ] ?? '').replace(/\n/g, ' '),
+    answer: r[iAns] ?? '',
+    judgedAt: today,
+    game: 'math-quest',
+  });
+}
+mkdirSync(dirname(DATASET), { recursive: true });
+writeFileSync(DATASET, [...records.values()].map((r) => JSON.stringify(r)).join('\n') + '\n');
+console.log(`判定の 記録: ${DATASET}(${records.size} 件)`);
