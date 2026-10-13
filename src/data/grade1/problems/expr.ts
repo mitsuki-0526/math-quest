@@ -10,7 +10,7 @@ import { parseExpression, polyToTex } from '@/math/expr';
  *   g1.expr.collect    まとめ屋ゴブリン    同類項をまとめる(式入力)
  *   g1.expr.distribute 分配キツネ          分配法則・かっこをはずす(式入力)
  *   g1.expr.model      表しヒツジ          数量を文字式で表す(選択式)
- *   g1.expr.pattern    規則ムカデ          n番目の数(式入力)
+ *   g1.expr.pattern    規則ムカデ          n番目の数(数で答える)
  */
 const UNIT = '文字と式';
 
@@ -317,9 +317,10 @@ function genCollect(rng: Rng, d: Difficulty): Problem {
   // x の項が 消える式(答えが 数だけ)は 練習の ねらいから外れるので 作り直す
   if (a + s * c === 0) return genCollect(rng, d);
   const expected = `${a + s * c}x+${b + s * e}`;
-  // 3 回に 1 回は「2 つの式の 和・差」の 聞き方(授業の プリント「左の式から 右の式を ひけ」)
-  const twoExprs = rng.int(0, 2) === 0;
-  const ask = minus ? '左の式から 右の式を ひけ' : '和を 求めよ';
+  // たし算の 3 回に 1 回は「2 つの式の 和を 求めよ」の 聞き方(授業の プリント)。
+  // ひき算の「左の式から 右の式を ひけ」は 分かりにくいので 出さない(先生の印 2026-10-14)
+  const twoExprs = !minus && rng.int(0, 2) === 0;
+  const ask = '和を 求めよ';
   return {
     templateId: 'g1.expr.collect',
     difficulty: d,
@@ -984,110 +985,30 @@ function genModel(rng: Rng, d: Difficulty): Problem {
 
 // ---------------------------------------------------------------- 規則性(n番目)
 
+/**
+ * 規則性: 並びの 5〜8 番目の数を答える(どの ★ でも この形)。
+ * 先生の印(2026-10-14)「規則性の 問題は 難しすぎる。レベル 1 の 問題だけで 十分」で、
+ * n 番目を 式で 表す(★2)・棒の本数と 減っていく並び(★3)を やめた
+ */
 function genPattern(rng: Rng, d: Difficulty): Problem {
   const a = rng.int(2, 6); // 増える数
   const b = rng.int(1, 8); // 1番目の数
   const terms = [0, 1, 2, 3].map((i) => b + a * i);
-  const expected = `${a}n+${b - a}`;
-  if (d === 1) {
-    // 5番目の数を答える(数値)
-    const nth = rng.int(5, 8);
-    const value = b + a * (nth - 1);
-    return {
-      templateId: 'g1.expr.pattern',
-      difficulty: d,
-      prompt: `${terms.join(', ')}, \\ldots \\quad ${text(`この並びの ${nth} 番目の数は?`)}`,
-      promptText: `${terms.join(', ')}, … この並びの ${nth} 番目の数は?`,
-      answer: { kind: 'number', value: rat(value) },
-      hint: `いくつずつ 増えているか 数えてみよう`,
-      explanation: [`${text(`${a} ずつ 増えている`)}`, `${b} + ${a} \\times ${nth - 1} = ${value}`, `${text('答え: ')} ${value}`],
-      tags: ['pattern_value'],
-      key: `pat:${a}:${b}:${nth}`,
-      verify: `${b}+${a}*${nth - 1}`,
-    };
-  }
-  // ★3: 棒の本数(図形の並び)か 減っていく並び。以前は ★2 と 同じ形だった(2026-09-28)
-  if (d === 3) return rng.bool() ? genMatchsticks(rng, d) : genDecreasing(rng, d);
-  // ★2: n番目を式で
+  const nth = rng.int(5, 8);
+  const value = b + a * (nth - 1);
   return {
     templateId: 'g1.expr.pattern',
     difficulty: d,
-    prompt: `${terms.join(', ')}, \\ldots \\quad ${text('この並びの n 番目の数を n の式で 表せ')}`,
-    promptText: `${terms.join(', ')}, … この並びの n 番目の数を n の式で 表せ`,
-    answer: { kind: 'expression', expected },
-    hint: `${a} ずつ 増えているから、まず ${a}n を 考えて、ずれを 足し引きしよう`,
-    explanation: [`${text(`${a} ずつ 増える → ${a}n`)}`, `${text('1番目は ')} ${a} \\times 1 ${b - a < 0 ? '-' : '+'} ${Math.abs(b - a)} = ${b}`, `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`],
-    tags: ['pattern_expression'],
-    key: `patn:${a}:${b}`,
-    verify: expected,
-  };
-}
-
-/**
- * 棒で 図形を 横に つなげて 並べるときの 本数(教科書の「マッチ棒の問題」。チャレンジテストの規則性は 正答率 21〜40%)。
- * 1 個目は 辺の数、1 個 ふえるごとに 辺の数 − 1 本 ふえる
- */
-const SHAPES = [
-  { name: '正三角形', sides: 3 },
-  { name: '正方形', sides: 4 },
-  { name: '正五角形', sides: 5 },
-  { name: '正六角形', sides: 6 },
-];
-
-function genMatchsticks(rng: Rng, d: Difficulty): Problem {
-  const shape = rng.pick(SHAPES);
-  const step = shape.sides - 1;
-  const counts = [1, 2, 3].map((k) => shape.sides + step * (k - 1));
-  const expected = `${step}n+1`;
-  const story = `棒で ${shape.name}を 横に つなげて 並べる。${shape.name}が 1 個なら ${counts[0]} 本、2 個なら ${counts[1]} 本、3 個なら ${counts[2]} 本。`;
-  // 半分は 式を、半分は 20 個などのときの 本数を 聞く
-  if (rng.bool()) {
-    return {
-      templateId: 'g1.expr.pattern',
-      difficulty: d,
-      prompt: text(`${story}${shape.name}を n 個 つくるのに 必要な 棒の 本数を n の式で 表せ`),
-      promptText: `${story}${shape.name}を n 個 つくるのに 必要な 棒の 本数を n の式で 表せ`,
-      answer: { kind: 'expression', expected },
-      hint: `1 個 ふえるごとに ${step} 本 ふえる。はじめの 1 本に、${step} 本の まとまりが n 個`,
-      explanation: [`${text(`1 個 ふえるごとに ${step} 本 → ${step}n`)}`, `${text('1 個のとき ')} ${step} \\times 1 + 1 = ${shape.sides}`, `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`],
-      tags: ['pattern_matchsticks'],
-      key: `match:${shape.sides}`,
-      verify: expected,
-    };
-  }
-  const n = rng.pick([10, 12, 15, 20, 25, 30]);
-  const value = step * n + 1;
-  return {
-    templateId: 'g1.expr.pattern',
-    difficulty: d,
-    prompt: text(`${story}${shape.name}を ${n} 個 つくるのに 必要な 棒は 何本?`),
-    promptText: `${story}${shape.name}を ${n} 個 つくるのに 必要な 棒は 何本?`,
+    prompt: `${terms.join(', ')}, \\ldots \\quad ${text(`この並びの ${nth} 番目の数は?`)}`,
+    promptText: `${terms.join(', ')}, … この並びの ${nth} 番目の数は?`,
     answer: { kind: 'number', value: rat(value) },
-    hint: `n 個のときの 式を 先に 考えよう(1 個 ふえるごとに ${step} 本)`,
-    explanation: [`${text('n 個のとき ')} ${step}n + 1`, `${step} \\times ${n} + 1 = ${value}`, `${text('答え: ')} ${value} ${text('本')}`],
-    tags: ['pattern_matchsticks'],
-    key: `match:${shape.sides}:${n}`,
-    verify: `${step}*${n}+1`,
-  };
-}
-
-/** ★3: 減っていく並び(20, 17, 14, 11, … → −3n + 23) */
-function genDecreasing(rng: Rng, d: Difficulty): Problem {
-  const a = rng.int(2, 5);
-  const b = rng.int(15, 30);
-  const terms = [0, 1, 2, 3].map((i) => b - a * i);
-  const expected = `${-a}n+${b + a}`;
-  return {
-    templateId: 'g1.expr.pattern',
-    difficulty: d,
-    prompt: `${terms.join(', ')}, \\ldots \\quad ${text('この並びの n 番目の数を n の式で 表せ')}`,
-    promptText: `${terms.join(', ')}, … この並びの n 番目の数を n の式で 表せ`,
-    answer: { kind: 'expression', expected },
-    hint: `${a} ずつ 減っているから −${a}n。1 番目が ${b} になるように 数を たそう`,
-    explanation: [`${text(`${a} ずつ 減る → `)} -${a}n`, `${text('1番目は ')} -${a} \\times 1 + ${b + a} = ${b}`, `${text('答え: ')} ${polyToTex(parseExpression(expected)!)}`],
-    tags: ['pattern_decreasing'],
-    key: `patd:${a}:${b}`,
-    verify: expected,
+    hint: `いくつずつ 増えているか 数えてみよう`,
+    explanation: [`${text(`${a} ずつ 増えている`)}`, `${b} + ${a} \\times ${nth - 1} = ${value}`, `${text('答え: ')} ${value}`],
+    // 1 番目から n 番目までに 増えるのは (n − 1) 回。n 回 たして しまう まちがい
+    mistakes: [mistakeNum(b + a * nth, `1 番目から ${nth} 番目までに 増えるのは ${nth - 1} 回だよ(${nth} 回では ない)`)],
+    tags: ['pattern_value'],
+    key: `pat:${a}:${b}:${nth}`,
+    verify: `${b}+${a}*${nth - 1}`,
   };
 }
 

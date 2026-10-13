@@ -292,6 +292,8 @@ describe('第2章 文字と式', () => {
     each('g1.expr.collect', 1, (p) => expect(maxNum(p), p.promptText).toBeLessThanOrEqual(9));
     expect(tagsOf('g1.expr.collect', 2)).toEqual(['add_expression', 'collect_like_terms', 'subtract_expression']);
     for (const d of [1, 2, 3] as const) each('g1.expr.collect', d, (p) => expect(p.promptText, p.promptText).not.toMatch(/[ab]/));
+    // 「左の式から 右の式を ひけ」は 分かりにくいので 出さない(先生の印 2026-10-14)
+    each('g1.expr.collect', 2, (p) => expect(p.promptText, p.promptText).not.toMatch(/左の式/));
     each('g1.expr.collect', 3, (p) => {
       // 4/4x・3/3x・1x のような 約分していない係数を 出さない
       for (const [, n, q] of p.promptText.matchAll(/(\d+)\/(\d+)x/g)) {
@@ -364,9 +366,11 @@ describe('第2章 文字と式', () => {
     expect(seen).toBeGreaterThan(0);
   });
 
-  it('規則性: ★3 は ★2 と 形を変える(棒の本数・減っていく並び)', () => {
-    expect(tagsOf('g1.expr.pattern', 2)).toEqual(['pattern_expression']);
-    expect(tagsOf('g1.expr.pattern', 3)).toEqual(['pattern_decreasing', 'pattern_matchsticks']);
+  it('規則性: どの ★ でも 並びの 5〜8 番目の数を 答える形だけ(先生の印 2026-10-14「難しすぎる。レベル 1 だけで 十分」)', () => {
+    for (const d of [1, 2, 3] as const) {
+      expect(tagsOf('g1.expr.pattern', d)).toEqual(['pattern_value']);
+      each('g1.expr.pattern', d, (p) => expect(p.answer.kind).toBe('number'));
+    }
   });
 
   it('修練の泉(チャレンジテスト基準)の 代入 ★3 に 負の数を 累乗の式に 代入する形がある(x は −2 か −3)', () => {
