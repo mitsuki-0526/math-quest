@@ -7,6 +7,7 @@ import { saveStore } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { Button } from './Ui';
 import { Tex } from './Tex';
+import { MathText } from '@/ui/components/MathText';
 
 /**
  * 物語で手に入れる入力キー(要件 F49 の拡張)。フラグ `key:<記号>` が立つまで 🔒 で押せない。
@@ -227,8 +228,8 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => press(k)}
           >
-            <span>{locked(k) ? '🔒' : k.label}</span>
-            {k.caption && <span class="key-cap">{locked(k) ? '???' : k.caption}</span>}
+            <span class={!locked(k) && /^[a-z]$/.test(k.label) ? 'key-var' : undefined}>{locked(k) ? '🔒' : k.label}</span>
+            {k.caption && <span class="key-cap">{locked(k) ? '???' : <MathText text={k.caption} />}</span>}
           </button>
         ))}
       </div>
