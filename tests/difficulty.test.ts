@@ -308,9 +308,18 @@ describe('第2章 文字と式', () => {
     for (const d of [1, 2, 3] as const) each('g1.expr.distribute', d, (p) => expect(p.promptText, p.promptText).not.toMatch(/\)\(/));
   });
 
-  it('代入(教科書の順): ★1 は 正の数(x は 6 まで)、★2 は 負の数の代入(2x + 7、5 − 2x、−x、x²、−x²)', () => {
-    each('g1.expr.subst', 1, (p) => expect(Number(p.promptText.match(/x = (\d+)/)?.[1]), p.promptText).toBeLessThanOrEqual(6));
-    each('g1.expr.subst', 2, (p) => expect(p.promptText, p.promptText).toMatch(/^x = −[1-6] /));
+  it('代入(先生の印 2026-10-13 で 1 段ずつ 上げた): ★1 は 1 つの項 ax に 正の数、★2 は ax + b に 正の数・1 つの項に 負の数、★3 は 負の数の代入', () => {
+    each('g1.expr.subst', 1, (p) => {
+      expect(p.promptText, p.promptText).toMatch(/^x = [2-6] のとき、\dx の値は\?$/);
+      expect(p.tags).toEqual(['substitute_one_term']);
+    });
+    each('g1.expr.subst', 2, (p) => {
+      if (p.tags[0] === 'substitute') expect(Number(p.promptText.match(/x = (\d+)/)?.[1]), p.promptText).toBeLessThanOrEqual(6);
+      else expect(p.promptText, p.promptText).toMatch(/^x = −[1-6] のとき、\dx の値は/);
+    });
+    each('g1.expr.subst', 3, (p) => expect(p.promptText, p.promptText).toMatch(/^x = −?\d/));
+    // 累乗の 式(5x³ など)は 道中には 出さない(修練の泉の ★3 だけ)
+    each('g1.expr.subst', 3, (p) => expect(p.promptText, p.promptText).not.toMatch(/³/));
   });
 
   it('係数の問題(同類項・かっこ・代入・規則性)では 分母に 文字が来る式を 出さない(先生の方針 2026-09-28。文字式で表す問題の 4/x と、式の値の 12/x(2026-10-02)は よい)', () => {
@@ -346,13 +355,13 @@ describe('第2章 文字と式', () => {
     expect(tagsOf('g1.expr.pattern', 3)).toEqual(['pattern_decreasing', 'pattern_matchsticks']);
   });
 
-  it('代入 ★3 に 負の数を 累乗の式に 代入する形がある(x は −2 か −3)', () => {
+  it('修練の泉(チャレンジテスト基準)の 代入 ★3 に 負の数を 累乗の式に 代入する形がある(x は −2 か −3)', () => {
     let power = 0;
     each('g1.expr.subst', 3, (p) => {
       if (!p.tags.includes('substitute_power')) return;
       power++;
       expect(p.promptText, p.promptText).toMatch(/x = −[23] /);
-    });
+    }, 'challenge');
     expect(power).toBeGreaterThan(N / 4);
   });
 
@@ -410,8 +419,10 @@ describe('第2章 教科書の 本文から 足した形(2026-10-13)', () => {
     each(id, d, (p) => p.tags.forEach((t) => tags.add(t)));
     return tags;
   };
-  it('代入 ★3 に 2 文字で 累乗を ふくむ 式、表しヒツジ ★3 に 数の 表し方(★2 には 出ない)', () => {
-    expect(tagsOf('g1.expr.subst', 3).has('substitute_two_power')).toBe(true);
+  it('修練の泉の 代入 ★3 に 2 文字で 累乗を ふくむ 式、表しヒツジ ★3 に 数の 表し方(★2 には 出ない)', () => {
+    const challenge = new Set<string>();
+    each('g1.expr.subst', 3, (p) => p.tags.forEach((t) => challenge.add(t)), 'challenge');
+    expect(challenge.has('substitute_two_power')).toBe(true);
     expect(tagsOf('g1.expr.model', 3).has('number_form')).toBe(true);
     expect(tagsOf('g1.expr.model', 2).has('number_form')).toBe(false);
   });

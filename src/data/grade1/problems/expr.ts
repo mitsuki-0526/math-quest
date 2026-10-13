@@ -1,4 +1,4 @@
-import { mistakeNum, registerTemplate, type Difficulty, type Mistake, type Problem } from '@/math/template';
+import { mistakeNum, registerTemplate, type Difficulty, type Mistake, type Problem, type ProblemBasis } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { add, isZero, rat, sub, toTex } from '@/math/rational';
 import { paren, plainMinus, text } from '@/math/format';
@@ -28,9 +28,20 @@ function signedTex(c: number, v = ''): string {
 
 // ---------------------------------------------------------------- 代入
 
-function genSubst(rng: Rng, d: Difficulty): Problem {
-  if (d === 1) {
-    // ax + b に正の数を代入(x は 6 まで。章の最初の地点で出るので、かけ算は 九九の範囲)
+/**
+ * 式の値(代入)。先生の印(2026-10-13)「代入が 難しい。最初は 2x など 1 つの項で よい。今の 問題は もう 1 段 上で」で 1 段ずつ 上げた。
+ *   ★1: 1 つの項 ax に 正の数(x = 3 のとき 4x)
+ *   ★2: ax + b に 正の数(以前の ★1)/ 3 回に 1 回 1 つの項に 負の数(x = −3 のとき 4x)
+ *   ★3: 負の数の 代入(以前の ★2: 2x + 7、5 − 2x、−x、x²、−x²、12/x)/ 4 回に 1 回 2 文字の 代入
+ * 累乗の 式(−4x²、5x³)と 2 文字で 累乗を ふくむ 式は、修練の泉(チャレンジテスト基準)の ★3 と ボスで 出す
+ */
+function genSubst(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem {
+  if (d === 3 && basis === 'challenge') return genSubstPowerOrTwo(rng, d);
+  if (d === 1) return genSubstOneTerm(rng, d, rng.int(2, 6));
+  if (d === 3) return rng.int(0, 3) === 0 ? genSubstTwoLinear(rng, d) : genSubstNegative(rng, d);
+  if (rng.int(0, 2) === 0) return genSubstOneTerm(rng, d, -rng.int(1, 6));
+  {
+    // ★2: ax + b に正の数を代入(x は 6 まで。かけ算は 九九の範囲)
     const a = rng.int(2, 9);
     const b = rng.nonZero(9);
     const x = rng.int(2, 6);
@@ -43,14 +54,46 @@ function genSubst(rng: Rng, d: Difficulty): Problem {
       promptText: `x = ${x} のとき、${plainMinus(expr)} の値は?`,
       answer: { kind: 'number', value: rat(value) },
       hint: 'x のところに 数を そのまま 入れてみよう',
-      explanation: [`${expr.replace(/x/, `(${x})`)} = ${a * x}${signedTex(b)}`, `${text('答え: ')} ${value}`],
+      explanation: [`${a} \\times ${x}${signedTex(b)} = ${a * x}${signedTex(b)}`, `${text('答え: ')} ${value}`],
+      // 2x に x = 3 を 入れて 23 と 書いた(数字を 並べた)
+      mistakes: [mistakeNum(Number(`${a}${x}`) + b, `${a}x の x に ${x} を 入れると ${a} × ${x}。${a}${x} と 並べるのでは ないよ`)],
       tags: ['substitute'],
       key: `subst:${a}x${b}:${x}`,
       verify: `${a}*(${x})+(${b})`,
     };
   }
-  if (d === 2) {
-    // 負の数の代入(教科書の「x = −3 のとき 2x + 7、5 − 2x、−x、x²、−x²」の形)。x は −1 〜 −6
+}
+
+/** 1 つの 項 ax に 代入(★1 は 正の数 x = 3、★2 は 負の数 x = −3) */
+function genSubstOneTerm(rng: Rng, d: Difficulty, x: number): Problem {
+  const a = x > 0 ? rng.int(2, 9) : rng.int(2, 6);
+  const value = a * x;
+  const xs = plainMinus(String(x));
+  return {
+    templateId: 'g1.expr.subst',
+    difficulty: d,
+    prompt: `x = ${x} ${text('のとき、')} ${a}x ${text('の値は?')}`,
+    promptText: `x = ${xs} のとき、${a}x の値は?`,
+    answer: { kind: 'number', value: rat(value) },
+    hint: `${a}x は ${a} × x。x の ところに ${xs} を 入れよう${x < 0 ? '(負の数は かっこを つけて)' : ''}`,
+    explanation: [`${a}x = ${a} \\times ${paren(x)} = ${value}`, `${text('答え: ')} ${value}`],
+    mistakes:
+      x > 0
+        ? [
+            // 2x を 2 + x と 読んだ / 数字を 並べた(x = 3 で 23)
+            mistakeNum(a + x, `${a}x は ${a} × x の ことだよ(${a} + x では ない)`),
+            mistakeNum(Number(`${a}${x}`), `${a}x の x に ${x} を 入れると ${a} × ${x}。${a}${x} と 並べるのでは ないよ`),
+          ]
+        : [mistakeNum(-value, '数の 大きさは 合ってる! 正の数 × 負の数 は 負の数 だよ')],
+    tags: x > 0 ? ['substitute_one_term'] : ['substitute_negative'],
+    key: `subst1:${a}:${x}`,
+    verify: `${a}*(${x})`,
+  };
+}
+
+/** ★3: 負の数の代入(教科書の「x = −3 のとき 2x + 7、5 − 2x、−x、x²、−x²」の形)。x は −1 〜 −6 */
+function genSubstNegative(rng: Rng, d: Difficulty): Problem {
+  {
     const x = -rng.int(1, 6);
     // 1 つの項だけの式(−x、x²、−x²)は やさしいので 少なめ
     const form = rng.pick([0, 0, 1, 1, 2, 3, 4, 5]);
@@ -77,16 +120,26 @@ function genSubst(rng: Rng, d: Difficulty): Problem {
       answer: { kind: 'number', value: rat(value) },
       hint: power ? '負の数を 代入するときは かっこを つけて (−3)² のように。−x² は −(x²)' : 'x のところに かっこを つけて 入れよう',
       explanation: [`${work} = ${value}`, `${text('答え: ')} ${value}`],
+      // 負の数の 符号を 落として 代入した(2x + 7 に x = −3 で 13)/ (−3)² を −9 に した
+      mistakes:
+        form === 0
+          ? [mistakeNum(a * -x + b, `x = ${plainMinus(String(x))} は 負の数。${a} × (${plainMinus(String(x))}) = ${a * x} だよ`)]
+          : form === 1
+            ? [mistakeNum(b + a * x, `${a} × (${plainMinus(String(x))}) = ${a * x}。それを ひくから ${b} − (${a * x}) = ${b - a * x}`)]
+            : form === 3
+              ? [mistakeNum(-(x * x), '負の数の 2 乗は 正の数。(−3)² = (−3) × (−3) = 9')]
+              : form === 4
+                ? [mistakeNum(x * x, '−x² は −(x²)。x² を 先に 計算して、そのあと − を つけるよ')]
+                : [],
       tags: power ? ['substitute_power'] : ['substitute_negative'],
       key: `subst2:${expr}:${x}`,
       verify,
     };
   }
-  return genSubstPowerOrTwo(rng, d);
 }
 
 /**
- * ★2: a/x に 負の数を 代入(12/x に x = −3 → −4)。授業の プリントの 定着の 問題(2026-10-02)。
+ * ★3: a/x に 負の数を 代入(12/x に x = −3 → −4)。授業の プリントの 定着の 問題(2026-10-02)。
  * 数で 答える 式の値なので 分母に 文字が 来てよい(先生 2026-10-02)
  */
 function genSubstFraction(rng: Rng, d: Difficulty, x: number): Problem {
@@ -133,7 +186,11 @@ function genSubstPowerOrTwo(rng: Rng, d: Difficulty): Problem {
       verify: `${a}*(${x})**${e}`,
     };
   }
-  // 2文字の代入
+  return genSubstTwoLinear(rng, d);
+}
+
+/** 2 文字の 代入(x = 2, y = −3 のとき 3x − 2y + 4)。教科書の 基本の問題 */
+function genSubstTwoLinear(rng: Rng, d: Difficulty): Problem {
   const a = rng.nonZero(5);
   const b = rng.nonZero(5);
   const c = rng.nonZero(9);
