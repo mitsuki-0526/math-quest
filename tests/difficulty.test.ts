@@ -4,6 +4,7 @@ import { generateProblem, judge, type Difficulty, type Problem, type ProblemBasi
 import { toNumber } from '@/math/rational';
 import { createRng } from '@/math/rng';
 import { getEnemy } from '@/data/grade1/enemies';
+import { nodeDifficulty } from '@/engine/adaptive';
 import { grade1 } from '@/data/grade1/chapters';
 import type { NumberLineSpec, TableSpec } from '@/math/figure';
 
@@ -116,6 +117,19 @@ describe('第1章 正の数と負の数', () => {
       expect(battles[0].maxStar, `${c.id}.${battles[0].id}`).toBe(1);
       if (battles[1]) expect(battles[1].maxStar, `${c.id}.${battles[1].id}`).toBe(2);
     }
+  });
+
+  it('地点の ★: 上限(maxStar)と 出題タイプごとの 下限(minStars)。草原の道では 代入を ★2 から 出す(先生の要望 2026-10-13)', () => {
+    const road = grade1.chapters.find((c) => c.id === 'g1c2')!.nodes.find((n) => n.id === 'road2')!;
+    expect(nodeDifficulty(1, road, 'g1.expr.subst')).toBe(2);
+    expect(nodeDifficulty(3, road, 'g1.expr.subst')).toBe(2);
+    // ほかの 出題タイプは 生徒の ★ の まま(上限は 2)
+    expect(nodeDifficulty(1, road, 'g1.expr.collect')).toBe(1);
+    // 下限は 上限を こえない
+    expect(nodeDifficulty(1, { maxStar: 1, minStars: { t: 3 } }, 't')).toBe(1);
+    expect(nodeDifficulty(2, undefined, 't')).toBe(2);
+    // 草原の道に 代入の 敵(文字の妖精エックス)が いる
+    expect(road.enemies!.flat().map((e) => getEnemy(e).template)).toContain('g1.expr.subst');
   });
 
   it('絶対値: 記号 |−7| は使わず 文で聞く(中学校では 教えない)。★3 の「絶対値が a」は 10 まで', () => {

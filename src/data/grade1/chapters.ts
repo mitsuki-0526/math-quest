@@ -118,12 +118,14 @@ const g1c2: ChapterDef = {
     {
       id: 'road2',
       type: 'battle', maxStar: 2,
+      // 代入は ★2 から(ax + b・1 つの項に 負の数)。風車の丘は ★1 までなので、道中で ★2 の 代入に 触れる 所(先生の要望 2026-10-13)
+      minStars: { 'g1.expr.subst': 2 },
       name: '草原の道',
       x: 56,
       y: 56,
       next: ['stonewall', 'secret_well'],
       intro: 'C2-4',
-      enemies: [['collect_goblin', 'distribute_fox'], ['collect_goblin', 'distribute_fox'], ['distribute_fox', 'model_sheep']],
+      enemies: [['letter_fairy', 'collect_goblin'], ['collect_goblin', 'distribute_fox'], ['distribute_fox', 'model_sheep']],
       bg: 'bg_plain_road',
     },
     {

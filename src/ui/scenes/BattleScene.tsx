@@ -19,7 +19,7 @@ import {
   type BattleState,
 } from '@/engine/battle';
 import { playerStats, gainExp, addItem, removeItem, applyDefeat } from '@/engine/player';
-import { currentDifficulty, isWeak, recordAnswer, reviewTemplates, ensureDailyQuest } from '@/engine/adaptive';
+import { currentDifficulty, isWeak, nodeDifficulty, recordAnswer, reviewTemplates, ensureDailyQuest } from '@/engine/adaptive';
 import { practiceTemplates, enemyForTemplate } from '@/engine/practice';
 import { perksGainedBetween, nextPerk, type Perk } from '@/data/skills';
 import { getTemplate } from '@/math/template';
@@ -31,7 +31,7 @@ import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
 import '@/data/grade1/problems';
-import { needsFractionInput, type Difficulty, type Problem } from '@/math/template';
+import { needsFractionInput, type Problem } from '@/math/template';
 import { Bar, Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 import { Tex } from '@/ui/components/Tex';
@@ -99,7 +99,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
       encounters,
       getEnemy,
       player: { name: ps.name, hp: ps.hp, maxHp: ps.maxHp, attack: ps.attack, defense: ps.defense, timeBonus: ps.timeBonus, expMul: ps.expMul },
-      pickDifficulty: (t) => (tutorial ? 1 : (Math.min(currentDifficulty(saveStore.get()!, t), node?.maxStar ?? 3) as Difficulty)),
+      pickDifficulty: (t) => (tutorial ? 1 : nodeDifficulty(currentDifficulty(saveStore.get()!, t), node, t)),
       isWeak: (t) => isWeak(saveStore.get()!, t),
       hints: tutorial ? 99 : config.battle.hintsPerNode + ps.hintBonus,
       isBoss,

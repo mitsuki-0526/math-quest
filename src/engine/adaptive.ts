@@ -1,6 +1,7 @@
 import { config } from '@/data/config';
 import type { Difficulty } from '@/math/template';
 import type { SaveData, TemplateStats } from './save';
+import type { NodeDef } from './types';
 
 /**
  * 難易度の自動調整と苦手判定(要件 F45 F46)。
@@ -13,6 +14,16 @@ function statsOf(save: SaveData, templateId: string): TemplateStats | undefined 
 
 export function currentDifficulty(save: SaveData, templateId: string): Difficulty {
   return (statsOf(save, templateId)?.level ?? 1) as Difficulty;
+}
+
+/**
+ * その地点で 出す ★。生徒の ★ を、地点の 上限(maxStar)と 出題タイプごとの 下限(minStars)に おさめる。
+ * 下限は 上限を こえない(上限が 優先)
+ */
+export function nodeDifficulty(student: Difficulty, node: Pick<NodeDef, 'maxStar' | 'minStars'> | undefined, templateId: string): Difficulty {
+  const max = node?.maxStar ?? 3;
+  const min = Math.min(node?.minStars?.[templateId] ?? 1, max);
+  return Math.max(min, Math.min(student, max)) as Difficulty;
 }
 
 /** 正誤を記録し、必要なら難易度を上下する。戻り値は変化(+1 / -1 / 0) */
