@@ -28,6 +28,7 @@ export const assetManifest: Record<string, AssetEntry> = {
   char_pita_icon: { emoji: '🦉', label: 'ピタ' },
   char_teo: { emoji: '🧔', label: 'テオ' },
   char_elder: { emoji: '👴', label: '村長' },
+  char_mei: { emoji: '👧', label: 'ミオ' },
   char_rena: { emoji: '🛡️', label: 'レナ' },
 
   // --- 第1章の敵 ---
@@ -103,7 +104,7 @@ export const assetManifest: Record<string, AssetEntry> = {
   bg_forest_shrine: { emoji: '🗿', label: '符号の碑' },
 
   // --- 第2章の背景 ---
-  bg_plain_gate: { emoji: '🚪', label: '平原の関所', alias: 'bg_plain_village' },
+  bg_plain_gate: { emoji: '🚪', label: '平原の関所' },
   bg_plain_village: { emoji: '🏡', label: '羊飼いの集落' },
   bg_plain_windmill: { emoji: '🌬️', label: '風車の丘', alias: 'bg_plain_road' },
   bg_plain_sheepfold: { emoji: '🐑', label: '羊の囲い', alias: 'bg_plain_village' },

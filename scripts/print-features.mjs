@@ -12,6 +12,10 @@ export function normalizeExpr(s) {
     .replace(/[（]/g, '(')
     .replace(/[）]/g, ')')
     .replace(/[＝]/g, '=')
+    .replace(/[≦≤]/g, '<=')
+    .replace(/[≧≥]/g, '>=')
+    .replace(/[＜]/g, '<')
+    .replace(/[＞]/g, '>')
     .replace(/\s+/g, '');
 }
 
@@ -21,7 +25,7 @@ export function normalizeExpr(s) {
  */
 export function isMathExpr(expr) {
   const s = normalizeExpr(expr);
-  return s.length > 0 && s.length <= 60 && /^[0-9a-z+\-*/÷^().,=〜~□]+$/i.test(s);
+  return s.length > 0 && s.length <= 60 && /^[0-9a-z+\-*/÷^().,=<>π〜~□]+$/i.test(s);
 }
 
 /** 式に 出てくる 数(符号なしの 大きさ) */
@@ -33,7 +37,8 @@ export function numbersOf(expr) {
  * 加減の 項の 数(かっこの 外の + − で 区切る)。(−3)+(+5)−(−2) → 3、−2−6+5 → 3
  */
 export function termCount(expr) {
-  const s = normalizeExpr(expr).split('=')[0];
+  // 等式・不等式は 左辺だけ 数える
+  const s = normalizeExpr(expr).split(/[=<>]/)[0];
   let depth = 0;
   let terms = 1;
   for (let i = 0; i < s.length; i++) {

@@ -26,13 +26,14 @@ export const CURRICULUM_RULES: JudgeRule[] = [
     id: 'no-letter-denominator-in-calculation',
     reason: 'OUT_OF_SCOPE',
     scope: { units: ['文字と式'] },
-    // 「数量を 文字式で 表す」(選択式)の 4/x は よい。計算して 式で 答える 問題だけ
+    // 「数量を 文字式で 表す」(選択式)の 4/x と、式の値(12/x に x = −3。数で 答える)は よい。
+    // 計算して 式で 答える 問題だけ(先生 2026-10-02「12/x の 式の値は 大丈夫」)
     test: (p) => {
-      if (p.answer.kind === 'choice') return null;
+      if (p.answer.kind !== 'expression') return null;
       const t = texts(p).find((s) => /\\frac\{[^{}]*\}\{[^{}]*[a-z][^{}]*\}|\/\s*\(?[a-z]/.test(s));
       return t ? `計算の 問題で 分母に 文字: ${t.slice(0, 40)}` : null;
     },
-    source: '先生の方針 2026-09-28「分母に 文字が 来てほしくないのは 係数に 関する 問題のみ」',
+    source: '先生の方針 2026-09-28「分母に 文字が 来てほしくないのは 係数に 関する 問題のみ」、式の値は 2026-10-02 に 許可',
   },
   {
     id: 'one-letter-expressions-in-grade1',

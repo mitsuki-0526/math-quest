@@ -66,7 +66,7 @@ export const towns: Record<string, TownDef> = {
     shop: { tools: ['potion', 'hi_potion', 'hint_feather', 'time_sand'], gear: ['silver_sword', 'leather_shield'] },
     villagers: [
       { name: '洞窟守', emoji: '🧔‍♂️', before: '天秤の部屋は 全部で 七つ。一番奥のが 一番 大きい', after: '碑が 直ってから、洞窟の 壁が 明るくなった。ランプが いらねえ' },
-      { name: 'メイ', emoji: '👧', before: '羊たちは 集落の みんなが 見ててくれてる。でも ベルがないと 夜が 心配で', after: 'エックスったら、また 光るもの 集めてる。今度は 返すのよ!' },
+      { name: 'ミオ', emoji: '👧', before: '羊たちは 集落の みんなが 見ててくれてる。でも ベルがないと 夜が 心配で', after: 'エックスったら、また 光るもの 集めてる。今度は 返すのよ!' },
       { name: '荷運びの男', emoji: '🧑‍🔧', before: '集落の 鍋も 風車の 部品も、みんな 影に 持っていかれた', after: '返しに 行く 道具の 山だ。持ち主の 名前が 光ってるから 間違えねえ' },
       { name: '旅の騎士', emoji: '🛡️', before: '……王国の 者だ。北の様子を 調べている。ここから 北は、まだ 行くな', after: '碑を 直したのは 君か。……王都にも、君のような 力が 必要になるかもしれない' },
       { name: 'テオ', emoji: '🧔', before: 'オレも 影に やられた。靴下を 片方 持っていかれた。損した!', after: '靴下ーっ! 帰ってきた! 得した! ……いや、これも 元に戻っただけか' },

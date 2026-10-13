@@ -31,13 +31,15 @@ import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
 import '@/data/grade1/problems';
-import { type Difficulty, type Problem } from '@/math/template';
+import { needsFractionInput, type Difficulty, type Problem } from '@/math/template';
 import { Bar, Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 import { Tex } from '@/ui/components/Tex';
 import { ProblemPrompt, answerTex, givenTex, isProse } from '@/ui/components/ProblemView';
 import { Figure } from '@/ui/components/Figure';
 import { AnswerInput } from '@/ui/components/AnswerInput';
+import { MathText } from '@/ui/components/MathText';
+import { FractionPractice, FRACTION_PRACTICE_FLAG } from '@/ui/components/FractionPractice';
 
 /**
  * バトル画面(要件 F20〜F28)。ロジックは engine/battle.ts、ここは表示と入力と時間管理。
@@ -75,6 +77,8 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   const askedAt = useRef<number>(Date.now());
   /** タイマーから呼ぶ時間切れ処理。毎回の描画で最新のものに差し替える */
   const onTimeoutRef = useRef<() => void>(() => {});
+  /** はじめて 分数で 答える 問題が 出たら、先に 入れ方を 練習する(1 回だけ。その間は 時間を 止め、コマンドの キーも 止める) */
+  const practicing = !!state?.problem && state.phase === 'question' && needsFractionInput(state.problem) && !save?.flags[FRACTION_PRACTICE_FLAG];
   const reviewTemplate = useRef<string | null>(null);
 
   useEffect(() => {
@@ -116,7 +120,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   // タイマーは問題ごとに張り直す。時間切れの処理は最新の状態で行う(ヒントやアイテムを使った後の状態を巻き戻さないため)
   const timed = !tutorial && config.battle.timeLimitOn === 1;
   useEffect(() => {
-    if (!state || state.phase !== 'question' || !timed) return;
+    if (!state || state.phase !== 'question' || !timed || practicing) return;
     const limit = state.timeLimit;
     const t = setInterval(() => {
       const left = limit - (Date.now() - askedAt.current) / 1000;
@@ -128,7 +132,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     }, 200);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state?.turn, state?.phase, state?.timeLimit]);
+  }, [state?.turn, state?.phase, state?.timeLimit, practicing]);
 
   // ダメージ数字は 900ms で消す
   useEffect(() => {
@@ -140,7 +144,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   // ↑↓ でコマンド、Esc でアイテム窓を閉じる
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!state || state.phase !== 'question' || explain) return;
+      if (!state || state.phase !== 'question' || explain || practicing) return;
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
         const ids: Cmd[] = state.canFlee ? ['attack', 'hint', 'item', 'run'] : ['attack', 'hint', 'item'];
@@ -150,7 +154,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cmd, state, explain]);
+  }, [cmd, state, explain, practicing]);
 
   // Enter で えらんだ コマンドを 実行する(ヒント・アイテム・にげる も キーボードだけで。先輩の先生の意見 2026-09-29)。
   // 答えの 入力欄の Enter(送信)より 先に 受けたいので、捕捉(capture)で 聞く。
@@ -158,7 +162,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   const [itemCursor, setItemCursor] = useState(0);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!state || state.phase !== 'question' || explain || e.isComposing) return;
+      if (!state || state.phase !== 'question' || explain || practicing || e.isComposing) return;
       const owned = Object.entries(saveStore.get()?.inventory ?? {}).filter(
         ([id, n]) => n > 0 && getItem(id).kind === 'consumable' && (timed || !getItem(id).use?.time),
       );
@@ -187,7 +191,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cmd, state, explain, menu, itemCursor]);
+  }, [cmd, state, explain, menu, itemCursor, practicing]);
 
   if (!save || !state || !ctxRef.current) return null;
   const ctx = ctxRef.current;
@@ -417,7 +421,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
         <div class="rpg-window msg-window" aria-live="polite">
           {state.log.slice(-3).map((line, i, arr) => (
             <p key={`${state.encounterIndex}-${state.log.length - arr.length + i}`} class={i === arr.length - 1 ? 'latest' : ''}>
-              {line}
+              <MathText text={line} />
             </p>
           ))}
         </div>
@@ -516,7 +520,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                   <Sprite id="char_pita_icon" size={28} class="inline-icon" alt="" /> {characters.pita.name}「{hintText}」
                 </p>
               )}
-              <AnswerInput answer={problem.answer} value={input} onChange={setInput} onSubmit={submit} disabled={!!explain} />
+              <AnswerInput answer={problem.answer} value={input} onChange={setInput} onSubmit={submit} disabled={!!explain || practicing} fraction={needsFractionInput(problem)} />
             </>
           )}
           {state.phase === 'victory' && (
@@ -559,6 +563,18 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
             ))}
         </div>
       </div>
+
+      {practicing && problem && (
+        <FractionPractice
+          expression={problem.answer.kind === 'expression'}
+          onDone={() => {
+            updateSave((d) => (d.flags[FRACTION_PRACTICE_FLAG] = true));
+            // 練習の 時間は 問題の 時間に 入れない
+            askedAt.current = Date.now();
+            setRemaining(state.timeLimit);
+          }}
+        />
+      )}
 
       {explain && (
         <div class="overlay" role="dialog" aria-label="解説">

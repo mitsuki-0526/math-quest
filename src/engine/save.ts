@@ -42,7 +42,7 @@ export interface SaveData {
   inventory: Record<string, number>;
   /** 会話・イベントのフラグ */
   flags: Record<string, boolean>;
-  /** 会話の効果で変わった表示名(例: 羊飼いの少女 → メイ) */
+  /** 会話の効果で変わった表示名(例: 羊飼いの少女 → ミオ) */
   renames?: Record<string, string>;
   progress: {
     /** 現在の章ID(例: g1c1) */

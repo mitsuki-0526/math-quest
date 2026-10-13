@@ -22,7 +22,7 @@ const NAME_TO_ID = {
   レナ: 'rena',
   ノア: 'noa',
   ゼノン: 'zenon',
-  メイ: 'mei',
+  ミオ: 'mei',
   エックス: 'cat_x',
   符号王ネガ: 'king_nega',
   仮面の書記官: 'masked_scribe',

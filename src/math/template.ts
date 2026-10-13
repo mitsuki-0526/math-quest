@@ -51,6 +51,24 @@ function numToRat(v: number): Rational {
   return rat(Math.round(v * 10), 10);
 }
 
+/**
+ * 答えに 分数を 入れる 問題か(「/」で 入れる)。分数の 入れ方を 知らない 生徒が 多いので、
+ * はじめての ときに 練習させ、入力欄に 見本を 出す(先生の要望 2026-10-04)。
+ * 小数で 見せる 答え(answerLabel)は 小数で 入れればよいので のぞく
+ */
+export function needsFractionInput(p: Problem): boolean {
+  // 小数で 見せる 答え(5.2、−0.7x − 2.7)だけ のぞく。分数の 形で 見せる 答え(\frac{x+5}{4})は 分数を 入れる
+  if (p.answerLabel && !p.answerLabel.includes('frac')) return false;
+  const a = p.answer;
+  if (a.kind === 'number') return a.value.d !== 1n;
+  if (a.kind === 'numbers') return a.values.some((v) => v.d !== 1n);
+  if (a.kind === 'expression') {
+    const poly = parseExpression(a.expected);
+    return !!poly && poly.terms.some((t) => t.coef.d !== 1n);
+  }
+  return false;
+}
+
 /** 誤答が どの「よくある まちがい」か。当てはまらなければ undefined */
 export function diagnose(p: Problem, input: string): string | undefined {
   for (const m of p.mistakes ?? []) if (judge(m.answer, input).correct) return m.say;
@@ -60,6 +78,7 @@ export function diagnose(p: Problem, input: string): string | undefined {
 function sameAnswer(a: AnswerSpec, b: AnswerSpec): boolean {
   if (a.kind === 'number' && b.kind === 'number') return eq(a.value, b.value);
   if (a.kind === 'choice' && b.kind === 'choice') return a.correct === b.correct;
+  if (a.kind === 'expression' && b.kind === 'expression') return judgeExpression(a.expected, b.expected).correct;
   if (a.kind === 'numbers' && b.kind === 'numbers') {
     const key = (xs: Rational[]) => xs.map(toString).sort().join(',');
     return key(a.values) === key(b.values);

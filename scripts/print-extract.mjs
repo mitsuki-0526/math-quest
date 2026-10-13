@@ -1,6 +1,7 @@
 // 授業の プリント(画像)を ローカル LLM で 読み取り、問題の「特徴」を 集計する(docs/print-import.md)。
 //   npm run print:extract -- refs/prints/加減        (フォルダの 中の png / jpg を すべて)
 //   npm run print:extract -- refs/prints/加減 --model qwen3-vl:8b --passes 2 --width 900
+//   npm run print:extract -- refs/prints/2章_honbun --not-answer 20,26   (解答の ページと 見まちがえた ページを 集計に 入れる)
 // ・画像も 読み取りも この パソコンの 中だけ(Ollama: http://127.0.0.1:11434)。外の サービスには 送らない
 // ・LLM には 式を 書き写させる だけ。項の数・数の 範囲などは プログラムが 計算する(print-features.mjs)
 // ・2 回 読ませて 食い違った 問題は「要確認」に(符号・数の 読み違いを 見つける)
@@ -26,6 +27,10 @@ const PASSES = Number(opt('passes', '2'));
 // 900px で 12 問 すべて 正しく 1 回 約 100 秒、620px でも 正しく 約 60 秒(字の 大きい 試しの プリント)
 const WIDTH = Number(opt('width', '900'));
 const HOST = 'http://127.0.0.1:11434';
+// LLM が 解答の ページと 見まちがえた ページを 集計に 入れる(例: --not-answer 20,26,27,28)。
+// 教科書の 章末問題は 答えが 下に 小さく 載っていて、解答の ページと 判定された(2026-10-13)
+const NOT_ANSWER = new Set(opt('not-answer', '').split(',').filter(Boolean).map(Number));
+const forcedQuestion = (img) => NOT_ANSWER.has(Number(img.match(/p(\d+)\.\w+$/)?.[1]));
 if (!dir || !existsSync(dir)) {
   console.error('使い方: npm run print:extract -- refs/prints/<単元のフォルダ> [--model qwen3-vl:8b] [--passes 2] [--width 900]');
   process.exit(1);
@@ -255,6 +260,15 @@ for (const img of images) {
     if (passes.some((p) => p.error)) console.warn(`${img}: 読み取りの 結果を 取り出せませんでした(${passes.find((p) => p.error).error})`);
     else writeFileSync(out, JSON.stringify({ model: MODEL, image: img, passes }, null, 2));
   }
+  // 解答の ページでは ないと 指定された ページ: 2 回目を 読んでいなければ 読む
+  if (forcedQuestion(img) && passes.length < PASSES && !passes.some((p) => p.error)) {
+    if (readCount++ === 0) await ensureServer();
+    const file = resized(join(dir, img));
+    for (let k = passes.length; k < PASSES; k++) passes.push(await readPage(file, PROMPTS[k % PROMPTS.length]));
+    totalSec += passes.slice(1).reduce((s, p) => s + p.seconds, 0);
+    if (!passes.some((p) => p.error)) writeFileSync(out, JSON.stringify({ model: MODEL, image: img, passes }, null, 2));
+  }
+  if (forcedQuestion(img)) passes = passes.map((p) => ({ ...p, answerPage: false }));
   const [first0, ...others] = passes;
   // PDF の 見出しから 取れた 題名・段階・解答かを 優先する
   const m = pageMeta[img];

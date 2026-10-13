@@ -293,8 +293,17 @@ describe('第2章 文字と式', () => {
     each('g1.expr.distribute', 1, (p) => {
       if (p.tags[0] === 'distribute') expect(maxNum(p), p.promptText).toBeLessThanOrEqual(5);
     });
-    expect(tagsOf('g1.expr.distribute', 2)).toEqual(['distribute', 'divide_expression']);
-    expect(tagsOf('g1.expr.distribute', 3)).toEqual(['distribute_fraction', 'distribute_fraction_form', 'distribute_two']);
+    // 項 × 分数(★2)・整数 × 分数の係数の式(★3)は 授業の プリント(2026-10-02)
+    expect(tagsOf('g1.expr.distribute', 2)).toEqual(['distribute', 'divide_expression', 'term_times_fraction']);
+    expect(tagsOf('g1.expr.distribute', 3)).toEqual(['distribute_fraction', 'distribute_fraction_form', 'distribute_int_fraction', 'distribute_two']);
+    // 一次式 ÷ 数の わられる式の 数は 36 まで
+    each('g1.expr.distribute', 2, (p) => {
+      if (p.tags[0] === 'divide_expression') expect(maxNum(p), p.promptText).toBeLessThanOrEqual(36);
+    });
+    // ★3 の かっこの前の 整数は 30 まで(整数 × 分数の係数の式)
+    each('g1.expr.distribute', 3, (p) => {
+      if (p.tags[0] === 'distribute_int_fraction') expect(maxNum(p), p.promptText).toBeLessThanOrEqual(30);
+    });
     // 負の数を かっこの前に書くときは −3(2x − 5)。(−3)(2x − 5) とは書かない
     for (const d of [1, 2, 3] as const) each('g1.expr.distribute', d, (p) => expect(p.promptText, p.promptText).not.toMatch(/\)\(/));
   });
@@ -304,11 +313,12 @@ describe('第2章 文字と式', () => {
     each('g1.expr.subst', 2, (p) => expect(p.promptText, p.promptText).toMatch(/^x = −[1-6] /));
   });
 
-  it('係数の問題(同類項・かっこ・代入・規則性)では 分母に 文字が来る式を 出さない(先生の方針 2026-09-28。文字式で表す問題の 4/x は よい)', () => {
+  it('係数の問題(同類項・かっこ・代入・規則性)では 分母に 文字が来る式を 出さない(先生の方針 2026-09-28。文字式で表す問題の 4/x と、式の値の 12/x(2026-10-02)は よい)', () => {
     const letterDen = /\\frac\{[^{}]*\}\{[^{}]*[a-z][^{}]*\}|\/\s*\(?[a-z]/;
     for (const id of ['g1.expr.subst', 'g1.expr.collect', 'g1.expr.distribute', 'g1.expr.pattern'])
       for (const d of [1, 2, 3] as const)
         each(id, d, (p) => {
+          if (p.answer.kind === 'number') return;
           const all = [p.prompt, p.promptText, ...p.explanation, ...(p.answer.kind === 'choice' ? p.answer.options : []), p.answer.kind === 'expression' ? p.answer.expected : ''];
           for (const t of all) expect(t, `${p.promptText} / ${t}`).not.toMatch(letterDen);
         });
@@ -352,7 +362,80 @@ describe('第2章 文字と式', () => {
       each('g1.expr.model', d, (p) => p.tags.forEach((t) => tags.add(t)));
       expect(tags.has('notation'), `★${d}`).toBe(true);
       expect(tags.has('inequality'), `★${d}`).toBe(d === 3);
+      // 式の 意味(ごく小問。先生 2026-10-04)は ★2・★3 に 少しだけ
+      expect(tags.has('expression_meaning'), `★${d}`).toBe(d >= 2);
     }
+    let meaning = 0;
+    each('g1.expr.model', 3, (p) => void (p.tags.includes('expression_meaning') && meaning++));
+    expect(meaning / N).toBeLessThan(0.2);
+  });
+
+  it('仮面の書記官(ボス)の 発展の形(授業の 発展プリント 2026-10-02): 各段階に 1 つずつ まざり、道中には 出ない', () => {
+    const phases = getEnemy('masked_scribe').phases!.map((ph) => ph.templates);
+    expect(phases).toEqual([
+      ['g1.expr.subst', 'g1.expr.boss_subst'],
+      ['g1.expr.collect', 'g1.expr.distribute', 'g1.expr.boss_calc'],
+      ['g1.expr.model', 'g1.expr.pattern', 'g1.expr.boss_relation'],
+    ]);
+    const tagsOf = (id: string, d: Difficulty) => {
+      const tags = new Set<string>();
+      each(id, d, (p) => p.tags.forEach((t) => tags.add(t)));
+      return [...tags].sort();
+    };
+    expect(tagsOf('g1.expr.boss_calc', 1)).toEqual(['boss_decimal', 'boss_div_fraction']);
+    expect(tagsOf('g1.expr.boss_calc', 3)).toEqual(['boss_decimal_subtract', 'boss_div_fraction', 'boss_fraction_form', 'boss_fraction_two', 'boss_int_times_fraction']);
+    for (const d of [1, 2, 3] as const) {
+      // 2 文字の 式の 計算(2 年)は 出さない。数は 20 まで
+      each('g1.expr.boss_calc', d, (p) => {
+        expect(p.promptText, p.promptText).not.toMatch(/[a-wyz]/);
+        expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(20);
+      });
+      // 式の値は 整数、負の数を 代入する
+      each('g1.expr.boss_subst', d, (p) => {
+        // 正の数に なる 式を 選ぶ 問題(教科書の 章の問題 B)は 選択式
+        if (p.tags.includes('boss_sign_choice')) return expect(d).toBeGreaterThan(1);
+        expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+        expect(p.promptText, p.promptText).toMatch(/^x = −/);
+      });
+    }
+    // 不等式は ★2 から
+    expect(tagsOf('g1.expr.boss_relation', 1)).toEqual(['boss_relation_eq']);
+    expect(tagsOf('g1.expr.boss_relation', 3)).toContain('boss_relation_ineq');
+  });
+});
+
+describe('第2章 教科書の 本文から 足した形(2026-10-13)', () => {
+  const tagsOf = (id: string, d: Difficulty) => {
+    const tags = new Set<string>();
+    each(id, d, (p) => p.tags.forEach((t) => tags.add(t)));
+    return tags;
+  };
+  it('代入 ★3 に 2 文字で 累乗を ふくむ 式、表しヒツジ ★3 に 数の 表し方(★2 には 出ない)', () => {
+    expect(tagsOf('g1.expr.subst', 3).has('substitute_two_power')).toBe(true);
+    expect(tagsOf('g1.expr.model', 3).has('number_form')).toBe(true);
+    expect(tagsOf('g1.expr.model', 2).has('number_form')).toBe(false);
+  });
+  it('正の数に なる 式を 選ぶ: 正解は a = −2 で 正、ほかは 負', () => {
+    // 累乗の 前の − は 累乗の あと(−a² = −(a²))。JS の ** に 直すときに かっこを 付ける
+    const val = (t: string) =>
+      Function(`return ${t.replace(/(\(-a\)|a)\^\{(\d)\}/g, '(($1)**$2)').replace(/a/g, '(-2)')}`)() as number;
+    let n = 0;
+    each('g1.expr.boss_subst', 3, (p) => {
+      if (p.answer.kind !== 'choice') return;
+      n++;
+      p.answer.options.forEach((o, i) => expect(val(o) > 0, o).toBe(i === (p.answer as { correct: number }).correct));
+    });
+    expect(n).toBeGreaterThan(20);
+  });
+  it('分数の形の式の加減: 答えは 約分した形(分母は 1 でない)', () => {
+    each('g1.expr.boss_calc', 3, (p) => {
+      if (!p.tags.includes('boss_fraction_form') || p.answer.kind !== 'expression') return;
+      const m = p.answer.expected.match(/^\((-?\d*)x([+-]\d+)\)\/(\d+)$/);
+      expect(m, p.answer.expected).not.toBeNull();
+      const [n1, c, q] = [Number(m![1] === '' ? 1 : m![1] === '-' ? -1 : m![1]), Number(m![2]), Number(m![3])];
+      expect(q).toBeGreaterThan(1);
+      expect(gcd(gcd(Math.abs(n1), Math.abs(c)), q), p.answer.expected).toBe(1);
+    });
   });
 });
 

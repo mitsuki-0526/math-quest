@@ -19,7 +19,7 @@ export const characters = {
   rena: { name: 'レナ', sprite: 'char_rena', emoji: '🛡️' },
   noa: { name: 'ノア', emoji: '🧙' },
   zenon: { name: 'ゼノン', emoji: '🧙‍♂️' },
-  mei: { name: 'メイ', emoji: '👧' },
+  mei: { name: 'ミオ', sprite: 'char_mei', emoji: '👧' },
   cat_x: { name: 'エックス', emoji: '🐈‍⬛' },
   // 第4章のボス「湖の双子竜」は 1 体の敵だが、会話では 2 頭が別々に話す
   narabi: { name: 'ナラビ', sprite: 'enemy_twin_dragons', emoji: '🐉' },
@@ -28,6 +28,14 @@ export const characters = {
 } as const satisfies Record<string, Character>;
 
 export type CharacterId = keyof typeof characters;
+
+/**
+ * 名前が まだ 分からない 話し手(台本の「npc:羊飼いの少女」など)のうち、登場人物と 同じ人の 立ち絵を 使うもの。
+ * 羊飼いの少女は 名前を 思い出す前の ミオ(第2章)。名前の ない ほかの NPC は 立ち絵を 出さない
+ */
+export const npcLooks: Record<string, CharacterId> = {
+  羊飼いの少女: 'mei',
+};
 
 /** 主人公の見た目(最初に選ぶ)。立ち絵の素材IDとプレースホルダ */
 export const playerLooks = {

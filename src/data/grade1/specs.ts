@@ -71,4 +71,23 @@ export const grade1Specs: ProblemSpec[] = [
   spec('g1.sign.average', 3, { integerAnswer: true, source: '学習プリントの仮平均、チャレンジテスト R6' }),
 ];
 
-registerSpecs(grade1Specs);
+/**
+ * 第2章「文字と式」の ボス(仮面の書記官)専用の 発展の形。授業の 発展プリント(2026-10-02 取り込み)の 集計に 合わせる。
+ * 道中の 出題タイプの 仕様は まだ ここに 入れていない(docs/difficulty.md の 表が 正)
+ */
+const exprSpec = (templateId: string, difficulty: Difficulty, s: Omit<ProblemSpec, 'templateId' | 'difficulty' | 'grade' | 'unit'>): ProblemSpec => ({
+  templateId,
+  difficulty,
+  grade: 1,
+  unit: '文字と式',
+  ...s,
+});
+const BOSS_SOURCE = '授業の 発展プリント(2026-10-02): 小数の係数・一次式 ÷ 分数・分数の係数の かっこ 2 つ・2 文字の 式の値・関係を表す式。教科書の 章の問題 B(2026-10-13): 分数の形の式の加減・正の数に なる 式を 選ぶ';
+export const grade1ExprSpecs: ProblemSpec[] = ([1, 2, 3] as const).flatMap((d) => [
+  // 数は 20 まで(÷ 分数で わられる式の 係数)。小数は 0.1〜1.9。整数 × 分数の係数の式 2 つは 数が 10 個
+  exprSpec('g1.expr.boss_calc', d, { maxNumber: 20, numberCount: [3, 10], source: BOSS_SOURCE }),
+  exprSpec('g1.expr.boss_subst', d, { maxNumber: 9, numberCount: [1, 5], integerAnswer: true, maxAnswer: 100, forms: { boss_sign_choice: { numberCount: [0, 0] } }, source: BOSS_SOURCE }),
+  exprSpec('g1.expr.boss_relation', d, { maxNumber: 1500, numberCount: [2, 6], source: BOSS_SOURCE }),
+]);
+
+registerSpecs([...grade1Specs, ...grade1ExprSpecs]);

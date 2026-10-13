@@ -49,6 +49,11 @@ describe('プリントの 特徴', () => {
     expect(isMathExpr('3x+2-5x')).toBe(true);
     expect(isMathExpr('60を素因数分解しなさい。')).toBe(false);
     expect(isMathExpr('')).toBe(false);
+    // 不等式・円周率も 式(文字式の 章。2026-10-02 に 文章あつかいで 外れていた)
+    expect(isMathExpr('2*x + 6 <= 3*x')).toBe(true);
+    expect(isMathExpr('3x+4≧5y')).toBe(true);
+    expect(isMathExpr('π * r^2')).toBe(true);
+    expect(isMathExpr('a ÷ b = 3 余り 2')).toBe(false);
   });
 
   it('2 回の 読み取りの 比べ方(書き方の 違いは 同じ、符号の 違いは 別)', () => {

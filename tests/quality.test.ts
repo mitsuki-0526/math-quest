@@ -59,7 +59,9 @@ describe('MathValidator(数学の 検査)', () => {
 describe('Judge(教育的な ルール)', () => {
   it('未習の 記号・係数の 分母の 文字・先生の × を 見つける', () => {
     expect(judgeProblem(good({ promptText: '|−7| = ?' }))?.reason).toBe('OUT_OF_SCOPE');
-    expect(judgeProblem(good({ templateId: 'g1.expr.collect', explanation: ['\\frac{3}{x} + 1'] }))?.reason).toBe('OUT_OF_SCOPE');
+    expect(judgeProblem(good({ templateId: 'g1.expr.collect', answer: { kind: 'expression', expected: '3x+1' }, explanation: ['\\frac{3}{x} + 1'] }))?.reason).toBe('OUT_OF_SCOPE');
+    // 式の値(数で 答える)の 12/x は よい(先生 2026-10-02)
+    expect(judgeProblem(good({ templateId: 'g1.expr.subst', prompt: 'x = -3 \\text{のとき、} \\frac{12}{x}', explanation: ['\\frac{12}{(-3)} = -4'] }))).toBeNull();
     // 文字式で 表す 問題(model)は 4/x で よい(先生の方針 2026-09-28)
     expect(judgeProblem(good({ templateId: 'g1.expr.model', answer: { kind: 'choice', options: ['\\frac{4}{x}', '4x'], correct: 0 }, explanation: ['\\frac{4}{x}'] }))).toBeNull();
     // 2 文字の 式の 計算は 2 年(代入は 1 年で よい)。単元で 当てるので、出題タイプの 名前に よらない

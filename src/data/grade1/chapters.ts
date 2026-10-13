@@ -99,7 +99,7 @@ const g1c2: ChapterDef = {
   unit: '文字と式',
   inscription: '文字は どんな数の 代わりにも なれる',
   intro: 'C2-0',
-  templates: ['g1.expr.subst', 'g1.expr.collect', 'g1.expr.distribute', 'g1.expr.model', 'g1.expr.pattern'],
+  templates: ['g1.expr.subst', 'g1.expr.collect', 'g1.expr.distribute', 'g1.expr.model', 'g1.expr.pattern', 'g1.expr.boss_subst', 'g1.expr.boss_calc', 'g1.expr.boss_relation'],
   nextChapter: 'g1c3',
   nodes: [
     { id: 'village2', type: 'town', name: '羊飼いの集落', x: 8, y: 74, next: ['windmill'], bg: 'bg_plain_village' },

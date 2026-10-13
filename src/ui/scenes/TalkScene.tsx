@@ -4,10 +4,11 @@ import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { ScriptRunner, getScene, type ScriptEffect, type Step } from '@/engine/script';
 import { addItem, equip, clearChapter } from '@/engine/player';
-import { characters, playerSprite, type CharacterId } from '@/data/characters';
+import { characters, npcLooks, playerSprite, type CharacterId } from '@/data/characters';
 import { enemies } from '@/data/grade1/enemies';
 import type { FigureSpec } from '@/math/figure';
 import { getAsset, assetUrl } from '@/assets/manifest';
+import { MathText } from '@/ui/components/MathText';
 import { Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 import { Figure } from '@/ui/components/Figure';
@@ -192,8 +193,11 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
     return who === 'player' ? save!.player.name : (characters[who as CharacterId]?.name ?? enemies[who]?.name ?? who);
   };
   const render = (t: string) => t.replaceAll('{player}', save!.player.name);
-  const actorSprite = (who: string) =>
-    who === 'player' ? playerSprite(save!.player.look) : ((characters[who as CharacterId] as { sprite?: string } | undefined)?.sprite ?? enemies[who]?.sprite ?? `char_${who}`);
+  const actorSprite = (who: string) => {
+    if (who === 'player') return playerSprite(save!.player.look);
+    const id = npcLook(who) ?? who;
+    return (characters[id as CharacterId] as { sprite?: string } | undefined)?.sprite ?? enemies[id]?.sprite ?? `char_${id}`;
+  };
   const speaker = step?.type === 'say' ? step.who : null;
   const [left, right] = pickActors(scene.actors, speaker);
   const bgAsset = getAsset(bg ?? scene.bg ?? 'bg_village_square');
@@ -243,7 +247,9 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
         {step?.type === 'say' && (
           <>
             {step.who !== 'narrator' && <span class="talk-name">{displayName(step.who)}</span>}
-            <p>{render(step.text).slice(0, typed)}</p>
+            <p>
+              <MathText text={render(step.text).slice(0, typed)} />
+            </p>
             {typed >= step.text.length && <span class="talk-next">▼</span>}
           </>
         )}
@@ -264,7 +270,7 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
         <div class="talk-log" onClick={(e) => e.stopPropagation()}>
           {[...logRef.current, ...(runnerRef.current?.history ?? [])].map((l, k) => (
             <div key={k}>
-              <b>{displayName(l.who)}</b> {render(l.text)}
+              <b>{displayName(l.who)}</b> <MathText text={render(l.text)} />
             </div>
           ))}
         </div>
@@ -273,11 +279,20 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
   );
 }
 
-/** 立ち絵の配置: 主人公は左、それ以外は右。話者以外を薄くする */
+/**
+ * 名前が まだ 分からない 話し手が、登場人物の 誰と 同じ人か(npcLooks)。
+ * 登場人物の 欄は「羊飼いの少女(ミオ)」のように かっこ書きが 付くことが あるので 外して 引く
+ */
+function npcLook(who: string): CharacterId | undefined {
+  if (!who.startsWith('npc:')) return undefined;
+  return npcLooks[who.slice(4).replace(/[((].*[))]$/, '')];
+}
+
+/** 立ち絵の配置: 主人公は左、それ以外は右。話者以外を薄くする。名前の ない NPC は 立ち絵の ある 人(npcLooks)だけ 出す */
 function pickActors(actors: string[], speaker: string | null): [string | null, string | null] {
   const left = actors.includes('player') ? 'player' : null;
-  const others = actors.filter((a) => a !== 'player' && !a.startsWith('npc:'));
+  const others = actors.filter((a) => a !== 'player' && (!a.startsWith('npc:') || npcLook(a)));
   let right = others[0] ?? null;
-  if (speaker && speaker !== 'player' && others.includes(speaker)) right = speaker;
+  if (speaker && speaker !== 'player' && (others.includes(speaker) || npcLook(speaker))) right = speaker;
   return [left, right];
 }

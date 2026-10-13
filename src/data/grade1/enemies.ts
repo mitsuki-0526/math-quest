@@ -177,9 +177,9 @@ export const enemies: Record<string, EnemyDef> = {
     gold: 100,
     boss: true,
     phases: [
-      { untilHpRatio: 1, templates: ['g1.expr.subst'], line: '仮面の書記官「x は x。数ではない。……ならば x に 数を入れて 答えられるか?」' },
-      { untilHpRatio: 0.66, templates: ['g1.expr.collect', 'g1.expr.distribute'], line: '仮面の書記官「ほう。では 文字のまま 計算してみせよ。数でないものを 足せるものか」' },
-      { untilHpRatio: 0.33, templates: ['g1.expr.model', 'g1.expr.pattern'], line: '仮面の書記官「……最後だ。この文を、式にしてみせよ。名前のない世界では、それは できぬはずだ」' },
+      { untilHpRatio: 1, templates: ['g1.expr.subst', 'g1.expr.boss_subst'], line: '仮面の書記官「x は x。数ではない。……ならば x に 数を入れて 答えられるか?」' },
+      { untilHpRatio: 0.66, templates: ['g1.expr.collect', 'g1.expr.distribute', 'g1.expr.boss_calc'], line: '仮面の書記官「ほう。では 文字のまま 計算してみせよ。数でないものを 足せるものか」' },
+      { untilHpRatio: 0.33, templates: ['g1.expr.model', 'g1.expr.pattern', 'g1.expr.boss_relation'], line: '仮面の書記官「……最後だ。この文を、式にしてみせよ。名前のない世界では、それは できぬはずだ」' },
     ],
     lines: {
       appear: '仮面の書記官が 羽根ペンを かまえた!',

@@ -45,6 +45,8 @@ interface Props {
   onSubmit(v: string): void;
   disabled?: boolean;
   submitLabel?: string;
+  /** 答えが 分数(needsFractionInput)。入れ方の 見本を 出し、「/」キーを 目立たせる */
+  fraction?: boolean;
 }
 
 interface Key {
@@ -59,7 +61,6 @@ interface Key {
 }
 
 const TEXT_KINDS: AnswerKind[] = ['number', 'numbers', 'factorization', 'expression'];
-const NUMERIC: AnswerKind[] = ['number', 'numbers'];
 const WITH_EXPR: AnswerKind[] = ['number', 'numbers', 'expression'];
 
 /** モック画面2のパレット配置。式入力(expression: x, √, かっこ)のキーは M5 で有効化する */
@@ -90,7 +91,7 @@ const KEYS: Key[][] = [
   ],
   [
     { label: '0' },
-    { label: '.', caption: '小数点', kinds: NUMERIC },
+    { label: '.', caption: '小数点', kinds: WITH_EXPR },
     { label: ',', caption: '答えを区切る', kinds: ['numbers'] },
   ],
 ];
@@ -109,7 +110,7 @@ function letterKeys(answer: AnswerSpec): Key[] {
   return vars.slice(0, 3).map((v) => ({ label: v, caption: v === 'π' ? '円周率 π' : `文字 ${v}`, kinds: ['expression' as AnswerKind] }));
 }
 
-export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submitLabel = 'こうげき (Enter)' }: Props) {
+export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submitLabel = 'こうげき (Enter)', fraction }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const save = useStore(saveStore);
   const flags = save?.flags ?? {};
@@ -196,6 +197,20 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
           </>
         ) : value.trim() ? (
           <span class="warn">まだ 数として 読めません</span>
+        ) : fraction ? (
+          // 「/」で 分数を 入れることに 慣れていない 生徒が 多い(先生 2026-10-04)。答えが 分数の 問題では 毎回 見本を 出す
+          <span class="answer-help fraction-help">
+            分数は 分子 → <b>/</b> → 分母 の 順に 押します:{' '}
+            {answer.kind === 'expression' ? (
+              <>
+                2/3x → <Tex tex="\frac{2}{3}x" />
+              </>
+            ) : (
+              <>
+                3/4 → <Tex tex="\frac{3}{4}" />
+              </>
+            )}
+          </span>
         ) : (
           <span class="answer-help">{help}</span>
         )}
@@ -205,7 +220,7 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
           <button
             type="button"
             key={k.label}
-            class={`key ${locked(k) ? 'locked' : ''}`}
+            class={`key ${locked(k) ? 'locked' : ''}${fraction && k.label === '/' ? ' key-spot' : ''}`}
             disabled={disabled || !usable(k) || locked(k)}
             tabIndex={-1}
             title={locked(k) ? 'まだ 手に入れていない 力' : k.caption}

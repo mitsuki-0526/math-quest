@@ -1821,6 +1821,36 @@ img.sprite {
   background: repeating-linear-gradient(135deg, #1a2036 0 6px, #141a2c 6px 12px);
 }
 
+/* 会話・メッセージの 窓の 文字式(MathText)。ドット絵の 書体では × と x が 同じ 形に 見えるので、
+   文字は 数式の 斜体(KaTeX の 書体)、× ÷ は 本文の 書体で 描く */
+.mt-var {
+  font-family: KaTeX_Math, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 1.12em;
+  padding: 0 0.04em;
+}
+.mt-op {
+  font-family: var(--font-body);
+  padding: 0 0.12em;
+}
+
+/* 分数の 答えの とき「/」キーを 目立たせる(動きは 増やさない: 枠の 色だけ) */
+.key.key-spot {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-dim) inset;
+}
+.answer-help.fraction-help {
+  color: var(--gold-2);
+}
+.fraction-help b {
+  padding: 0 4px;
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius-sm);
+}
+.fraction-practice .answer-form {
+  margin-top: 8px;
+}
+
 /* ---------- 修練の泉・クエスト・レベルの力 ---------- */
 .spring-list {
   display: grid;
@@ -2017,7 +2047,7 @@ img.sprite {
   font-size: 0.85em;
   color: var(--sub);
 }
-.catalog-options span::before {
+.catalog-options > span::before {
   content: '・';
 }
 .catalog-answer {
