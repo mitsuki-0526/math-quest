@@ -1,9 +1,15 @@
 import katex from 'katex';
 import { useMemo } from 'preact/hooks';
 
+/**
+ * 分数を 教科書と 同じ 大きさで 描く(\displaystyle)。KaTeX は 文中の 数式の 分数を 小さく 描くので、
+ * 選択肢の x/6 などが 読みにくかった(先生の指摘 2026-10-14)。行の 中に 置いたまま、分数だけ 大きくする
+ */
+const big = (tex: string) => `\\displaystyle ${tex}`;
+
 /** KaTeX で数式を描く。失敗しても例外にせず、赤字で元の文字列を出す(throwOnError: false)。 */
 export function Tex({ tex, block = false, class: cls }: { tex: string; block?: boolean; class?: string }) {
-  const html = useMemo(() => katex.renderToString(tex, { throwOnError: false, displayMode: block, strict: 'ignore' }), [tex, block]);
+  const html = useMemo(() => katex.renderToString(block ? tex : big(tex), { throwOnError: false, displayMode: block, strict: 'ignore' }), [tex, block]);
   return <span class={`tex ${cls ?? ''}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
@@ -20,7 +26,7 @@ export function ProseTex({ tex, class: cls }: { tex: string; class?: string }) {
         p.text ? (
           <span key={i}>{p.value}</span>
         ) : (
-          <span key={i} dangerouslySetInnerHTML={{ __html: katex.renderToString(p.value, { throwOnError: false, strict: 'ignore' }) }} />
+          <span key={i} dangerouslySetInnerHTML={{ __html: katex.renderToString(big(p.value), { throwOnError: false, strict: 'ignore' }) }} />
         ),
       )}
     </span>
