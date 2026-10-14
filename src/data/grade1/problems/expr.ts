@@ -10,7 +10,7 @@ import { parseExpression, polyToTex } from '@/math/expr';
  *   g1.expr.collect    まとめ屋ゴブリン    同類項をまとめる(式入力)
  *   g1.expr.distribute 分配キツネ          分配法則・かっこをはずす(式入力)
  *   g1.expr.model      表しヒツジ          数量を文字式で表す(選択式)
- *   g1.expr.pattern    規則ムカデ          n番目の数(数で答える)
+ *   g1.expr.pattern    規則ムカデ          n番目の数(数で答える)/ n 番目を表す式を選ぶ
  */
 const UNIT = '文字と式';
 
@@ -986,14 +986,17 @@ function genModel(rng: Rng, d: Difficulty): Problem {
 // ---------------------------------------------------------------- 規則性(n番目)
 
 /**
- * 規則性: 並びの 5〜8 番目の数を答える(どの ★ でも この形)。
- * 先生の印(2026-10-14)「規則性の 問題は 難しすぎる。レベル 1 の 問題だけで 十分」で、
- * n 番目を 式で 表す(★2)・棒の本数と 減っていく並び(★3)を やめた
+ * 規則性(どの ★ でも 同じ 形)。
+ *   3 回に 2 回: 並びの 5〜8 番目の数を答える
+ *   3 回に 1 回: n 番目の数を表す 式を 4 つから 選ぶ(3, 7, 11, … → 4n − 1)
+ * 先生の印(2026-10-14)「規則性は 難しすぎる。レベル 1 だけで 十分」で 式を 書く 問題と 棒の本数を やめ、
+ * そのあと「式を 4 択で 選ぶ 問題を 追加」。問題文の 長さが 数の 桁で 変わるので、見せ方は いつも 文章(layout)
  */
 function genPattern(rng: Rng, d: Difficulty): Problem {
   const a = rng.int(2, 6); // 増える数
   const b = rng.int(1, 8); // 1番目の数
   const terms = [0, 1, 2, 3].map((i) => b + a * i);
+  if (rng.int(0, 2) === 0) return genPatternChoice(rng, d, a, b, terms);
   const nth = rng.int(5, 8);
   const value = b + a * (nth - 1);
   return {
@@ -1002,6 +1005,7 @@ function genPattern(rng: Rng, d: Difficulty): Problem {
     prompt: `${terms.join(', ')}, \\ldots \\quad ${text(`この並びの ${nth} 番目の数は?`)}`,
     promptText: `${terms.join(', ')}, … この並びの ${nth} 番目の数は?`,
     answer: { kind: 'number', value: rat(value) },
+    layout: 'prose',
     hint: `いくつずつ 増えているか 数えてみよう`,
     explanation: [`${text(`${a} ずつ 増えている`)}`, `${b} + ${a} \\times ${nth - 1} = ${value}`, `${text('答え: ')} ${value}`],
     // 1 番目から n 番目までに 増えるのは (n − 1) 回。n 回 たして しまう まちがい
@@ -1009,6 +1013,45 @@ function genPattern(rng: Rng, d: Difficulty): Problem {
     tags: ['pattern_value'],
     key: `pat:${a}:${b}:${nth}`,
     verify: `${b}+${a}*${nth - 1}`,
+  };
+}
+
+/** n 番目の数を表す式を 4 つから 選ぶ(3, 7, 11, 15, … → 4n − 1)。n = 1 を 入れて 確かめる 解説を 付ける */
+function genPatternChoice(rng: Rng, d: Difficulty, a: number, b: number, terms: number[]): Problem {
+  const lin = (p: number, q: number) => `${coefTex(p, 'n')}${q === 0 ? '' : signedTex(q)}`;
+  const c = b - a;
+  const correctTex = lin(a, c);
+  // よくある まちがい: 1 番目の数を そのまま たす(an + b)/ 増える数を たす(n + a)/ 1 番目の数を かける(bn + a)
+  const wrongs: [string, string][] = [
+    [lin(a, b), `n = 1 を 入れると ${a + b} に なって、1 番目の ${b} に ならないよ。${a}n の あとの 数は ${b} − ${a}`],
+    [lin(1, a), `${a} ずつ 増えるのは ${a}n。n + ${a} だと 1 ずつ しか 増えないよ`],
+    [lin(b, a), `n の 前の 数は 増える数(${a})。1 番目の 数 ${b} では ないよ`],
+  ];
+  // 表示が 同じに なる 選択肢(b = a の とき an + b と bn + a など)は のぞく
+  const seen = new Set([correctTex]);
+  const picked = wrongs.filter(([t]) => !seen.has(t) && seen.add(t));
+  // 足りない ときは 減る向き(−an + …)で 補う
+  if (picked.length < 3) picked.push([lin(-a, b + a), `${a} ずつ 増えて いるので、n の 前は +${a}`]);
+  const options = rng.shuffle([correctTex, ...picked.slice(0, 3).map(([t]) => t)]);
+  const correct = options.indexOf(correctTex);
+  return {
+    templateId: 'g1.expr.pattern',
+    difficulty: d,
+    // 文の 中の n も 数式の 斜体で(教科書と 同じ 見た目)
+    prompt: `${terms.join(', ')}, \\ldots \\quad ${text('この並びの ')} n ${text(' 番目の数を 表す 式は?')}`,
+    promptText: `${terms.join(', ')}, … この並びの n 番目の数を 表す 式は?`,
+    answer: { kind: 'choice', options, correct },
+    layout: 'prose',
+    hint: `${a} ずつ 増えているから ${a}n。n = 1 を 入れて 1 番目の ${b} に なるか 確かめよう`,
+    explanation: [
+      `${text(`${a} ずつ 増える → `)} ${a}n`,
+      `${text('n = 1 のとき ')} ${a} \\times 1 ${c < 0 ? '-' : '+'} ${Math.abs(c)} = ${b} ${text(' で 1 番目と 合う')}`,
+      `${text('答え: ')} ${correctTex}`,
+    ],
+    mistakes: picked.slice(0, 3).map(([t, say]) => ({ answer: { kind: 'choice' as const, options, correct: options.indexOf(t) }, say })),
+    tags: ['pattern_choice'],
+    key: `patc:${a}:${b}`,
+    verify: String(correct),
   };
 }
 

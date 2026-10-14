@@ -5,6 +5,7 @@ import { Tex, ProseTex } from './Tex';
 
 /** 文章の多い問題(文章題・表の問題など)は、折り返せるように本文の文字で描く */
 export function isProse(p: Problem): boolean {
+  if (p.layout) return p.layout === 'prose';
   return p.promptText.length > 30;
 }
 

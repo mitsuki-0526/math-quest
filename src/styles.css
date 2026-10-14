@@ -994,7 +994,8 @@ img.sprite {
   font-family: var(--font-body);
   font-size: 1.15em;
   line-height: 1.7;
-  text-align: left;
+  /* 文章の 問題も 式の 問題と 同じく 中央に(先生の要望 2026-10-14) */
+  text-align: center;
 }
 .question-text.prose .katex {
   font-size: 1.05em;

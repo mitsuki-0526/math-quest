@@ -366,10 +366,21 @@ describe('第2章 文字と式', () => {
     expect(seen).toBeGreaterThan(0);
   });
 
-  it('規則性: どの ★ でも 並びの 5〜8 番目の数を 答える形だけ(先生の印 2026-10-14「難しすぎる。レベル 1 だけで 十分」)', () => {
+  it('規則性: どの ★ でも「並びの 5〜8 番目の数」と「n 番目を表す式を 4 択で 選ぶ」だけ(先生の印 2026-10-14)。問題文の 見せ方は いつも 文章', () => {
     for (const d of [1, 2, 3] as const) {
-      expect(tagsOf('g1.expr.pattern', d)).toEqual(['pattern_value']);
-      each('g1.expr.pattern', d, (p) => expect(p.answer.kind).toBe('number'));
+      expect(tagsOf('g1.expr.pattern', d)).toEqual(['pattern_choice', 'pattern_value']);
+      each('g1.expr.pattern', d, (p) => {
+        expect(p.layout, p.promptText).toBe('prose');
+        if (p.answer.kind !== 'choice') return expect(p.answer.kind).toBe('number');
+        // 正解の 式は n = 1〜4 で 並びの 数に なる。ほかの 選択肢は ならない
+        const terms = p.promptText.split(',').slice(0, 4).map(Number);
+        const evalAt = (tex: string, n: number) => Function('n', `return ${tex.replace(/(\d)n/g, '$1*n').replace(/^-n/, '-1*n')}`)(n) as number;
+        p.answer.options.forEach((o, i) => {
+          const fits = terms.every((t, k) => evalAt(o, k + 1) === t);
+          expect(fits, `${p.promptText} / ${o}`).toBe(i === (p.answer as { correct: number }).correct);
+        });
+        expect(new Set(p.answer.options).size).toBe(4);
+      });
     }
   });
 
