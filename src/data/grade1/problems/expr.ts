@@ -1341,7 +1341,8 @@ function mistakeExpr(expected: string, say: string): Mistake {
  * 負の数を 2 乗して 負に した まちがい((−3)² = −9)に 一言を 出す
  */
 function genBossSubst(rng: Rng, d: Difficulty): Problem {
-  const forms = d === 1 ? ['sq_linear'] : d === 2 ? ['sum_sq', 'sq_minus_y', 'sq_linear', 'sign'] : ['sum_sq', 'sq_minus_y', 'sq_minus_xy', 'half', 'sign'];
+  // ★1 は 負の数を 1 次式に、★2 から 累乗・2 文字(1 段 やさしくした。先生の指摘 2026-10-14)
+  const forms = d === 1 ? ['neg_linear'] : d === 2 ? ['sq_linear', 'sq_linear', 'sum_sq', 'sq_minus_y', 'sign'] : ['sum_sq', 'sq_minus_y', 'sq_minus_xy', 'half', 'sign'];
   const form = rng.pick(forms);
   if (form === 'sign') return genBossSignChoice(rng, d);
   const neg = (max: number) => -rng.int(1, max);
@@ -1353,9 +1354,20 @@ function genBossSubst(rng: Rng, d: Difficulty): Problem {
   let calc: (wrong: boolean) => number;
   let work: string;
   let verify: string;
-  if (form === 'sq_linear') {
+  if (form === 'neg_linear') {
+    // ★1: 負の数を 1 次式に(x = −3 のとき 2x − 7)。累乗は ★2 から(先生の指摘 2026-10-14「書記官の 1 問目が 難しすぎる」)
+    const x = neg(5);
+    const a = rng.int(2, 6);
+    const b = rng.nonZero(9);
+    vars = [['x', x]];
+    tex = `${a}x${signedTex(b)}`;
+    txt = tex;
+    calc = () => a * x + b;
+    work = `${a} \\times ${paren(x)}${signedTex(b)} = ${a * x}${signedTex(b)}`;
+    verify = `${a}*(${x})+(${b})`;
+  } else if (form === 'sq_linear') {
     // x² + ax + b(x は 負の数)
-    const x = neg(d === 1 ? 4 : 5);
+    const x = neg(d === 2 ? 4 : 5);
     const a = rng.nonZero(6);
     const b = rng.nonZero(9);
     vars = [['x', x]];

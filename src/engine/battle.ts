@@ -198,6 +198,8 @@ function templateFor(state: BattleState, enemy: Combatant): string {
   if (state.isBoss && phases && phases.length > 0) {
     const idx = currentPhaseIndex(enemy, phases);
     const list = phases[idx].templates;
+    // ボス戦の 1 問目は 段階の 最初の 出題タイプ(ふつうの 問題)。発展の 形が いきなり 出ないように(先生の指摘 2026-10-14)
+    if (state.turn === 0) return list[0];
     return list[Math.floor(Math.random() * list.length)];
   }
   return enemy.def.template;

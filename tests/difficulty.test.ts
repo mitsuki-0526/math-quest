@@ -436,6 +436,8 @@ describe('第2章 文字と式', () => {
         expect(p.promptText, p.promptText).toMatch(/^x = −/);
       });
     }
+    // 発展の 式の値 ★1 は 負の数を 1 次式に(累乗は ★2 から。先生の指摘 2026-10-14)
+    each('g1.expr.boss_subst', 1, (p) => expect(p.promptText, p.promptText).not.toMatch(/[²³]/));
     // 不等式は ★2 から
     expect(tagsOf('g1.expr.boss_relation', 1)).toEqual(['boss_relation_eq']);
     expect(tagsOf('g1.expr.boss_relation', 3)).toContain('boss_relation_ineq');

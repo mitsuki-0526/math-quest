@@ -149,6 +149,13 @@ describe('battle engine', () => {
     expect(flee(boss).phase).toBe('question');
   });
 
+  it('ボス戦の 1 問目は 段階の 最初の 出題タイプ(仮面の書記官は ふつうの 代入。先生の指摘 2026-10-14)', () => {
+    for (let i = 0; i < 20; i++) {
+      const s = createBattle(ctx({ encounters: [['masked_scribe']], isBoss: true, rng: createRng(i + 1) }));
+      expect(s.problem!.templateId).toBe('g1.expr.subst');
+    }
+  });
+
   it('ボスはフェーズで出題テンプレートが変わる', () => {
     const c = ctx({ encounters: [['king_nega']], isBoss: true, pickDifficulty: () => 3 });
     let s = createBattle(c);
