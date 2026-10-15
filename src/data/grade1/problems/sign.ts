@@ -213,8 +213,17 @@ function addSubSteps(tex: string, tokens: AddSubToken[], asTerms: number[], valu
 }
 
 /** ボス(符号王ネガ)専用: 50 までの 2 けたの数の加減 */
+/**
+ * ボス(addsub_big)の項。★1 は 3 項とも 50 まで(先生の判定で ○)。
+ * ★2・★3 は 2 けたを 2 つだけにし、のこりは 1 けた(★2 は 30 まで、★3 は 50 まで)。
+ * 先生の判定(2026-10-15)「すべての数字が大きすぎる。2桁が多すぎて計算しにくい」(4 項とも 2 けたの式など)
+ */
 function addSubTerms(rng: Rng, d: Difficulty): number[] {
-  return Array.from({ length: d === 1 ? 3 : rng.pick([3, 4]) }, () => rng.nonZero(50));
+  if (d === 1) return Array.from({ length: 3 }, () => rng.nonZero(50));
+  const n = rng.pick([3, 4]);
+  const bigAt = rng.shuffle(Array.from({ length: n }, (_, i) => i)).slice(0, 2);
+  const bigMax = d === 2 ? 30 : 50;
+  return Array.from({ length: n }, (_, i) => (bigAt.includes(i) ? rng.nonZero(bigMax, 10) : rng.nonZero(9)));
 }
 
 /**

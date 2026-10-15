@@ -22,7 +22,8 @@ export const grade1Specs: ProblemSpec[] = [
   spec('g1.sign.addsub', 3, { maxNumber: 35, numberCount: [2, 4], source: '教科書の問「加法と減法の混じった計算」、授業の プリント(35 まで・小数・分数)' }),
   // 大きな数の加減(ボス専用)
   spec('g1.sign.addsub_big', 1, { maxNumber: 50, numberCount: [3, 3], integerAnswer: true, source: '先生の試遊(2026-09-24)でボスは 50 まで' }),
-  spec('g1.sign.addsub_big', 2, { maxNumber: 50, numberCount: [3, 4], integerAnswer: true, source: '同上' }),
+  // ★2・★3 は 2 けたを 2 つまで(のこりは 1 けた)。数の 個数は 生成側で 守り、テストで 確かめる
+  spec('g1.sign.addsub_big', 2, { maxNumber: 30, numberCount: [3, 4], integerAnswer: true, source: '先生の判定(2026-10-15)「2桁が多すぎて計算しにくい」' }),
   spec('g1.sign.addsub_big', 3, { maxNumber: 50, numberCount: [3, 4], integerAnswer: true, source: '同上' }),
   // 乗除(プラマイコウモリ)。★2 は わり算だけ(わられる数 81 まで)
   spec('g1.sign.muldiv', 1, { maxNumber: 9, numberCount: [2, 2], integerAnswer: true, source: '例題は 1けたの 2数の積' }),

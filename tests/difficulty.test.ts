@@ -241,6 +241,15 @@ describe('第1章 正の数と負の数', () => {
       });
   });
 
+  it('ボスの加減 ★2・★3 は 2 けたの数が 2 つだけ(★2 は 30 まで)。先生の判定「2桁が多すぎて計算しにくい」', () => {
+    for (const d of [2, 3] as const)
+      each('g1.sign.addsub_big', d, (p) => {
+        const nums = (p.promptText.match(/\d+/g) ?? []).map(Number);
+        expect(nums.filter((n) => n >= 10).length, p.promptText).toBe(2);
+        expect(Math.max(...nums), p.promptText).toBeLessThanOrEqual(d === 2 ? 30 : 50);
+      });
+  });
+
   it('小数の問題の正解は 小数で 見せる(26/5 ではなく 5.2)', () => {
     each('g1.sign.addsub', 3, (p) => {
       if (p.tags.includes('decimal_addsub')) expect(p.answerLabel, p.promptText).toMatch(/^-?\d+(\.\d)?$/);

@@ -23,7 +23,7 @@ interface Scene {
   targets: number[];
   /** 目標 or 基準 */
   baseWord: string;
-  /** 目標の言い方(「目標は 1日 30 個」) */
+  /** 目標の言い方(「1日の 目標は 30 個」。先生の判定 2026-10-15「1日の目標という文言が欲しい」) */
   base: (t: number) => string;
   /** 1 つ分の言い方(「27 個 売れた 日」) */
   one: (n: number) => string;
@@ -41,7 +41,7 @@ const SCENES: Scene[] = [
     unit: '個',
     targets: [30, 40, 50],
     baseWord: '目標',
-    base: (t) => `りんごを 売る 目標は 1日 ${t} 個`,
+    base: (t) => `りんごを 売る 1日の 目標は ${t} 個`,
     one: (n) => `${n} 個 売れた 日`,
     per: '日',
     col: (i) => `${i + 1}日目`,
@@ -52,7 +52,7 @@ const SCENES: Scene[] = [
     unit: '個',
     targets: [60, 80, 100],
     baseWord: '目標',
-    base: (t) => `パンを 焼く 目標は 1日 ${t} 個`,
+    base: (t) => `パンを 焼く 1日の 目標は ${t} 個`,
     one: (n) => `${n} 個 焼いた 日`,
     per: '日',
     col: (i) => `${i + 1}日目`,
@@ -63,7 +63,7 @@ const SCENES: Scene[] = [
     unit: '回',
     targets: [50, 100],
     baseWord: '目標',
-    base: (t) => `素振りの 目標は 1日 ${t} 回`,
+    base: (t) => `素振りの 1日の 目標は ${t} 回`,
     one: (n) => `${n} 回 素振りした 日`,
     per: '日',
     col: (i) => `${i + 1}日目`,
