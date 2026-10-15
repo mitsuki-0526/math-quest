@@ -478,6 +478,20 @@ describe('第2章 教科書の 本文から 足した形(2026-10-13)', () => {
     });
     expect(n).toBeGreaterThan(20);
   });
+  it('文章の 問題は 本文の 書体で、文中の 文字は \\text の 外(数式の 斜体)。先生の判定「フォントが違う」「a が教科書と違う」', () => {
+    const loneVar = /\\text\{[^}]*(?<![A-Za-z])[abcnxy](?![A-Za-z])[^}]*\}/;
+    for (const id of ['g1.expr.model', 'g1.expr.boss_subst', 'g1.expr.boss_relation'])
+      for (const d of [1, 2, 3] as const)
+        each(id, d, (p) => {
+          expect(p.prompt, p.promptText).not.toMatch(loneVar);
+          // 文章で 聞く 問題は 本文の 書体(式を 見せて 聞く x × 2 ÷ 9 や 代入は 数式の 書体の まま)
+          const sentence = ['model_expression', 'number_form', 'expression_meaning', 'inequality', 'boss_sign_choice'];
+          if (id === 'g1.expr.boss_relation' || p.tags.some((t) => sentence.includes(t))) expect(p.layout, p.promptText).toBe('prose');
+        });
+  });
+  it('同類項 ★2 に「2 つの式 … の 和を 求めよ」は 出ない(先生の判定「試験でも 見かけない」)', () => {
+    each('g1.expr.collect', 2, (p) => expect(p.promptText, p.promptText).not.toMatch(/和を|2 つの式/));
+  });
   it('分数の形の式の加減: 答えは 約分した形(分母は 1 でない)', () => {
     each('g1.expr.boss_calc', 3, (p) => {
       if (!p.tags.includes('boss_fraction_form') || p.answer.kind !== 'expression') return;
