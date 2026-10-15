@@ -96,6 +96,19 @@ export interface LoadResult {
   ok: true;
   save: SaveData | null;
 }
+/**
+ * 宝の地図(クラスに 1 枚だけ)の 売れ具合。決めるのは サーバー(早い者勝ちを 1 か所で 判定するため)。
+ * onSale = この人の クラスで 売っている、soldOut = クラスの だれかが 買った、mine = 買ったのは この人
+ */
+export interface TreasureStatus {
+  onSale: boolean;
+  soldOut: boolean;
+  mine: boolean;
+}
+export interface TreasureResult {
+  ok: true;
+  treasure: TreasureStatus;
+}
 export type ApiError = { ok: false; error: string; detail?: string };
 
 /** 感想(体験版の試遊)。レベルや進み具合は画面側で自動で付ける */
@@ -242,6 +255,9 @@ export const api = {
   load: (id: Identity) => post<LoadResult>({ action: 'load', class: id.class, number: id.number, pass: id.pass }),
   feedback: (id: Identity, feedback: FeedbackInput) =>
     post<{ ok: true }>({ action: 'feedback', class: id.class, number: id.number, pass: id.pass, feedback }),
+  /** 宝の地図の 売れ具合を 聞く(buy=true なら 買う。売り切れなら 買えずに 状態だけ 返る) */
+  treasure: (id: Identity, buy: boolean) =>
+    post<TreasureResult>({ action: 'treasure', class: id.class, number: id.number, pass: id.pass, buy }),
   review: (id: Identity, marks: ReviewInput[]) =>
     post<{ ok: true; count: number }>({ action: 'review', class: id.class, number: id.number, pass: id.pass, marks }),
 };

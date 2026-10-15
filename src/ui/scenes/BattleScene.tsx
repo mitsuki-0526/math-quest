@@ -26,7 +26,7 @@ import { getTemplate } from '@/math/template';
 import { config } from '@/data/config';
 import { grade1 } from '@/data/grade1/chapters';
 import { getEnemy } from '@/data/grade1/enemies';
-import { getItem } from '@/data/grade1/items';
+import { getItem, STAR_SHARD_ID } from '@/data/grade1/items';
 import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
@@ -318,6 +318,8 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
         daily.claimed = true;
         quest = { done: true, exp: config.daily.rewardExp, gold: config.daily.rewardGold };
         d.player.gold += quest.gold;
+        // 星のかけらは 宝の地図(クラスに 1 枚)と 交換する。毎日 こつこつ 解いた 証
+        addItem(d, STAR_SHARD_ID, 1);
       }
       ({ levelUps, overflowGold, cap } = gainExp(d, exp + (quest?.exp ?? 0)));
       perksGained = perksGainedBetween(before, d.player.level);
@@ -661,7 +663,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                 )}
                 {result.quest?.done && (
                   <p class="levelup">
-                    📜 今日のクエスト 達成! +{result.quest.exp} 経験値 ・ +{result.quest.gold} G
+                    📜 今日のクエスト 達成! +{result.quest.exp} 経験値 ・ +{result.quest.gold} G ・ {getItem(STAR_SHARD_ID).emoji} {getItem(STAR_SHARD_ID).name} +1
                   </p>
                 )}
                 {result.levelUps > 0 && (

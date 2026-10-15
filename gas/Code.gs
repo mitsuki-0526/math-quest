@@ -26,6 +26,7 @@
  *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
  *   config   : key | value
  *   log      : time | action | class | number | note (エラーと主要イベントだけ)
+ *   treasure : time | class | number | player_name | level | note (宝の地図を買った人。行を消すと、そのクラスで また売り出す)
  *
  * 授業の管理(スプレッドシートの「MathQuest」メニュー):
  *   - 全員をタイトルに戻す: config の session_epoch を今の時刻にする。開いているゲームは保存してタイトルに戻る
@@ -42,6 +43,8 @@
  *   { action:'feedback', class, number, pass, feedback:{ fun, difficulty, comment, level, chapter, answered, correct } } → { ok }
  *   { action:'review', class, number, pass, marks:[{ node, template, star, rating, comment, flagged }] } → { ok, count }(先生だけ。問題の見本帳の印)
  *        感想(体験版の試遊)。feedback シートに 1 行足す
+ *   { action:'treasure', class, number, pass, buy } → { ok, treasure:{ onSale, soldOut, mine } }
+ *        宝の地図(クラスに 1 枚だけ)。config の treasure_classes に書いたクラスでだけ売る。buy=true なら早い者勝ちで買う
  */
 
 var SHEETS = {
@@ -53,6 +56,7 @@ var SHEETS = {
   unlock: ['class', 'g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'],
   config: ['key', 'value'],
   log: ['time', 'action', 'class', 'number', 'note'],
+  treasure: ['time', 'class', 'number', 'player_name', 'level', 'note'],
 };
 
 var TEACHER_CLASS = 'teacher';
@@ -83,6 +87,7 @@ function setup() {
   ensureConfig('open_days', ''); // 受付する曜日(例: 月火水木金)。空なら毎日
   ensureConfig('open_hours', ''); // 受付する時間(例: 08:30-12:30,13:20-15:40)。空なら一日中
   ensureConfig('session_epoch', ''); // メニューの「全員をタイトルに戻す」で書き換わる
+  ensureConfig('treasure_classes', ''); // 宝の地図を売るクラス(例: 1-2,2-3)。空ならどこでも売らない
   var roster = ss.getSheetByName('roster');
   // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
   roster.getRange('B:C').setNumberFormat('@');
@@ -463,6 +468,7 @@ function handle(body) {
     else if (body.action === 'load') res = loadGame(cls, num, pass);
     else if (body.action === 'feedback') res = passFeedback(cls, num, pass, body.feedback);
     else if (body.action === 'review') res = passReview(cls, num, pass, body.marks);
+    else if (body.action === 'treasure') res = passTreasure(cls, num, pass, body.buy);
     else return { ok: false, error: 'unknown_action' };
     if (res.error === 'bad_pass') recordFailure(cls, num);
     else if (res.ok) clearFailures(cls, num);
@@ -646,6 +652,69 @@ function parseSave(row) {
   return row.save_json ? JSON.parse(row.save_json) : null;
 }
 
+// ------------------------------------------------------------------ 宝の地図(クラスに 1 枚だけ)
+
+function passTreasure(cls, num, pass, buy) {
+  var row = findStudent(cls, num);
+  if (!row) return { ok: false, error: 'not_found' };
+  if (!authorize(row, cls, pass)) return { ok: false, error: 'bad_pass' };
+  return treasure(row, cls, num, cls === TEACHER_CLASS, buy === true);
+}
+
+/** config の treasure_classes(「1-2,2-3」)。1 つだけ書くと日付に化けることがあるので cellText で読む */
+function treasureClasses() {
+  return cellText(readConfig().treasure_classes)
+    .split(/[,、\s]+/)
+    .map(function (s) {
+      return s.trim();
+    })
+    .filter(Boolean);
+}
+
+/**
+ * 売れ具合を返し、buy なら買う。呼び出し側がロックを持っているので、同じクラスの 2 人が同時に押しても 1 人だけが買える。
+ * 先生は試しに買えるよう、いつでも売っていて売り切れにならない(生徒のクラスの分は減らない)。
+ * 同じ人が もう一度 買うと mine=true が返るだけ(応答が届かなかったときの やり直しで 二重に 記録しない)
+ */
+function treasure(row, cls, num, teacher, buy) {
+  var onSale = teacher || treasureClasses().indexOf(cls) >= 0;
+  if (!onSale) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
+  var sh = treasureSheet();
+  var values = sh.getLastRow() > 1 ? sh.getRange(2, 2, sh.getLastRow() - 1, 2).getValues() : [];
+  var mine = false;
+  var soldOut = false;
+  for (var i = 0; i < values.length; i++) {
+    if (cellText(values[i][0]) !== cls) continue;
+    var n = cellText(values[i][1]);
+    if (/^\d+$/.test(n)) n = String(Number(n));
+    if (n === num) mine = true;
+    soldOut = true;
+  }
+  if (teacher) soldOut = false;
+  if (buy && !mine && !soldOut) {
+    var save = parseSave(row);
+    var player = (save && save.player) || {};
+    sh.appendRow([new Date().toISOString(), literal(cls), literal(num), asText(String(player.name || '').slice(0, 20)), Number(player.level || 0), teacher ? '先生(試し)' : '']);
+    logRow('treasure', cls, num, '宝の地図を買った');
+    mine = true;
+    soldOut = !teacher;
+  }
+  return { ok: true, treasure: { onSale: true, soldOut: soldOut && !mine, mine: mine } };
+}
+
+/** 古い版で作ったスプレッドシートには treasure シートがないので、初めて使うときに作る */
+function treasureSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('treasure');
+  if (!sh) {
+    sh = ss.insertSheet('treasure');
+    sh.appendRow(SHEETS.treasure);
+    sh.setFrozenRows(1);
+    sh.getRange('B:C').setNumberFormat('@');
+  }
+  return sh;
+}
+
 // ------------------------------------------------------------------ 学校アカウント方式
 
 /** 開いている人の学校アカウント。取れなければ ''(合言葉方式になる) */
@@ -749,6 +818,7 @@ function handleAccount(email, body) {
     if (!row) return { ok: false, error: 'not_registered' };
     if (body.action === 'save') return storeSave(row, body.save);
     if (body.action === 'load') return { ok: true, save: parseSave(row) };
+    if (body.action === 'treasure') return treasure(row, cls, num, teacher, body.buy === true);
     return { ok: false, error: 'unknown_action' };
   } finally {
     lock.releaseLock();

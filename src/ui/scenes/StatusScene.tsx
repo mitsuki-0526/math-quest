@@ -76,6 +76,15 @@ export function StatusScene() {
                   {st.defense} <small>(素 {p.defense})</small>
                 </td>
               </tr>
+              {save.school && (
+                <tr>
+                  <td>クラス</td>
+                  <td colSpan={3}>
+                    {save.school.grade ? `${save.school.grade}年 ・ ` : ''}
+                    {save.school.class} ・ {save.school.number}番
+                  </td>
+                </tr>
+              )}
               <tr>
                 <td>ゴールド</td>
                 <td>{p.gold} G</td>

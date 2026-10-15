@@ -8,6 +8,8 @@
  * 学校アカウント方式の再現: MOCK_EMAIL=s1@school.example で起動すると、その人が開いている扱いになる
  * (リクエストに __email を付けると、その回だけ別の人になる。テスト用)。
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
+ * 宝の地図を売るクラスは MOCK_TREASURE_CLASSES(既定 1-2。本物は config の treasure_classes)。
+ *   GET ?action=__admin&op=treasure_reset で 売り切れを 戻す(本物は treasure シートの行を消す)
  * 授業の管理(先生のメニューの代わり): GET ?action=__admin&op=reset|close|open|summary&token=dev-token
  *   summary は「集計を更新する」と同じ集計(gas/Code.gs の summarizeTallies をそのまま使う)を返す
  */
@@ -43,6 +45,24 @@ const hash = (pass, salt) => createHash('sha256').update(`${salt}:${pass}`).dige
 const key = (c, n) => `${c}|${n}`;
 /** 授業の状態(本物は config の open / session_epoch) */
 const session = { open: true, epoch: '' };
+const TREASURE_CLASSES = (process.env.MOCK_TREASURE_CLASSES ?? '1-2').split(',').filter(Boolean);
+/** 宝の地図を 買った人(本物は treasure シート)。[クラス, 番号] */
+let treasureBuyers = [];
+
+/** gas/Code.gs の treasure() と同じ判定 */
+function treasure(cls, num, teacher, buy) {
+  if (!teacher && !TREASURE_CLASSES.includes(cls)) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
+  const rows = treasureBuyers.filter(([c]) => c === cls);
+  let mine = rows.some(([, n]) => n === num);
+  let soldOut = !teacher && rows.length > 0;
+  if (buy && !mine && !soldOut) {
+    treasureBuyers.push([cls, num]);
+    console.log('treasure', cls, num);
+    mine = true;
+    soldOut = !teacher;
+  }
+  return { ok: true, treasure: { onSale: true, soldOut: soldOut && !mine, mine } };
+}
 
 function handle(action, p) {
   if (p.token !== TOKEN) return { ok: false, error: 'bad_token' };
@@ -51,6 +71,7 @@ function handle(action, p) {
     if (p.op === 'reset') session.epoch = new Date().toISOString();
     if (p.op === 'close') session.open = false;
     if (p.op === 'open') session.open = true;
+    if (p.op === 'treasure_reset') treasureBuyers = [];
     // 本物のメニュー「選んだ生徒のセーブを消す / 全員のセーブを消す」(key を省くと全員)
     if (p.op === 'wipe') {
       const now = new Date().toISOString();
@@ -108,6 +129,7 @@ function handle(action, p) {
   if (action === 'save') return storeSave(row, p.save);
   if (action === 'feedback') return storeFeedback(k, p.feedback);
   if (action === 'review') return teacher ? storeReview(p.marks) : { ok: false, error: 'not_teacher' };
+  if (action === 'treasure') return treasure(cls, num, teacher, p.buy === true);
   if (action === 'load') return { ok: true, save: row.save };
   return { ok: false, error: 'unknown_action' };
 }
@@ -135,6 +157,7 @@ function handleAccount(action, p, email) {
   if (action === 'load') return { ok: true, save: row.save };
   if (action === 'feedback') return storeFeedback(k, p.feedback);
   if (action === 'review') return teacher ? storeReview(p.marks) : { ok: false, error: 'not_teacher' };
+  if (action === 'treasure') return treasure(cls, num, teacher, p.buy === true);
   return { ok: false, error: 'unknown_action' };
 }
 

@@ -129,7 +129,7 @@ describe('1年版の章データ', () => {
       expect(it.emoji.length).toBeGreaterThan(0);
       expect(it.description.length).toBeGreaterThan(2);
       if (it.kind === 'consumable') expect(it.use).toBeDefined();
-      else expect(it.stat).toBeDefined();
+      else if (it.kind !== 'key') expect(it.stat).toBeDefined();
     }
   });
 

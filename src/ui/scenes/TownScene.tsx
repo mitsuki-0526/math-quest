@@ -4,7 +4,7 @@ import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { addItem, equip, playerStats } from '@/engine/player';
 import { getTown } from '@/data/grade1/town';
-import { getItem } from '@/data/grade1/items';
+import { getItem, isEquipment, STAR_SHARD_ID, TREASURE_MAP_ID } from '@/data/grade1/items';
 import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
@@ -13,6 +13,8 @@ import { isWeak, ensureDailyQuest } from '@/engine/adaptive';
 import { config } from '@/data/config';
 import '@/data/grade1/problems';
 import { getTemplate } from '@/math/template';
+import { describeError, type TreasureStatus } from '@/engine/api';
+import { grantTreasure, hasTreasure, requestTreasure, treasureShortfall } from '@/engine/treasure';
 import { Bar, Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 
@@ -25,6 +27,21 @@ export function TownScene({ townId }: { townId: string }) {
   const [tab, setTab] = useState<Tab>('menu');
   const [msg, setMsg] = useState<string>(`${town.name}に ついた。`);
   const [talkIndex, setTalkIndex] = useState(0);
+  /** 宝の地図の 売れ具合(サーバーに 聞く)。null = 売っていない・まだ 分からない */
+  const [treasure, setTreasure] = useState<TreasureStatus | null>(null);
+  const [treasureBusy, setTreasureBusy] = useState(false);
+
+  // 道具屋を 開くたびに 聞き直す(同じクラスの だれかが 先に 買ったかもしれない)
+  useEffect(() => {
+    if (tab !== 'tools') return;
+    let alive = true;
+    requestTreasure(false)
+      .then((t) => alive && setTreasure(t))
+      .catch(() => alive && setTreasure(null));
+    return () => {
+      alive = false;
+    };
+  }, [tab]);
 
   // 章クリア後、最初に入ったときの会話(C1-10 など)。今日のクエストもここで用意する
   useEffect(() => {
@@ -62,12 +79,36 @@ export function TownScene({ townId }: { townId: string }) {
     setMsg(`${characters.teo.name}「毎度! ${it.name}、得したろ?」${it.kind !== 'consumable' ? ' さっそく 装備した。' : ''}`);
   }
 
+  async function buyTreasure() {
+    const lack = treasureShortfall(save!);
+    if (lack.gold > 0 || lack.shards > 0) {
+      const parts = [lack.gold > 0 ? `${lack.gold} G` : '', lack.shards > 0 ? `${getItem(STAR_SHARD_ID).name} ${lack.shards}個` : ''].filter(Boolean);
+      setMsg(`${characters.teo.name}「こいつは クラスに 1枚きりの 品だ。あと ${parts.join(' と ')} 足りないぜ。計算で 稼いでこい!」`);
+      return;
+    }
+    setTreasureBusy(true);
+    try {
+      const t = await requestTreasure(true);
+      setTreasure(t);
+      if (t?.mine) {
+        updateSave(grantTreasure);
+        setMsg(`${characters.teo.name}「毎度! ${getItem(TREASURE_MAP_ID).name}は おまえの ものだ。先生に 見せて みな」`);
+      } else if (t?.soldOut) {
+        setMsg(`${characters.teo.name}「わりい、ひと足 ちがいで クラスの だれかが 買っていった。売り切れだ」`);
+      }
+    } catch (e) {
+      setMsg(describeError(e));
+    } finally {
+      setTreasureBusy(false);
+    }
+  }
+
   function equipOwned(id: string) {
     updateSave((d) => equip(d, id));
     setMsg(`${getItem(id).name}を 装備した。`);
   }
 
-  const owned = Object.keys(save.inventory).filter((id) => getItem(id).kind !== 'consumable');
+  const owned = Object.keys(save.inventory).filter(isEquipment);
   const practice = practiceTemplates(save);
   const daily = save.daily;
   function startPractice(templateId?: string) {
@@ -135,6 +176,19 @@ export function TownScene({ townId }: { townId: string }) {
                 <span>{tab === 'tools' ? '道具屋' : '武具屋'}</span>
                 <span class="gold">{save.player.gold} G</span>
               </div>
+              {tab === 'tools' && treasure?.onSale && (
+                <div class="shop-row shop-row-treasure">
+                  <span class="shop-item">
+                    {getItem(TREASURE_MAP_ID).emoji} {getItem(TREASURE_MAP_ID).name} <small>クラスに 1枚だけ。先に 買った 1人の もの</small>
+                  </span>
+                  <span class="shop-price">
+                    {config.treasure.price} G{config.treasure.shards > 0 ? ` + ${getItem(STAR_SHARD_ID).emoji}×${config.treasure.shards}` : ''}
+                  </span>
+                  <Button disabled={hasTreasure(save) || treasure.soldOut || treasureBusy} onClick={() => void buyTreasure()}>
+                    {hasTreasure(save) ? '持っている' : treasure.soldOut ? '売り切れ' : treasureBusy ? '…' : 'かう'}
+                  </Button>
+                </div>
+              )}
               {/* 制限時間を 使わないときは、時間を のばす 道具は 売らない */}
               {(tab === 'tools' ? town.shop.tools : town.shop.gear).filter((id) => config.battle.timeLimitOn === 1 || !getItem(id).use?.time).map((id) => {
                 const it = getItem(id);
@@ -178,7 +232,7 @@ export function TownScene({ townId }: { townId: string }) {
               </div>
               {daily && !daily.claimed && (
                 <p class="note">
-                  📜 今日のクエスト: 「{getTemplate(daily.templateId).title}」を {daily.target}問 正解する({daily.correct}/{daily.target})— 達成で +{config.daily.rewardGold}G +{config.daily.rewardExp}経験値
+                  📜 今日のクエスト: 「{getTemplate(daily.templateId).title}」を {daily.target}問 正解する({daily.correct}/{daily.target})— 達成で +{config.daily.rewardGold}G +{config.daily.rewardExp}経験値 +{getItem(STAR_SHARD_ID).name}
                 </p>
               )}
               {daily?.claimed && <p class="muted">📜 今日のクエストは 達成ずみ。明日 また 新しい単元が 出る</p>}

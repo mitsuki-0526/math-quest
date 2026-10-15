@@ -21,6 +21,27 @@ export interface TemplateStats {
   level?: 1 | 2 | 3;
 }
 
+export interface SchoolInfo {
+  /** 学年(1〜3)。クラス名から 読めないとき(先生用・「A組」など)は ない */
+  grade?: number;
+  class: string;
+  number: string;
+}
+
+/**
+ * クラス名から 学年を 読む。「1-2」「2年3組」「3A」→ 1 / 2 / 3。
+ * 中学は 1〜3 年なので、先頭が それ以外の 数字なら 学年とは みなさない
+ */
+export function gradeOfClass(cls: string): number | undefined {
+  const m = /^\s*([1-3])(?!\d)/.exec(cls);
+  return m ? Number(m[1]) : undefined;
+}
+
+export function schoolInfo(cls: string, number: string): SchoolInfo {
+  const grade = gradeOfClass(cls);
+  return grade ? { grade, class: cls, number } : { class: cls, number };
+}
+
 export interface SaveData {
   version: typeof SAVE_VERSION;
   player: {
@@ -40,6 +61,11 @@ export interface SaveData {
   party: string[];
   /** アイテムID → 個数 */
   inventory: Record<string, number>;
+  /**
+   * 学年・クラス・番号(サーバーに 入ったときに 書く)。ほかの学年も 同じ ゲームを 使うので、
+   * どの学年の 子の セーブかを セーブ自体にも 残す。この端末だけで 遊ぶときは ない
+   */
+  school?: SchoolInfo;
   /** 会話・イベントのフラグ */
   flags: Record<string, boolean>;
   /** 会話の効果で変わった表示名(例: 羊飼いの少女 → ミオ) */

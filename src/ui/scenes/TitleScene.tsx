@@ -2,10 +2,10 @@ import { useEffect, useState } from 'preact/hooks';
 import { Sprite } from '@/ui/components/Sprite';
 import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button, Panel } from '@/ui/components/Ui';
-import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, type SaveData } from '@/engine/save';
+import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, updateSave, type SaveData } from '@/engine/save';
 import { pushScene, resetScenes } from '@/engine/scenes';
 import { hasServer, describeError, isNetworkError, ApiFailure, type AccountInfo, type Identity } from '@/engine/api';
-import { bootstrap, getIdentity, login, ownerKey, resumeOffline, scheduleSync } from '@/engine/sync';
+import { bootstrap, getIdentity, login, ownerKey, resumeOffline, scheduleSync, stampSchool } from '@/engine/sync';
 import { markEntered, sessionStore } from '@/engine/session';
 import { useStore } from '@/engine/store';
 import { DEFAULT_PLAYER_NAME, PLAYER_NAME_MAX, playerLooks } from '@/data/characters';
@@ -76,6 +76,8 @@ export function TitleScene() {
 
   function enterGame(save: SaveData) {
     markEntered();
+    // 学年・クラスは 名簿で 決まるので、入るたびに 書き直す(名簿の 直しを 反映する)
+    stampSchool(save);
     saveStore.set(save);
     writeLocalSave(save);
     resetScenes({ kind: 'map' });
@@ -84,6 +86,7 @@ export function TitleScene() {
   function startPrologue(playerName: string) {
     markEntered();
     startNewGame(playerName, look);
+    updateSave(stampSchool);
     scheduleSync(0);
     resetScenes({ kind: 'map' });
     pushScene({ kind: 'talk', scriptIds: ['P-1', 'P-2', 'P-3', 'P-4', 'P-5'], then: { type: 'tutorialBattle' } });

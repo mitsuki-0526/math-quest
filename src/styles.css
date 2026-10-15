@@ -1700,6 +1700,15 @@ img.sprite {
   padding: 6px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
+/* 宝の地図(クラスに 1 枚): 値段が 長いので 列を 広げ、金箔の 縁で 特別な 品と 分かるように */
+.shop-row-treasure {
+  grid-template-columns: 1fr auto 110px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(230, 194, 92, 0.08);
+}
 .shop-item small {
   display: block;
   color: rgba(255, 255, 255, 0.6);

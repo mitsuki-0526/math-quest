@@ -1,6 +1,6 @@
 import { createStore } from './store';
 import { api, hasServer, saveBeacon, ApiFailure, type AccountInfo, type Identity } from './api';
-import { saveStore, writeLocalSave, clearLocalSave, saveChangedHooks, setSaveOwner, type SaveData } from './save';
+import { saveStore, writeLocalSave, clearLocalSave, saveChangedHooks, setSaveOwner, schoolInfo, type SaveData } from './save';
 import { unlockedChapters } from './progress';
 import { applyConfigOverrides } from '@/data/config';
 
@@ -66,6 +66,13 @@ function loadIdentity(): Identity | null {
   } catch {
     return null;
   }
+}
+
+/** いま 入っている人の 学年・クラス・番号を セーブに 書く(サーバーなしで 遊ぶときは 書かない) */
+export function stampSchool(d: SaveData): void {
+  // 先生は 学年・クラスを 持たない(試しの 行が 生徒の 記録に まざらないように)
+  if (!hasServer() || !identity || syncStore.get().teacher) return;
+  d.school = schoolInfo(identity.class, identity.number);
 }
 
 /** 解放状態を反映し、オフライン時のためにキャッシュする */
