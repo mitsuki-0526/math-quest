@@ -517,68 +517,76 @@ describe('第3章 方程式', () => {
     return seen;
   };
 
-  it('解は 整数(±12 まで)。分数の解は 基本の ★3 だけ、分数・小数の方程式は ±36 まで', () => {
+  it('解は 整数が 基本(教科書の 本文 2026-10-15)。分数の解は 基本の ★2・★3 と 移項の ★3 だけ。解の 大きさは 教科書の 範囲', () => {
     for (const id of ['g1.eq.basic', 'g1.eq.linear', 'g1.eq.paren', 'g1.eq.fraction', 'g1.eq.ratio'])
       for (const d of [1, 2, 3] as const)
         each(id, d, (p) => {
           if (p.answer.kind !== 'number') return;
           const x = answerOf(p);
           if (p.tags.includes('eq_fraction_answer')) {
-            expect(d, p.promptText).toBe(3);
+            expect(id === 'g1.eq.basic' ? d >= 2 : id === 'g1.eq.linear' && d === 3, `${id} ★${d} ${p.promptText}`).toBe(true);
             return;
           }
           expect(Number.isInteger(x), p.promptText).toBe(true);
-          // x/k = b(★2)は 両辺に k を かけるので 36 まで
-          const max = id === 'g1.eq.fraction' ? (d === 3 ? 36 : 24) : id === 'g1.eq.ratio' ? 54 : p.tags.includes('eq_div') ? 36 : 12;
+          // x/k = b は 両辺に k を かけるので 36 まで。分数は ⅓x − 4 = ⅕x(解 30)まで。比例式は 60 まで
+          const max = id === 'g1.eq.fraction' ? 36 : id === 'g1.eq.ratio' ? 60 : p.tags.includes('eq_div') ? 36 : 12;
           expect(Math.abs(x), p.promptText).toBeLessThanOrEqual(max);
         });
   });
 
-  it('基本(教科書の順): ★1 は 解が 正の数で 1 けた・解を選ぶ問題がある、★2 に 負の解・−x・x/k、★3 に 分数の解・分数の係数', () => {
-    each('g1.eq.basic', 1, (p) => {
-      if (p.answer.kind === 'number') expect(answerOf(p), p.promptText).toBeGreaterThan(0);
-      expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(81);
-    });
+  it('基本: ★1 は 等式の性質と 解を選ぶ、★2 に k が 解の 式を選ぶ・−x・x/k・(p/q)x・分数の 解、★3 に 分数の 解', () => {
+    each('g1.eq.basic', 1, (p) => expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(81));
     expect(tagsOf('g1.eq.basic', 1)).toEqual(new Set(['eq_add', 'eq_mul', 'eq_solution']));
     const t2 = tagsOf('g1.eq.basic', 2);
-    for (const t of ['eq_add', 'eq_mul', 'eq_minus_x', 'eq_div']) expect(t2).toContain(t);
-    const t3 = tagsOf('g1.eq.basic', 3);
-    for (const t of ['eq_fraction_answer', 'eq_frac_coef']) expect(t3).toContain(t);
-  });
-
-  it('移項: ★1 は ax + b = c(右辺に x がない)、★2 から 両辺に x、★3 に 数の項が先の形(2 − 7x = 3x − 8)', () => {
-    each('g1.eq.linear', 1, (p) => {
-      expect(rightSide(p), p.promptText).not.toContain('x');
-      expect(answerOf(p), p.promptText).toBeGreaterThan(0);
+    for (const t of ['eq_which_solution', 'eq_minus_x', 'eq_div', 'eq_frac_coef', 'eq_fraction_answer']) expect(t2).toContain(t);
+    expect(tagsOf('g1.eq.basic', 3)).toContain('eq_fraction_answer');
+    // k が 解の 式を 選ぶ: 正解の 式だけが 成り立つ(選択肢は 3 つとも ちがう)
+    each('g1.eq.basic', 2, (p) => {
+      if (p.answer.kind === 'choice' && p.tags.includes('eq_which_solution')) expect(new Set(p.answer.options).size).toBe(3);
     });
-    expect(tagsOf('g1.eq.linear', 2)).toContain('eq_both_sides');
-    let constFirst = 0;
-    each('g1.eq.linear', 3, (p) => void (/^\d/.test(p.promptText) && constFirst++));
-    expect(constFirst).toBeGreaterThan(N / 5);
   });
 
-  it('かっこ: ★1 は k(x + a) = c(k は 正)、★2 に x + k(ax + b) = c、★3 に かっこ 2 つ。−2(x − 3) と 書く((−2)(…) と しない)', () => {
-    each('g1.eq.paren', 1, (p) => expect(p.promptText, p.promptText).toMatch(/^[2-5]\(x [+−] \d\) = −?\d+ の/));
+  it('移項: ★1 に ax + b = c・b − ax = c(数の項が 先)・ax = cx + e、★2・★3 は 両辺に x で 右辺が 数から 始まる 形も', () => {
+    let constFirst = 0;
+    let bothSides = 0;
+    each('g1.eq.linear', 1, (p) => {
+      if (/^\d+ − \d?x/.test(p.promptText)) constFirst++;
+      if (rightSide(p).includes('x')) bothSides++;
+    });
+    expect(constFirst).toBeGreaterThan(N / 10);
+    expect(bothSides).toBeGreaterThan(N / 5);
+    let rightConst = 0;
+    each('g1.eq.linear', 2, (p) => void (/^ −?\d+ [+−] \d*x/.test(rightSide(p)) && rightConst++));
+    expect(rightConst).toBeGreaterThan(N / 5);
+  });
+
+  it('かっこ: ★1 は k(x + a) = c と k(x + a) ± mx = c、★2 に かっこが 右辺・中が 数から(2 − x)、★3 に かっこ 2 つ。−2(x − 3) と 書く', () => {
+    each('g1.eq.paren', 1, (p) => expect(p.promptText, p.promptText).toMatch(/^[2-5]\(x [+−] \d\)( [+−] \d?x)? = −?\d+ の/));
+    const t2 = tagsOf('g1.eq.paren', 2);
+    expect(t2).toContain('eq_paren_right');
+    let rev = 0;
+    each('g1.eq.paren', 2, (p) => void (/\(\d+ − x\)/.test(p.promptText) && rev++));
+    expect(rev).toBeGreaterThan(N / 10);
     expect(tagsOf('g1.eq.paren', 3)).toContain('eq_paren_two');
     for (const d of [2, 3] as const) each('g1.eq.paren', d, (p) => expect(p.promptText, p.promptText).not.toMatch(/\(−\d\)\(/));
   });
 
-  it('小数・分数: ★1 は 片方の辺だけ x、★3 に (x + a)/p = (x + b)/q と 小数第 2 位', () => {
+  it('小数・分数: ★1 は 片方の辺だけ x、★2 に 小数第 2 位、★3 に 数の項も 分数・(ax + b)/p の 形', () => {
     each('g1.eq.fraction', 1, (p) => expect(rightSide(p), p.promptText).not.toContain('x'));
-    expect(tagsOf('g1.eq.fraction', 3)).toContain('eq_fraction_paren');
     let hundredths = 0;
-    each('g1.eq.fraction', 3, (p) => void (/\d\.\d\d/.test(p.promptText) && hundredths++));
+    each('g1.eq.fraction', 2, (p) => void (/\d\.\d\d/.test(p.promptText) && hundredths++));
     expect(hundredths).toBeGreaterThan(N / 10);
+    const t3 = tagsOf('g1.eq.fraction', 3);
+    for (const t of ['eq_fraction_paren', 'eq_fraction_const', 'eq_decimal']) expect(t3).toContain(t);
   });
 
-  it('比例式: ★1 は 45 まで。★3 に (x ± m) : b = c : d がある', () => {
-    each('g1.eq.ratio', 1, (p) => expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(45));
-    let paren = 0;
+  it('比例式: ★1 は 40 まで、★2 に (x ± m) が 1 か所、★3 は 両方の 項に x', () => {
+    each('g1.eq.ratio', 1, (p) => expect(Math.max(...numbersIn(p)), p.promptText).toBeLessThanOrEqual(40));
+    expect(tagsOf('g1.eq.ratio', 2)).toContain('eq_ratio_expr');
     each('g1.eq.ratio', 3, (p) => {
       expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
-      if (p.promptText.startsWith('(x')) paren++;
+      expect(p.tags, p.promptText).toContain('eq_ratio_both');
     });
-    expect(paren).toBeGreaterThan(N / 4);
   });
 
   it('文章題: 解は 整数、選択肢は 4 つとも ちがう', () => {
@@ -605,17 +613,137 @@ describe('第3章 方程式', () => {
 });
 
 describe('第4章 比例と反比例', () => {
-  it('変域が ★2(場面)・★3(y = ax の y の変域)に出る。★1 には出ない', () => {
+  // 教科書 4 章の 本文(2026-10-15。refs/prints/4章_honbun-features.md)に 合わせた 範囲
+  const ids = ['g1.func.prop', 'g1.func.invprop', 'g1.func.coord', 'g1.func.graph'];
+  const tagsOf = (id: string, d: Difficulty) => {
+    const seen = new Set<string>();
+    each(id, d, (p) => p.tags.forEach((t) => seen.add(t)));
+    return [...seen].sort();
+  };
+  const denOf = (p: Problem): number => {
+    if (p.answer.kind === 'number') return Number(p.answer.value.d);
+    if (p.answer.kind === 'expression') return Number(p.answer.expected.match(/\/(\d+)x$/)?.[1] ?? 1);
+    return 1;
+  };
+  const numOfExpr = (p: Problem): number => Number(p.answer.kind === 'expression' ? (p.answer.expected.match(/^(-?\d*)\//)?.[1] ?? 'NaN') : NaN);
+
+  it('変域: ★2 は 言葉 → 不等号(4 未満 → x < 4)と 場面、★3 は y = ax の y の 変域。★1 には 出ない', () => {
     for (const d of [1, 2, 3] as const) {
       let n = 0;
       each('g1.func.prop', d, (p) => {
-        if (!p.tags.includes('prop_domain')) return;
+        if (!p.tags.includes('prop_domain') && !p.tags.includes('domain_words')) return;
         n++;
-        if (p.answer.kind === 'choice') expect(p.answer.options[p.answer.correct], p.promptText).toMatch(/leqq/);
+        if (p.tags.includes('domain_words') && p.answer.kind === 'choice') {
+          const c = p.answer.options[p.answer.correct];
+          if (/未満/.test(p.promptText)) expect(c, p.promptText).toMatch(/< \d+$/);
+          if (/以下/.test(p.promptText)) expect(c, p.promptText).toMatch(/leqq \d+$/);
+          if (/以上/.test(p.promptText)) expect(c, p.promptText).toMatch(/^-?\d+ \\leqq x/);
+        }
+        if (d === 3) expect(p.tags, p.promptText).toContain('prop_domain');
       });
       if (d === 1) expect(n).toBe(0);
-      else expect(n).toBeGreaterThan(N / 6);
+      else expect(n).toBeGreaterThan(N / 8);
     }
+  });
+
+  it('教科書の 順: 2 段の 問題・分数の 比例定数(−½)は 基本の問題なので ★2 から。★3 は 分数の 比例定数・y から x・利用', () => {
+    expect(tagsOf('g1.func.prop', 1)).toEqual(['prop_constant', 'prop_model', 'prop_value']);
+    expect(tagsOf('g1.func.prop', 2)).toEqual(['domain_words', 'prop_constant', 'prop_domain', 'prop_find_a', 'prop_find_a_frac', 'prop_table', 'prop_two_step', 'prop_value']);
+    expect(tagsOf('g1.func.prop', 3)).toEqual(['prop_domain', 'prop_find_a_frac', 'prop_find_x', 'prop_fraction', 'prop_two_step']);
+    expect(tagsOf('g1.func.invprop', 1)).toEqual(['invprop_constant', 'invprop_model', 'invprop_value']);
+    expect(tagsOf('g1.func.invprop', 2)).toEqual(['invprop_find_a', 'invprop_table', 'invprop_two_step', 'invprop_value']);
+    expect(tagsOf('g1.func.invprop', 3)).toEqual(['invprop_find_x', 'invprop_two_step', 'invprop_use']);
+    expect(tagsOf('g1.func.graph', 1)).toEqual(['graph_pick', 'graph_prop']);
+    expect(tagsOf('g1.func.graph', 2)).toEqual(['graph_invprop', 'graph_prop', 'graph_prop_frac', 'graph_trend']);
+    expect(tagsOf('g1.func.graph', 3)).toEqual(['graph_invprop', 'graph_prop_frac']);
+  });
+
+  it('★ を 下げて 作り直した 問題が まぎれない。負の数は \\text の 外(− が ハイフンに ならない)', () => {
+    for (const id of ids)
+      for (const d of [1, 2, 3] as const)
+        each(id, d, (p) => {
+          expect(p.difficulty, `${id} ${p.promptText}`).toBe(d);
+          expect(p.prompt, p.promptText).not.toMatch(/\\text\{[^}]*-\d/);
+          // \\; を \; と 書くと「;」が そのまま 出る(増加・減少の 問題で あった)
+          for (const s of [p.prompt, ...p.explanation]) expect(s, p.promptText).not.toMatch(/(^|[^\\]);/);
+        });
+  });
+
+  it('比例: ★1 の 比例定数は 整数(2〜9 か 場面の 数)、1 組の x, y は x が 8 まで・y が 30 まで、★2 の 分数は ½・⅓・¼ だけ', () => {
+    each('g1.func.prop', 1, (p) => {
+      if (p.tags.includes('prop_constant')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+      if (p.tags.includes('prop_value')) expect(Number(p.promptText.match(/^y = (\d+)x/)?.[1]), p.promptText).toBeGreaterThanOrEqual(2);
+    });
+    for (const d of [2, 3] as const)
+      each('g1.func.prop', d, (p) => {
+        // y = x の 比例定数(1)・約分すると 整数に なる 分数は 出さない
+        if (p.tags.includes('prop_constant')) expect(Math.abs(answerOf(p)), p.promptText).not.toBe(1);
+        if (p.tags.includes('prop_find_a_frac')) expect(denOf(p), p.promptText).toBeGreaterThan(1);
+        if (p.tags.includes('prop_fraction')) expect(p.promptText, p.promptText).toMatch(/^y = −?\d\/\dx/);
+        if (d === 2 && p.tags.some((t) => t.startsWith('prop_find_a'))) {
+          const [x, y] = numbersIn(p);
+          expect(x, p.promptText).toBeLessThanOrEqual(8);
+          expect(y, p.promptText).toBeLessThanOrEqual(30);
+          if (p.tags.includes('prop_find_a_frac')) expect(Math.abs(numOfExpr(p)), p.promptText).toBe(1);
+        }
+        if (d === 3 && p.tags.includes('prop_find_a_frac')) expect(Math.abs(numOfExpr(p)), p.promptText).toBeGreaterThan(1);
+      });
+  });
+
+  it('反比例: 比例定数は 教科書の 6〜24(★3 の 2 段・y から x は 48 まで)、1 組の x は 5 まで', () => {
+    const basic = [6, 8, 12, 16, 18, 20, 24];
+    for (const d of [1, 2, 3] as const)
+      each('g1.func.invprop', d, (p) => {
+        const a = Number(p.promptText.match(/y = −?(\d+)\/x/)?.[1] ?? NaN);
+        if (!Number.isNaN(a)) expect(d === 3 ? [...basic, 30, 36, 48] : basic, p.promptText).toContain(a);
+        if (d === 1 && p.tags.includes('invprop_value')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+        if (d === 2 && (p.tags.includes('invprop_find_a') || p.tags.includes('invprop_two_step'))) {
+          const [x, y] = numbersIn(p);
+          expect(x, p.promptText).toBeLessThanOrEqual(5);
+          expect(x * y, p.promptText).toBeLessThanOrEqual(30);
+        }
+        if (p.tags.includes('invprop_use')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+      });
+  });
+
+  it('座標: 点は ±5(★1 は ±4)、移動した 先も ±5。軸の 上の 点も 読む', () => {
+    for (const d of [1, 2, 3] as const) {
+      let axis = 0;
+      each('g1.func.coord', d, (p) => {
+        const lim = d === 1 ? 4 : 5;
+        for (const q of p.figure?.kind === 'plane' ? (p.figure.points ?? []) : []) expect(Math.max(Math.abs(q.x), Math.abs(q.y)), p.promptText).toBeLessThanOrEqual(lim);
+        if (p.answer.kind === 'numbers') {
+          const [x, y] = p.answer.values.map(toNumber);
+          expect(Math.max(Math.abs(x), Math.abs(y)), p.promptText).toBeLessThanOrEqual(lim);
+        }
+        if (p.tags.includes('coord_axis')) axis++;
+      });
+      if (d < 3) expect(axis, `★${d}`).toBeGreaterThan(N / 10);
+    }
+  });
+
+  it('グラフ: ★1 は 比例定数 ±3 までの 直線、★2 の 分数は 真分数(½x・⅔x・−⅓x・¾x)、★3 は 分数の 比例定数', () => {
+    each('g1.func.graph', 1, (p) => {
+      const graphs = p.figure?.kind === 'plane' ? (p.figure.graphs ?? []) : [];
+      expect(graphs.every((g) => g.type === 'prop' && Number.isInteger(g.a) && Math.abs(g.a) <= 3), p.promptText).toBe(true);
+    });
+    each('g1.func.graph', 2, (p) => {
+      if (!p.tags.includes('graph_prop_frac')) return;
+      expect(denOf(p), p.promptText).toBeLessThanOrEqual(4);
+      expect(Math.abs(numOfExpr(p)), p.promptText).toBeLessThan(denOf(p));
+    });
+    each('g1.func.graph', 3, (p) => {
+      if (p.tags.includes('graph_prop_frac')) expect(denOf(p), p.answer.kind === 'expression' ? p.answer.expected : '').toBeGreaterThan(1);
+    });
+  });
+
+  it('ほとんどの 問題に よくある まちがいの 一言がある', () => {
+    for (const id of ids)
+      for (const d of [1, 2, 3] as const) {
+        let n = 0;
+        each(id, d, (p) => void ((p.mistakes?.length ?? 0) > 0 && n++));
+        expect(n / N, `${id} ★${d}`).toBeGreaterThan(0.9);
+      }
   });
 });
 

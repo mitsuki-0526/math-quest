@@ -159,6 +159,16 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       {spec.graphs?.map((g, i) =>
         path(g.type, g.a).map((d, k) => <path key={`p${i}-${k}`} d={d} fill="none" stroke="var(--gold-2)" stroke-width="2.4" />),
       )}
+      {/* グラフの 名前(ア・イ・ウ)。比例の 直線は 右の はし(図の 枠に かかる 手前)に 置く */}
+      {spec.graphs?.map((g, i) => {
+        if (!g.label || g.type !== 'prop') return null;
+        const x = Math.min(R, (R - 0.4) / Math.abs(g.a)) * 0.92;
+        return (
+          <text key={`l${i}`} x={px(x) + 6} y={py(g.a * x) + (g.a > 0 ? 4 : 14)} font-size="16" font-weight="bold" fill="var(--gold-2)">
+            {g.label}
+          </text>
+        );
+      })}
       {/* 補助線 */}
       {spec.guides?.map((p, i) => (
         <g key={`gd${i}`} opacity="0.7">

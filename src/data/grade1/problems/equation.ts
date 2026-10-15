@@ -5,16 +5,16 @@ import { plainMinus, text } from '@/math/format';
 
 /**
  * 第3章「方程式」のテンプレート(台本 03_unknown_cave.md の敵に対応)。
- *   g1.eq.basic    てんびんスライム  方程式の解・等式の性質(x + a = b、ax = b、x/k = b)
- *   g1.eq.linear   移項ネズミ        移項(ax + b = c、両辺に x)
+ *   g1.eq.basic    てんびんスライム  方程式の解・等式の性質(x + a = b、ax = b、x/k = b、(p/q)x = b)
+ *   g1.eq.linear   移項ネズミ        移項(ax + b = c、ax = cx + e、ax + b = cx + e)
  *   g1.eq.paren    かっこトロル      かっこを含む方程式
  *   g1.eq.fraction 分数ゴースト      小数・分数の係数
  *   g1.eq.ratio    比のカニ          比例式
  *   g1.eq.word     (ボス)            文章題(選択式で式 → 数値で解)
- * ★ は 教科書(東京書籍「新しい数学1」3章)の 順に 合わせた(2026-10-15、先生の方針「道中は教科書」)。
- * 各 ★ の 1 段目が 教科書の 前の方の問題に なるようにし、チャレンジテストの 形(12x + 9 = 7x − 11、2 − 7x = 3x − 8、
- * x + 3(2x − 5) = 6、(x + 2) : 9 = 10 : 6)は ★3 に 置く。解は 整数(±12 まで)が 基本で、
- * 分数の 解は 基本の ★3(6x = 4)だけ。答えは すべて「x の値」
+ * ★ は 教科書の 本文(先生から 受け取った 3 章 26 ページ、2026-10-15。特徴は refs/prints/3章_honbun-features.md)に 合わせた。
+ * 各 ★ の 1 段目が 教科書の 前の方の 問(♥ の 基本)、★3 は 章の問題 A と チャレンジテストの 形。
+ * 解は 整数が 基本。教科書の 基本に ある −6x = 3 のような 分数の 解は 等式の性質の ★2 から、移項の ★3 にも 出す。
+ * 答えは すべて「x の値」
  */
 const UNIT = '方程式';
 
@@ -26,18 +26,118 @@ const coef = (c: number, v = 'x'): string => (c === 1 ? v : c === -1 ? `-${v}` :
 const signed = (c: number, v = ''): string => (c === 0 ? '' : `${c < 0 ? ' - ' : ' + '}${v ? coef(Math.abs(c), v) : Math.abs(c)}`);
 /** ax + b(a が 0 なら b だけ) */
 const lin = (a: number, b: number): string => (a === 0 ? String(b) : `${coef(a)}${signed(b)}`);
-/** 項を 反対の辺へ 移したときの 書き方(符号を 変えて たす) */
-const moved = (c: number, v = ''): string => signed(-c, v);
 /** 小数(10 分の n、100 分の n)。12 → 1.2、−5 → −0.5、20 → 2 */
 const dec = (n: number, scale = 10): string => String(n / scale);
-/** 小数の 係数の x */
-const decCoef = (n: number, scale = 10): string => coef(n / scale);
-const decSigned = (n: number, scale = 10): string => `${n < 0 ? ' - ' : ' + '}${dec(Math.abs(n), scale)}`;
 /** 答えの 行 */
 const answerLine = (x: Rational | number): string => `${text('答え: ')} x = ${toTex(typeof x === 'number' ? rat(x) : x)}`;
-/** px + q = rx + s の 解(解説・まちがいの 計算に 使う) */
-const solve = (p: number, q: number, r: number, s: number): Rational => rat(s - q, p - r);
 const gcd = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcd(b, a % b));
+const lcm = (a: number, b: number): number => Math.abs(a * b) / gcd(a, b);
+/** 数を 平文の −(問題文・一言用) */
+const pm = (n: number | string): string => plainMinus(String(n));
+
+// ---------------------------------------------------------------- 小さな 分数(問題を 作るときの 計算用)
+
+interface Fr {
+  n: number;
+  d: number;
+}
+function fr(n: number, d = 1): Fr {
+  if (d < 0) [n, d] = [-n, -d];
+  const g = gcd(n, d) || 1;
+  return { n: n / g, d: d / g };
+}
+const frAdd = (a: Fr, b: Fr): Fr => fr(a.n * b.d + b.n * a.d, a.d * b.d);
+const frSub = (a: Fr, b: Fr): Fr => fr(a.n * b.d - b.n * a.d, a.d * b.d);
+const frMul = (a: Fr, b: Fr): Fr => fr(a.n * b.n, a.d * b.d);
+const frIsInt = (a: Fr): boolean => a.d === 1;
+const frRat = (a: Fr): Rational => rat(a.n, a.d);
+
+// ---------------------------------------------------------------- 両辺の 式(移項・かっこ・小数と分数を はらった あと で 使う)
+
+/** 整数の 係数の 項。p は かっこ k(ax + b)。rev なら かっこの 中を 数から 書く k(b + ax)(教科書の −3(2 − x)) */
+type Term = { t: 'x'; c: number } | { t: 'n'; c: number } | { t: 'p'; k: number; a: number; b: number; rev?: boolean };
+type Side = Term[];
+
+const innerTex = (p: { a: number; b: number; rev?: boolean }): string => (p.rev ? `${p.b}${signed(p.a, 'x')}` : lin(p.a, p.b));
+function termTex(term: Term, first: boolean): string {
+  if (term.t === 'x') return first ? coef(term.c) : signed(term.c, 'x');
+  if (term.t === 'n') return first ? String(term.c) : signed(term.c);
+  const body = `(${innerTex(term)})`;
+  const k = Math.abs(term.k) === 1 ? '' : String(Math.abs(term.k));
+  if (first) return `${term.k < 0 ? '-' : ''}${k}${body}`;
+  return `${term.k < 0 ? ' - ' : ' + '}${k}${body}`;
+}
+const sideTex = (s: Side): string => (s.length ? s.map((t, i) => termTex(t, i === 0)).join('') : '0');
+/** かっこを はずした 項の 並び(rev なら 数の項が 先) */
+const flat = (s: Side): Side =>
+  s.flatMap((t): Term[] => {
+    if (t.t !== 'p') return [t];
+    const x: Term = { t: 'x', c: t.k * t.a };
+    const n: Term = { t: 'n', c: t.k * t.b };
+    return (t.rev ? [n, x] : [x, n]).filter((u) => u.c !== 0);
+  });
+const sumX = (s: Side): number => flat(s).reduce((v, t) => v + (t.t === 'x' ? t.c : 0), 0);
+const sumN = (s: Side): number => flat(s).reduce((v, t) => v + (t.t === 'n' ? t.c : 0), 0);
+/** 検証用: その辺の 式に x = v を 入れる JS 式(問題を 作った 計算とは 別の 書き方で 答えを 確かめる) */
+const sideJs = (s: Side, v: number): string =>
+  s.map((t) => (t.t === 'x' ? `(${t.c})*(${v})` : t.t === 'n' ? `(${t.c})` : `(${t.k})*((${t.a})*(${v})+(${t.b}))`)).join('+') || '0';
+const verifyOf = (l: Side, r: Side): string =>
+  `((${sideJs(r, 0)})-(${sideJs(l, 0)}))/(((${sideJs(l, 1)})-(${sideJs(l, 0)}))-((${sideJs(r, 1)})-(${sideJs(r, 0)})))`;
+
+/** 教科書の 手順の 解説: かっこを はずす → x の項を 左辺に、数の項を 右辺に 移項 → ax = b → 両辺を a で わる */
+function solveSteps(left: Side, right: Side, firstLabel = ''): string[] {
+  const steps = [`${sideTex(left)} = ${sideTex(right)}${firstLabel ? ` \\quad ${text(firstLabel)}` : ''}`];
+  const fl = flat(left);
+  const fr2 = flat(right);
+  if ([...left, ...right].some((t) => t.t === 'p')) steps.push(`${sideTex(fl)} = ${sideTex(fr2)} \\quad ${text('(かっこを はずす)')}`);
+  const Xl = sumX(left);
+  const Xr = sumX(right);
+  const Nl = sumN(left);
+  const Nr = sumN(right);
+  const movedX = fr2.filter((t) => t.t === 'x');
+  const movedN = fl.filter((t) => t.t === 'n');
+  const lx: Side = [...fl.filter((t) => t.t === 'x'), ...movedX.map((t): Term => ({ t: 'x', c: -(t as { c: number }).c }))];
+  const rn: Side = [...fr2.filter((t) => t.t === 'n'), ...movedN.map((t): Term => ({ t: 'n', c: -(t as { c: number }).c }))];
+  if (movedX.length || movedN.length) {
+    const what = [...movedX.map((t) => pm(coef((t as { c: number }).c))), ...movedN.map((t) => pm((t as { c: number }).c))].join(' と ');
+    steps.push(`${sideTex(lx)} = ${sideTex(rn)} \\quad ${text(`(${what} を 移項)`)}`);
+  }
+  const c = Xl - Xr;
+  if (lx.length > 1 || rn.length > 1) steps.push(`${c === 0 ? '0' : coef(c)} = ${Nr - Nl}`);
+  const v = rat(Nr - Nl, c);
+  if (c !== 1) steps.push(`x = ${toTex(v)} \\quad ${text(`(両辺を ${pm(c)} で わる)`)}`);
+  steps.push(answerLine(v));
+  return steps;
+}
+
+/** 移項・かっこの よくある まちがい(それぞれの 誤答を 計算する) */
+function solveMistakes(left: Side, right: Side): Mistake[] {
+  const Xl = sumX(left);
+  const Xr = sumX(right);
+  const Nl = sumN(left);
+  const Nr = sumN(right);
+  const c = Xl - Xr;
+  const out: Mistake[] = [];
+  const nOnLeft = flat(left).find((t) => t.t === 'n') as { c: number } | undefined;
+  const xOnRight = flat(right).find((t) => t.t === 'x') as { c: number } | undefined;
+  // 数の項を 符号を 変えずに 右辺へ
+  if (nOnLeft) out.push(mistakeNum(rat(Nr + Nl, c), `${pm(nOnLeft.c)} を 右辺へ 移すときは 符号を 変えて ${pm(-nOnLeft.c)} に するよ`));
+  // x の項を 符号を 変えずに 左辺へ
+  if (xOnRight && Xl + Xr !== 0) out.push(mistakeNum(rat(Nr - Nl, Xl + Xr), `${pm(coef(xOnRight.c))} を 左辺へ 移すときは 符号を 変えて ${pm(coef(-xOnRight.c))} に するよ`));
+  // かっこの 後ろの 項に かけ忘れた(3(x + 2) → 3x + 2)/ かっこの 前が 負の数で 符号を 変え忘れた(−2(x − 3) → −2x − 6)
+  for (const [side, sign] of [
+    [left, 1],
+    [right, -1],
+  ] as const)
+    for (const t of side) {
+      if (t.t !== 'p') continue;
+      if (Math.abs(t.k) !== 1) out.push(mistakeNum(rat(Nr - Nl + sign * (t.k * t.b - t.b), c), `かっこの 前の ${pm(t.k)} は、かっこの 中の ${pm(t.b)} にも かけるよ(分配法則)`));
+      if (t.k < 0) out.push(mistakeNum(rat(Nr - Nl + sign * 2 * t.k * t.b, c), `${pm(t.k)}(…) は かっこの 中の どの項にも ${pm(t.k)} を かける。${pm(t.k)} × ${t.b < 0 ? `(${pm(t.b)})` : t.b} = ${pm(t.k * t.b)} だよ`));
+    }
+  // 最後に わるところを ひいた(5x = 15 で 10)
+  if (Math.abs(c) !== 1) out.push(mistakeNum(Nr - Nl - c, `${pm(coef(c))} = ${pm(Nr - Nl)} は 両辺を ${pm(c)} で わるよ(ひくのでは ない)`));
+  return out;
+}
 
 interface EqParts {
   d: Difficulty;
@@ -56,90 +156,104 @@ interface EqParts {
 /** 「〜 の x を求めよ」の 形の 問題に まとめる */
 function eqProblem(p: EqParts): Problem {
   const plain = plainMinus(p.eq.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1)/$2').replace(/\((\w)\)\//g, '$1/').replace(/\\times/g, '×'));
+  const answer = typeof p.answer === 'number' ? rat(p.answer) : p.answer;
   return {
     templateId: p.id,
     difficulty: p.d,
     prompt: `${p.eq} \\quad ${text('x を求めよ')}`,
     promptText: `${plain} の x を求めよ`,
-    answer: { kind: 'number', value: typeof p.answer === 'number' ? rat(p.answer) : p.answer },
+    answer: { kind: 'number', value: answer },
     hint: p.hint,
     explanation: p.explanation,
     // 一言の 負の数も 平文の −(−3 など)で 見せる
     mistakes: p.mistakes?.map((m) => ({ ...m, say: plainMinus(m.say) })),
-    tags: p.tags,
+    tags: answer.d !== 1n && !p.tags.includes('eq_fraction_answer') ? [...p.tags, 'eq_fraction_answer'] : p.tags,
     key: p.key,
     verify: p.verify,
   };
 }
 
-// ---------------------------------------------------------------- 基本(等式の性質)
+/** 両辺の 式から 問題を 作る(移項・かっこ・比例式) */
+function sidesProblem(d: Difficulty, id: string, left: Side, right: Side, hint: string, tags: string[], eqTex?: string, firstSteps: string[] = []): Problem {
+  const c = sumX(left) - sumX(right);
+  const answer = rat(sumN(right) - sumN(left), c);
+  const eq = eqTex ?? `${sideTex(left)} = ${sideTex(right)}`;
+  return eqProblem({
+    d,
+    id,
+    eq,
+    answer,
+    hint,
+    explanation: [...firstSteps, ...solveSteps(left, right)],
+    mistakes: solveMistakes(left, right),
+    tags,
+    key: `${id}:${eq}`,
+    verify: verifyOf(left, right),
+  });
+}
+
+// ---------------------------------------------------------------- 基本(方程式の解・等式の性質)
 
 /**
- * 方程式の解・等式の性質(てんびんスライム)。
- *   ★1: x + a = b、x − a = b、ax = b(数は 1 けた・解は 正の数)/ 5 回に 1 回 解を 選ぶ(2x + 1 = 7 の 解は 1〜4 の どれ?)
- *   ★2: 解が 負の数(x + 7 = 3)/ ax = b の 負の数(−4x = 12)/ −x = 6 / x/k = b(両辺に k を かける)
- *   ★3: 解が 分数(6x = 4 → 2/3)/ 分数の 係数(⅔x = 6 → 両辺に 逆数を かける)/ ★2 の 形の 数を 大きく
+ * 方程式の解・等式の性質(てんびんスライム)。教科書の 1 節 1・問題 3〜5。
+ *   ★1: x + a = b / a + x = b / x − a = b(解は 負の数も。例題の x + 9 = 4)/ ax = b(九九)/ 7 回に 1 回 解を 選ぶ(1〜4 の うち 2x + 1 = 7 の 解は?)
+ *   ★2: −4x = 12 / −x = 6 / x/k = b / (p/q)x = b(¼x = 5、⅔x = 6)/ **解が 分数**(−6x = 3。教科書の 基本)/ 6 回に 1 回 k が 解の 方程式を 選ぶ
+ *   ★3: 解が 分数 / −(p/q)x = b / 数の 大きい ★2 の 形
  */
 function genBasic(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
-    const form = rng.pick([0, 0, 1, 1, 2, 2, 3]);
-    if (form === 3) return genSolutionChoice(rng, d);
-    if (form === 2) {
-      const a = rng.int(2, 9);
-      const x = rng.int(2, 9);
-      return basicMul(d, a, x);
-    }
-    const a = rng.int(1, 9);
-    const x = rng.int(1, 9);
-    return form === 0 ? basicAdd(d, a, x) : basicAdd(d, -a, x);
+    const form = rng.pick([0, 0, 1, 2, 2, 3, 3, 4]);
+    if (form === 4) return genSolutionChoice(rng, d);
+    if (form === 3) return basicMul(d, rng.int(2, 9), rng.int(1, 9));
+    const a = rng.int(1, 12);
+    const x = rng.bool(0.7) ? rng.int(1, 12) : -rng.int(1, 9);
+    return form === 2 ? basicAdd(d, -a, x) : basicAdd(d, a, x, form === 1);
   }
   if (d === 2) {
-    const form = rng.pick([0, 0, 1, 1, 2, 3, 3]);
-    if (form === 0) {
-      // 解が 負の数 / a が 負の数(x − 4 = −9)
-      const x = rng.nonZero(9);
-      const a = rng.nonZero(9);
-      if (x > 0 && a > 0) return basicAdd(d, a, -x);
-      return basicAdd(d, a, x);
-    }
+    const form = rng.pick([0, 1, 1, 2, 3, 4, 5]);
+    if (form === 0) return rng.bool() ? genWhichSolution(rng, d) : basicAdd(d, rng.nonZero(12), rng.nonZero(12), rng.bool(0.3));
     if (form === 1) {
       const a = rng.nonZero(9, 2);
       const x = rng.nonZero(9);
       return a > 0 && x > 0 ? basicMul(d, -a, x) : basicMul(d, a, x);
     }
     if (form === 2) return basicMul(d, -1, rng.nonZero(12, 2));
-    // x/k = b
-    const k = rng.int(2, 6);
-    const b = rng.nonZero(6);
-    return basicDiv(d, k, b);
+    if (form === 3) return basicDiv(d, rng.int(2, 6), rng.nonZero(6));
+    if (form === 4) return basicFracCoefRandom(rng, d, false);
+    return basicFracAnswer(rng, d, 6);
   }
   const form = rng.pick([0, 0, 1, 1, 2]);
-  if (form === 0) {
-    // 解が 分数: ax = b で b が a で わりきれない(約分は する)
-    let a: number, b: number;
-    do {
-      a = rng.nonZero(9, 2);
-      b = rng.nonZero(12, 1);
-    } while (b % a === 0 || Math.abs(a) === Math.abs(b));
-    return basicMul(d, a, rat(b, a));
-  }
-  if (form === 1) {
-    // (p/q)x = b。解は 整数
-    let p: number, q: number;
-    do {
-      p = rng.nonZero(5);
-      q = rng.int(2, 6);
-    } while (gcd(p, q) !== 1);
-    const x = q * rng.nonZero(Math.max(1, Math.floor(12 / q)));
-    return basicFracCoef(d, p, q, x);
-  }
-  return rng.bool() ? basicMul(d, rng.nonZero(12, 6), rng.nonZero(12)) : basicAdd(d, rng.nonZero(20, 10), rng.nonZero(12));
+  if (form === 0) return basicFracAnswer(rng, d, 9);
+  if (form === 1) return basicFracCoefRandom(rng, d, true);
+  return rng.bool() ? basicMul(d, rng.nonZero(12, 6), rng.nonZero(12)) : basicAdd(d, rng.nonZero(20, 10), rng.nonZero(12), rng.bool(0.3));
 }
 
-/** x + a = b(a が 負なら x − |a| = b) */
-function basicAdd(d: Difficulty, a: number, x: number): Problem {
+/** ax = b で 解が 分数(b が a で わりきれない。約分は する) */
+function basicFracAnswer(rng: Rng, d: Difficulty, max: number): Problem {
+  let a: number, b: number;
+  do {
+    a = rng.nonZero(max, 2);
+    b = rng.nonZero(12, 1);
+  } while (b % a === 0 || Math.abs(a) === Math.abs(b));
+  return basicMul(d, a, rat(b, a));
+}
+
+/** (p/q)x = b。解は 整数。neg なら 係数が 負の数のことも(−½x = 6) */
+function basicFracCoefRandom(rng: Rng, d: Difficulty, neg: boolean): Problem {
+  let p: number, q: number;
+  do {
+    p = neg ? rng.nonZero(5) : rng.int(1, 5);
+    q = rng.int(2, 6);
+  } while (gcd(p, q) !== 1);
+  const x = q * rng.nonZero(Math.max(1, Math.floor(12 / q)));
+  return basicFracCoef(d, p, q, x);
+}
+
+/** x + a = b(a が 負なら x − |a| = b)。constFirst なら a + x = b(教科書の 10 + x = 7) */
+function basicAdd(d: Difficulty, a: number, x: number, constFirst = false): Problem {
   const b = x + a;
-  const eq = `${lin(1, a)} = ${b}`;
+  const left = constFirst && a > 0 ? `${a} + x` : lin(1, a);
+  const eq = `${left} = ${b}`;
   return eqProblem({
     d,
     id: 'g1.eq.basic',
@@ -148,14 +262,14 @@ function basicAdd(d: Difficulty, a: number, x: number): Problem {
     hint: a > 0 ? `天秤の 両側から ${a} を 取ってみよう(両辺から ${a} を ひく)` : `天秤の 両側に ${-a} を のせてみよう(両辺に ${-a} を たす)`,
     explanation: [
       `${eq}`,
-      `${lin(1, a)}${moved(a)} = ${b}${moved(a)} \\quad ${text(a > 0 ? `(両辺から ${a} を ひく)` : `(両辺に ${-a} を たす)`)}`,
+      `${left}${signed(-a)} = ${b}${signed(-a)} \\quad ${text(a > 0 ? `(両辺から ${a} を ひく)` : `(両辺に ${-a} を たす)`)}`,
       `x = ${x}`,
       answerLine(x),
     ],
-    // 両辺から ひく ところを たした(符号を 変えずに 移した)
-    mistakes: [mistakeNum(b + a, a > 0 ? `x に ${a} が たしてあるから、両辺から ${a} を ひくんだよ(${b} − ${a})` : `x から ${-a} が ひいてあるから、両辺に ${-a} を たすんだよ(${b} + ${-a})`)],
+    // 両辺から ひく ところを たした
+    mistakes: [mistakeNum(b + a, a > 0 ? `x に ${a} が たしてあるから、両辺から ${a} を ひくんだよ(${pm(b)} − ${a})` : `x から ${-a} が ひいてあるから、両辺に ${-a} を たすんだよ(${pm(b)} + ${-a})`)],
     tags: ['eq_add'],
-    key: `eqb:x${a}=${b}`,
+    key: `eqb:${left}=${b}`,
     verify: `${b}-(${a})`,
   });
 }
@@ -168,13 +282,14 @@ function basicMul(d: Difficulty, a: number, x: number | Rational): Problem {
   const frac = xr.d !== 1n;
   // 約分が いるのは 分子と 分母に 公約数が あるときだけ(4x = 11 は そのまま 11/4)
   const reduce = frac && gcd(a, b) !== 1;
+  const ap = a < 0 ? `(${a})` : String(a);
   const mistakes: Mistake[] = [];
   // わる数と わられる数を 逆に(4x = 12 で 4/12)
-  if (b !== 0) mistakes.push(mistakeNum(rat(a, b), `${coef(a)} = ${b} は 両辺を ${a < 0 ? `(${a})` : a} で わる。${b} ÷ ${a < 0 ? `(${a})` : a} だよ(わる順が 逆)`));
+  if (b !== 0) mistakes.push(mistakeNum(rat(a, b), `${coef(a)} = ${b} は 両辺を ${ap} で わる。${b} ÷ ${ap} だよ(わる順が 逆)`));
   // 符号だけ ちがう
   if (a < 0) mistakes.push(mistakeNum(rat(-b, a), `数の 大きさは 合ってる! 両辺を ${a} で わるから、符号も 変わるよ`));
   // 両辺から a を ひいた(かけ算を 移項の ように した)
-  mistakes.push(mistakeNum(b - a, `${coef(a)} は ${a < 0 ? `(${a})` : a} × x。ひくのでは なく、両辺を ${a < 0 ? `(${a})` : a} で わろう`));
+  mistakes.push(mistakeNum(b - a, `${coef(a)} は ${ap} × x。ひくのでは なく、両辺を ${ap} で わろう`));
   return eqProblem({
     d,
     id: 'g1.eq.basic',
@@ -248,8 +363,8 @@ function genSolutionChoice(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.eq.basic',
     difficulty: d,
-    prompt: `${text(`${values.join('、').replace(/-/g, '−')} の うち、方程式`)} \\; ${eq} \\; ${text('の 解は?')}`,
-    promptText: `${values.join('、').replace(/-/g, '−')} の うち、方程式 ${plainMinus(eq)} の 解は?`,
+    prompt: `${text(`${pm(values.join('、'))} の うち、方程式`)} \\; ${eq} \\; ${text('の 解は?')}`,
+    promptText: `${pm(values.join('、'))} の うち、方程式 ${plainMinus(eq)} の 解は?`,
     answer: { kind: 'choice', options, correct },
     hint: 'x に 1 つずつ 入れて、左辺と 右辺が 等しく なるか 調べよう',
     explanation: [...values.map((v) => `x = ${v} ${text('のとき 左辺は')} ${a} \\times ${v < 0 ? `(${v})` : v}${signed(b)} = ${a * v + b}${v === x ? ` \\quad ${text('← 右辺と 等しい')}` : ''}`), `${text('答え: ')} x = ${x}`],
@@ -259,210 +374,233 @@ function genSolutionChoice(rng: Rng, d: Difficulty): Problem {
   };
 }
 
+/**
+ * k が 解である 方程式を 選ぶ(教科書の「−4 が 解である ものを いいなさい」「6 が 解である ものは どれですか」)。
+ * 3 つの 式の 形(x − a = b、x/m = b、ax + b = cx、ax − b = c)の うち 1 つだけ 解が k
+ */
+function genWhichSolution(rng: Rng, d: Difficulty): Problem {
+  const k = rng.pick([-4, -3, -2, 2, 3, 4, 5, 6]);
+  // 解が s の 式と、x = k を 入れたときの 左辺・右辺(解説に 使う)
+  const make = (form: number, s: number): { eq: string; l: Fr; r: Fr } | null => {
+    if (form === 0) {
+      const a = rng.int(1, 9);
+      return { eq: `${lin(1, -a)} = ${s - a}`, l: fr(k - a), r: fr(s - a) };
+    }
+    if (form === 1) {
+      const m = s === 0 ? undefined : [2, 3, 4, 6].find((t) => s % t === 0 && rng.bool(0.7));
+      if (!m) return null;
+      return { eq: `\\frac{x}{${m}} = ${s / m}`, l: fr(k, m), r: fr(s / m) };
+    }
+    if (form === 2) {
+      const c = rng.int(2, 4);
+      const a = c + rng.pick([-1, 1]);
+      const b = (c - a) * s;
+      return { eq: `${lin(a, b)} = ${coef(c)}`, l: fr(a * k + b), r: fr(c * k) };
+    }
+    const a = rng.int(2, 3);
+    const b = rng.int(1, 8);
+    return { eq: `${lin(a, -b)} = ${a * s - b}`, l: fr(a * k - b), r: fr(a * s - b) };
+  };
+  for (;;) {
+    const forms = rng.shuffle([0, 1, 2, 3]).slice(0, 3);
+    const sols = [k, ...[1, 2].map(() => k + rng.pick([-2, -1, 1, 2, 3]))];
+    if (sols[1] === k || sols[2] === k) continue;
+    const eqs = forms.map((f, i) => make(f, sols[i]));
+    if (eqs.some((e) => !e)) continue;
+    const list = eqs as { eq: string; l: Fr; r: Fr }[];
+    if (new Set(list.map((e) => e.eq)).size !== 3) continue;
+    const order = rng.shuffle([0, 1, 2]);
+    const options = order.map((i) => list[i].eq);
+    const correct = order.indexOf(0);
+    return {
+      templateId: 'g1.eq.basic',
+      difficulty: d,
+      prompt: `${text(`次の 方程式で、${pm(k)} が 解である ものは?`)}`,
+      promptText: `次の 方程式で、${pm(k)} が 解である ものは?`,
+      answer: { kind: 'choice', options, correct },
+      hint: `どの 式にも x = ${pm(k)} を 入れて、左辺と 右辺が 等しく なるか 調べよう(負の数は かっこを つけて)`,
+      explanation: [
+        ...order.map((i) => `${list[i].eq} \\quad x = ${k} ${text(' のとき 左辺')} ${toTex(frRat(list[i].l))}${text('、右辺')} ${toTex(frRat(list[i].r))}${i === 0 ? ` \\; ${text('← 等しい')}` : ''}`),
+        `${text('答え: ')} ${list[0].eq}`,
+      ],
+      tags: ['eq_which_solution'],
+      key: `eqws:${options.join('|')}`,
+      verify: String(correct),
+    };
+  }
+}
+
 // ---------------------------------------------------------------- 移項
 
 /**
- * 移項(移項ネズミ)。
- *   ★1: ax + b = c(a は 2〜9、解は 正の数)
- *   ★2: ax = cx + e(5x = 3x + 8)/ ax + b = cx + e(係数 9 まで、解は ±9)
- *   ★3: チャレンジテストの形 12x + 9 = 7x − 11 / 数の項が 先の 2 − 7x = 3x − 8(係数 12 まで、解は ±12)
+ * 移項(移項ネズミ)。教科書の 1 節 2「方程式の解き方」。
+ *   ★1: ax + b = c / b − ax = c(1 − 2x = 11)/ ax = cx + e(4x = 3x − 6)。係数 9 まで
+ *   ★2: ax + b = cx + e(9x − 5 = 2x + 23)。右辺が 数から 始まる 形(2x + 7 = 19 − 4x)・解が 0(−7x + 1 = −x + 1)も
+ *   ★3: 係数 12 まで。数の項が 先の 形(2 − 7x = 3x − 8。チャレンジテスト)/ 4 回に 1 回 解が 分数(9x = 4 − 7x、5 − x = 5x + 8)
  */
 function genLinear(rng: Rng, d: Difficulty): Problem {
+  const id = 'g1.eq.linear';
+  const hint1 = '数の項を 右辺へ 移項しよう(移すと 符号が 変わる)。次に x の係数で わる';
+  const hint2 = 'x の項は 左辺へ、数の項は 右辺へ。移すときは 符号を 変える';
   if (d === 1) {
-    const a = rng.int(2, 9);
-    const x = rng.int(1, 9);
-    const b = rng.nonZero(9);
-    return linearProblem(d, a, b, 0, a * x + b, x, false);
-  }
-  if (d === 2 && rng.bool()) {
-    // ax = cx + e(数の項は 右だけ)
-    const a = rng.int(2, 9);
-    let c = rng.int(1, 8);
-    while (c === a) c = rng.int(1, 8);
-    const x = rng.nonZero(9);
-    return linearProblem(d, a, 0, c, (a - c) * x, x, false);
+    // 右辺の 数は 40 まで(教科書の 問 1: 2x − 3 = 7、1 − 2x = 11、7x = 5x − 6)
+    for (;;) {
+      const form = rng.pick([0, 0, 1, 2, 2]);
+      const x = rng.nonZero(9);
+      if (form === 0) {
+        const a = rng.int(2, 9);
+        const b = rng.nonZero(9);
+        if (Math.abs(a * x + b) > 40 || a * x + b === 0) continue;
+        return sidesProblem(d, id, [{ t: 'x', c: a }, { t: 'n', c: b }], [{ t: 'n', c: a * x + b }], hint1, ['eq_transpose']);
+      }
+      if (form === 1) {
+        const a = -rng.int(2, 5);
+        const b = rng.int(1, 9);
+        if (a * x + b === 0) continue;
+        return sidesProblem(d, id, [{ t: 'n', c: b }, { t: 'x', c: a }], [{ t: 'n', c: a * x + b }], hint1, ['eq_transpose']);
+      }
+      const a = rng.int(2, 9);
+      const c = rng.int(1, 8);
+      if (c === a || Math.abs((a - c) * x) > 30) continue;
+      return sidesProblem(d, id, [{ t: 'x', c: a }], [{ t: 'x', c }, { t: 'n', c: (a - c) * x }], hint2, ['eq_both_sides']);
+    }
   }
   const max = d === 2 ? 9 : 12;
-  const x = rng.nonZero(max);
-  let a: number, c: number, b: number, e: number;
-  do {
-    a = rng.nonZero(max);
-    c = rng.nonZero(max);
-    b = rng.nonZero(d === 2 ? 12 : 15);
-    e = (a - c) * x + b;
-  } while (a === c || e === 0 || Math.abs(e) > (d === 2 ? 30 : 60) || (d === 3 && Math.abs(a) < 2 && Math.abs(c) < 2));
-  // ★3 の 半分は 数の項が 先(2 − 7x = 3x − 8)
-  return linearProblem(d, a, b, c, e, x, d === 3 && rng.bool());
-}
-
-/** ax + b = cx + e(c = 0 なら 右辺は 数だけ)。constFirst なら 左辺を b + ax と 書く */
-function linearProblem(d: Difficulty, a: number, b: number, c: number, e: number, x: number, constFirst: boolean): Problem {
-  const left = constFirst ? `${b}${signed(a, 'x')}` : lin(a, b);
-  const right = lin(c, e);
-  const eq = `${left} = ${right}`;
-  const steps: string[] = [eq];
-  // 移項: x の項は 左へ、数の項は 右へ(符号を 変える)
-  const what = [c !== 0 ? `${plainMinus(coef(c))}` : '', b !== 0 ? `${plainMinus(String(b))}` : ''].filter(Boolean).join(' と ');
-  steps.push(`${coef(a)}${c !== 0 ? moved(c, 'x') : ''} = ${e}${b !== 0 ? moved(b) : ''} \\quad ${text(`(${what} を 移項)`)}`);
-  if (c !== 0 || b !== 0) steps.push(`${coef(a - c)} = ${e - b}`);
-  if (a - c !== 1) steps.push(`x = ${toTex(rat(e - b, a - c))} \\quad ${text(`(両辺を ${a - c} で わる)`)}`);
-  steps.push(answerLine(x));
-  const mistakes: Mistake[] = [];
-  // 数の項を 符号を 変えずに 移した
-  if (b !== 0) mistakes.push(mistakeNum(solve(a - c, 0, 0, e + b), `${plainMinus(String(b))} を 右辺へ 移すときは 符号を 変えて ${plainMinus(String(-b))} に するよ`));
-  // x の項を 符号を 変えずに 移した
-  if (c !== 0 && a + c !== 0) mistakes.push(mistakeNum(solve(a + c, 0, 0, e - b), `${plainMinus(coef(c))} を 左辺へ 移すときは 符号を 変えて ${plainMinus(coef(-c))} に するよ`));
-  // 最後に わるところを ひいた(5x = 15 で 10)
-  if (a - c !== 1 && a - c !== -1) mistakes.push(mistakeNum(e - b - (a - c), `${coef(a - c)} = ${e - b} は 両辺を ${a - c} で わるよ(ひくのでは ない)`));
-  return eqProblem({
-    d,
-    id: 'g1.eq.linear',
-    eq,
-    answer: x,
-    hint: c === 0 ? '数の項を 右辺へ 移項しよう(移すと 符号が 変わる)。次に x の係数で わる' : 'x の項は 左辺へ、数の項は 右辺へ。移すときは 符号を 変える',
-    explanation: steps,
-    mistakes,
-    tags: c === 0 ? ['eq_transpose'] : ['eq_both_sides'],
-    key: `eql:${constFirst ? 'c' : ''}${a}x${b}=${c}x${e}`,
-    verify: `((${e})-(${b}))/((${a})-(${c}))`,
-  });
+  const fracAnswer = d === 3 && rng.bool(0.25);
+  for (;;) {
+    const a = rng.nonZero(max);
+    const c = rng.nonZero(max);
+    if (a === c || (d === 3 && Math.abs(a) < 2 && Math.abs(c) < 2)) continue;
+    const b = rng.bool(0.15) ? 0 : rng.nonZero(d === 2 ? 12 : 15);
+    let e: number;
+    if (fracAnswer) {
+      // 分母は 2〜4(教科書の 9x = 4 − 7x → ¼、5 − x = 5x + 8 → −½)
+      if (Math.abs(a - c) > 4) continue;
+      e = b + rng.nonZero(20);
+      if ((e - b) % (a - c) === 0) continue;
+    } else {
+      const x = d === 2 && rng.bool(0.1) ? 0 : rng.nonZero(d === 2 ? 9 : 12);
+      e = (a - c) * x + b;
+    }
+    if (e === 0 || Math.abs(e) > (d === 2 ? 30 : 60)) continue;
+    const leftX: Term = { t: 'x', c: a };
+    const rightX: Term = { t: 'x', c };
+    // 数の項が 先の 形(左: 2 − 7x、右: 19 − 4x)。数の項が 0 なら その辺は x だけ
+    const left: Side = b === 0 ? [leftX] : rng.bool(d === 3 ? 0.5 : 0.25) ? [{ t: 'n', c: b }, leftX] : [leftX, { t: 'n', c: b }];
+    const right: Side = rng.bool(0.4) ? [{ t: 'n', c: e }, rightX] : [rightX, { t: 'n', c: e }];
+    return sidesProblem(d, id, left, right, hint2, ['eq_both_sides']);
+  }
 }
 
 // ---------------------------------------------------------------- かっこ
 
 /**
- * かっこを含む方程式(かっこトロル)。
- *   ★1: k(x + a) = c(k は 2〜5、解は 正の数)
- *   ★2: k(x + a) = mx + n(k は 負の数も。−2(x − 3) = 10 のように 書く)/ x + k(ax + b) = c(チャレンジテストの x + 3(2x − 5) = 6)
- *   ★3: かっこ 2 つ k(x + a) = m(x + b)/ ax − k(x + b) = c(かっこの前が ひき算)/ k(ax + b) = mx + n
+ * かっこを含む方程式(かっこトロル)。教科書の 1 節 3「いろいろな方程式」の 例題・問 1、章の問題 A。
+ *   ★1: k(x + a) = c / k(x + a) − mx = c(5(x + 4) − 3x = 10)
+ *   ★2: c + k(x − a) = d(1 + 2(x − 4) = 3)/ mx − k(b − x) = c(2x − 3(2 − x) = 4)/ mx + c = k(x − a)(7x + 9 = 3(x − 1))/ x + k(ax + b) = c(チャレンジテスト)
+ *   ★3: c − k(x − a) = mx + n(2 − 4(x − 1) = 2x − 18)/ かっこ 2 つ k(x + a) = m(x + b)/ k(ax + b) = mx + n
  */
 function genParen(rng: Rng, d: Difficulty): Problem {
-  if (d === 1) {
-    const k = rng.int(2, 5);
-    const a = rng.nonZero(6);
-    let x = rng.int(1, 9);
-    if (x + a === 0) x++;
-    return parenProblem(d, { k, a: 1, b: a, outA: 0, outB: 0, m: 0, n: k * (x + a), x });
-  }
-  const x = rng.nonZero(9);
-  const form = d === 2 ? rng.int(0, 1) : rng.int(2, 4);
+  const id = 'g1.eq.paren';
+  const hint = 'まず かっこを はずそう(分配法則)。それから 移項';
+  const ok = (n: number, max = 40) => n !== 0 && Math.abs(n) <= max;
   for (;;) {
-    if (form === 0) {
-      // k(x + a) = mx + n
-      const k = rng.nonZero(5, 2);
+    if (d === 1) {
+      const k = rng.int(2, 5);
       const a = rng.nonZero(6);
-      const m = rng.nonZero(6);
-      if (m === k) continue;
-      const n = k * (x + a) - m * x;
-      if (n === 0 || Math.abs(n) > 40) continue;
-      return parenProblem(d, { k, a: 1, b: a, outA: 0, outB: 0, m, n, x });
+      if (rng.bool(0.4)) {
+        const x = rng.int(1, 9);
+        if (x + a === 0) continue;
+        return sidesProblem(d, id, [{ t: 'p', k, a: 1, b: a }], [{ t: 'n', c: k * (x + a) }], hint, ['eq_paren']);
+      }
+      const x = rng.nonZero(9);
+      const m = rng.nonZero(4);
+      if (k + m === 0) continue;
+      const c = k * (x + a) + m * x;
+      if (!ok(c)) continue;
+      return sidesProblem(d, id, [{ t: 'p', k, a: 1, b: a }, { t: 'x', c: m }], [{ t: 'n', c }], hint, ['eq_paren', 'eq_paren_out']);
+    }
+    const x = rng.nonZero(9);
+    const form = d === 2 ? rng.int(0, 3) : rng.int(4, 6);
+    if (form === 0) {
+      // c + k(x − a) = d
+      const c0 = rng.int(1, 9);
+      const k = rng.int(2, 5);
+      const a = rng.nonZero(6);
+      const r = c0 + k * (x + a);
+      if (!ok(r)) continue;
+      return sidesProblem(d, id, [{ t: 'n', c: c0 }, { t: 'p', k, a: 1, b: a }], [{ t: 'n', c: r }], hint, ['eq_paren', 'eq_paren_out']);
     }
     if (form === 1) {
+      // mx − k(b − x) = c(かっこの 中が 数から)
+      const m = rng.int(1, 5);
+      const k = -rng.int(2, 4);
+      const b = rng.int(1, 6);
+      const r = m * x + k * (b - x);
+      if (!ok(r) || m - k === 0) continue;
+      return sidesProblem(d, id, [{ t: 'x', c: m }, { t: 'p', k, a: -1, b, rev: true }], [{ t: 'n', c: r }], hint, ['eq_paren', 'eq_paren_out']);
+    }
+    if (form === 2) {
+      // mx + c = k(x − a)(かっこが 右辺)
+      const m = rng.int(2, 9);
+      const k = rng.int(2, 5);
+      const a = rng.nonZero(6);
+      if (m === k) continue;
+      const c = k * (x + a) - m * x;
+      if (!ok(c)) continue;
+      return sidesProblem(d, id, [{ t: 'x', c: m }, { t: 'n', c }], [{ t: 'p', k, a: 1, b: a }], hint, ['eq_paren', 'eq_paren_right']);
+    }
+    if (form === 3) {
       // x + k(ax + b) = c
       const k = rng.int(2, 4);
       const a = rng.int(1, 3);
       const b = rng.nonZero(6);
       const c = x + k * (a * x + b);
-      if (c === 0 || Math.abs(c) > 40) continue;
-      return parenProblem(d, { k, a, b, outA: 1, outB: 0, m: 0, n: c, x });
+      if (!ok(c)) continue;
+      return sidesProblem(d, id, [{ t: 'x', c: 1 }, { t: 'p', k, a, b }], [{ t: 'n', c }], hint, ['eq_paren', 'eq_paren_out']);
     }
-    if (form === 2) {
+    if (form === 4) {
+      // c − k(x − a) = mx + n
+      const c0 = rng.int(1, 9);
+      const k = -rng.int(2, 5);
+      const a = rng.nonZero(6);
+      const m = rng.nonZero(5);
+      if (k === m) continue;
+      const n = c0 + k * (x + a) - m * x;
+      if (!ok(n)) continue;
+      return sidesProblem(d, id, [{ t: 'n', c: c0 }, { t: 'p', k, a: 1, b: a }], [{ t: 'x', c: m }, { t: 'n', c: n }], hint, ['eq_paren', 'eq_paren_both']);
+    }
+    if (form === 5) {
       // k(x + a) = m(x + b)
       const k = rng.nonZero(6, 2);
       const m = rng.nonZero(6, 2);
       if (k === m) continue;
       const a = rng.nonZero(6);
-      // k(x + a) = m(x + b) → b = (k(x + a) − mx)/m
       const bNum = k * (x + a) - m * x;
       if (bNum % m !== 0) continue;
       const b = bNum / m;
-      if (b === 0 || Math.abs(b) > 12 || b === a) continue;
-      return parenProblem(d, { k, a: 1, b: a, outA: 0, outB: 0, m: 0, n: 0, x, right: { m, b } });
+      if (!ok(b, 12) || b === a) continue;
+      return sidesProblem(d, id, [{ t: 'p', k, a: 1, b: a }], [{ t: 'p', k: m, a: 1, b }], hint, ['eq_paren', 'eq_paren_two']);
     }
-    if (form === 3) {
-      // ax − k(x + b) = c(かっこの前が ひき算)
-      const outA = rng.int(1, 6);
-      const k = -rng.int(2, 5);
-      const b = rng.nonZero(6);
-      if (outA + k === 0) continue;
-      const c = outA * x + k * (x + b);
-      if (c === 0 || Math.abs(c) > 40) continue;
-      return parenProblem(d, { k, a: 1, b, outA, outB: 0, m: 0, n: c, x });
-    }
-    // k(ax + b) = mx + n
+    // k(ax + b) = mx + n(k は 負の数も)
     const k = rng.nonZero(5, 2);
     const a = rng.int(2, 4);
     const b = rng.nonZero(6);
     const m = rng.nonZero(9);
-    if (k * a === m) continue;
+    if (k * a === m || Math.abs(k * a - m) > 15) continue;
     const n = k * (a * x + b) - m * x;
-    if (n === 0 || Math.abs(n) > 50) continue;
-    return parenProblem(d, { k, a, b, outA: 0, outB: 0, m, n, x });
+    if (!ok(n, 50)) continue;
+    return sidesProblem(d, id, [{ t: 'p', k, a, b }], [{ t: 'x', c: m }, { t: 'n', c: n }], hint, ['eq_paren', 'eq_paren_both']);
   }
-}
-
-interface ParenSpec {
-  /** 左辺の かっこ k(ax + b) */
-  k: number;
-  a: number;
-  b: number;
-  /** 左辺の かっこの 前の 項 outA x + outB */
-  outA: number;
-  outB: number;
-  /** 右辺 mx + n(right が あれば かっこの 式 m(x + b)) */
-  m: number;
-  n: number;
-  x: number;
-  right?: { m: number; b: number };
-}
-
-function parenProblem(d: Difficulty, s: ParenSpec): Problem {
-  const { k, a, b, outA, x } = s;
-  const inner = lin(a, b);
-  // かっこの 前の 数: 先頭なら −2(…)、x の あとなら x − 2(…)
-  const pk = (kk: number, body: string, first: boolean) => (first ? `${kk === -1 ? '-' : kk}(${body})` : `${kk < 0 ? ' - ' : ' + '}${Math.abs(kk)}(${body})`);
-  const left = outA !== 0 ? `${coef(outA)}${pk(k, inner, false)}` : pk(k, inner, true);
-  const right = s.right ? pk(s.right.m, lin(1, s.right.b), true) : lin(s.m, s.n);
-  const eq = `${left} = ${right}`;
-  // かっこを はずした 形: 左 Lx + Lc = 右 Rx + Rc
-  const L = outA + k * a;
-  const Lc = k * b;
-  const R = s.right ? s.right.m : s.m;
-  const Rc = s.right ? s.right.m * s.right.b : s.n;
-  const expandedLeft = outA !== 0 ? `${coef(outA)}${signed(k * a, 'x')}${signed(Lc)}` : lin(k * a, Lc);
-  const expandedRight = s.right ? lin(R, Rc) : right;
-  const steps = [eq, `${expandedLeft} = ${expandedRight} \\quad ${text('(かっこを はずす)')}`];
-  if (outA !== 0) steps.push(`${lin(L, Lc)} = ${expandedRight}`);
-  steps.push(`${coef(L)}${R !== 0 ? moved(R, 'x') : ''} = ${Rc}${moved(Lc)} \\quad ${text('(移項)')}`);
-  steps.push(`${coef(L - R)} = ${Rc - Lc}`);
-  if (L - R !== 1) steps.push(`x = ${toTex(rat(Rc - Lc, L - R))}`);
-  steps.push(answerLine(x));
-  const mistakes: Mistake[] = [];
-  // かっこの 後ろの 項に かけ忘れた(3(x + 2) → 3x + 2)
-  if (L !== R) mistakes.push(mistakeNum(solve(L, b, R, s.right ? s.right.m * s.right.b : s.n), `かっこの 前の ${Math.abs(k)} は、かっこの 中の ${plainMinus(String(b))} にも かけるよ(分配法則)`));
-  // かっこの 前が 負の数なのに、後ろの 項の 符号を 変えなかった(−2(x − 3) → −2x − 6)
-  if (k < 0 && L !== R) mistakes.push(mistakeNum(solve(L, -Lc, R, Rc), `${k}(…) は かっこの 中の どの項にも ${k} を かける。${k} × (${plainMinus(String(b))}) = ${plainMinus(String(k * b))} だよ`));
-  return eqProblem({
-    d,
-    id: 'g1.eq.paren',
-    eq,
-    answer: x,
-    hint: 'まず かっこを はずそう(分配法則)。それから 移項',
-    explanation: steps,
-    mistakes,
-    tags: s.right ? ['eq_paren', 'eq_paren_two'] : outA !== 0 || s.m !== 0 ? ['eq_paren_both'] : ['eq_paren'],
-    key: `eqp:${eq}`,
-    verify: `((${Rc})-(${Lc}))/((${L})-(${R}))`,
-  });
 }
 
 // ---------------------------------------------------------------- 小数・分数
 
 /**
- * 小数・分数の 係数(分数ゴースト)。
- *   ★1: 小数(0.4x + 1.2 = 2。片方の辺だけ x)/ x/p + a = b(分母を はらう)
- *   ★2: 小数で 両辺に x(0.5x + 2 = 0.3x + 1)/ x/p + a = x/q + b(解は ±24 まで)/ (a/p)x + b = c
- *   ★3: (x + a)/p = (x + b)/q / 小数第 2 位までの 係数(0.25x − 1 = 0.1x + 0.5)/ 分数の係数で 両辺に x
+ * 小数・分数の 係数(分数ゴースト)。教科書の 1 節 3 の 例題 2・3、問 2・3、章の問題 A。
+ *   ★1: 小数で 片方の辺だけ x(0.5x − 0.3 = 4.2)/ x/p + a = b
+ *   ★2: 小数第 2 位(0.12x − 0.28 = 0.8)/ ⅓x − 4 = ⅕x のように 両辺に x(解は 30 まで)/ (a/p)x + b = c
+ *   ★3: 数の項も 分数(⅔x + ½ = ½x − ⅙)/ (2x − 1)/3 = (x + 3)/2、(x − 4)/3 = (1/7)x / 小数で 両辺に x(1.1x + 1.4 = 3 − 0.5x)
  */
 function genFraction(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
@@ -470,29 +608,40 @@ function genFraction(rng: Rng, d: Difficulty): Problem {
       const A = rng.int(2, 9);
       const B = rng.nonZero(19);
       const x = rng.int(1, 9);
-      const C = A * x + B;
-      return decimalProblem(d, A, B, 0, C, x, 10);
+      return decimalProblem(d, A, B, 0, A * x + B, 10);
     }
     const p = rng.int(2, 5);
     const x = p * rng.int(1, Math.floor(12 / p));
     const a = rng.nonZero(9);
-    return fracProblem(d, { p, q: 0, a, b: x / p + a, x, num: 1 });
+    return fracProblem(d, [{ t: 'x', c: fr(1, p), over: true }, { t: 'n', c: fr(a) }], [{ t: 'n', c: fr(x / p + a) }]);
   }
   if (d === 2) {
     const form = rng.int(0, 2);
     if (form === 0) {
-      const x = rng.nonZero(9);
-      let A: number, C: number, B: number, E: number;
-      do {
-        A = rng.int(2, 9);
-        C = rng.int(1, 9);
-        B = rng.nonZero(30);
-        E = (A - C) * x + B;
-      } while (A === C || E === 0 || Math.abs(E) > 60);
-      return decimalProblem(d, A, B, C, E, x, 10);
+      // 小数第 2 位(片方の 辺だけ x)
+      for (;;) {
+        const A = rng.pick([4, 5, 6, 8, 12, 15, 25, 35]);
+        const B = rng.nonZero(9) * rng.pick([2, 4, 5]);
+        const x = rng.int(1, 12);
+        const C = A * x + B;
+        if (C <= 0 || C % 2 !== 0 || C > 900) continue;
+        return decimalProblem(d, A, B, 0, C, 100);
+      }
     }
-    if (form === 1) return fracBothSides(rng, d, 24);
-    // (a/p)x + b = c
+    if (form === 1) {
+      // (1/p)x + a = (1/q)x + b(数の項は 片方だけの ことも)
+      const [p, q] = rng.shuffle([2, 3, 4, 5, 6]).slice(0, 2);
+      const L = lcm(p, q);
+      const x = L * rng.nonZero(Math.max(1, Math.floor(30 / L)));
+      const a = rng.bool(0.3) ? 0 : rng.nonZero(6);
+      const b = x / p + a - x / q;
+      if (b === 0 && a === 0) return genFraction(rng, d);
+      const over = rng.bool();
+      const left: FSide = [{ t: 'x', c: fr(1, p), over }, ...(a ? [{ t: 'n' as const, c: fr(a) }] : [])];
+      const right: FSide = [{ t: 'x', c: fr(1, q), over }, ...(b ? [{ t: 'n' as const, c: fr(b) }] : [])];
+      return fracProblem(d, left, right);
+    }
+    // (n/p)x + b = c
     let num: number, p: number;
     do {
       num = rng.int(2, 5);
@@ -500,229 +649,274 @@ function genFraction(rng: Rng, d: Difficulty): Problem {
     } while (gcd(num, p) !== 1);
     const x = p * rng.nonZero(Math.max(1, Math.floor(12 / p)));
     const b = rng.nonZero(9);
-    return fracProblem(d, { p, q: 0, a: b, b: (num * x) / p + b, x, num });
+    return fracProblem(d, [{ t: 'x', c: fr(num, p) }, { t: 'n', c: fr(b) }], [{ t: 'n', c: fr((num * x) / p + b) }]);
   }
-  const form = rng.pick([0, 0, 1, 2]);
+  const form = rng.pick([0, 0, 1, 1, 2, 3]);
   if (form === 0) {
-    // (x + a)/p = (x + b)/q
+    // 数の項も 分数: αx + γ = βx + δ
     for (;;) {
-      const p = rng.int(2, 6);
-      const q = rng.int(2, 6);
-      if (p === q) continue;
+      const den = [2, 3, 4, 6];
+      const al = fr(rng.nonZero(3), rng.pick(den));
+      const be = fr(rng.nonZero(3), rng.pick(den));
+      if (al.n * be.d === be.n * al.d || Math.abs(al.n) >= al.d || Math.abs(be.n) >= be.d) continue;
       const x = rng.nonZero(12);
-      const a = rng.nonZero(9);
-      // q(x + a) = p(x + b) → b = (q(x + a) − px)/p
-      const bNum = q * (x + a) - p * x;
-      if (bNum % p !== 0) continue;
-      const b = bNum / p;
-      if (b === 0 || b === a || Math.abs(b) > 12) continue;
-      return fracParenProblem(d, p, q, a, b, x);
+      const ga = fr(rng.nonZero(5), rng.pick(den));
+      const de = frSub(frAdd(frMul(al, fr(x)), ga), frMul(be, fr(x)));
+      if (de.n === 0 || de.d > 6 || Math.abs(de.n) > 9 || frIsInt(ga)) continue;
+      // 右辺の 数も 真分数か 整数(⅙、−1 など)
+      if (!frIsInt(de) && Math.abs(de.n) >= de.d) continue;
+      const over = rng.bool(0.3);
+      return fracProblem(d, [{ t: 'x', c: al, over }, { t: 'n', c: ga }], [{ t: 'x', c: be, over }, { t: 'n', c: de }]);
     }
   }
   if (form === 1) {
-    // 小数第 2 位まで(100 分の 1 の 単位で 作る)
-    const x = rng.nonZero(12);
+    // (a1 x + b1)/p = (a2 x + b2)/q、または (x + b)/p = (1/q)x
     for (;;) {
-      const A = rng.pick([5, 12, 15, 25, 35, 45, 75]);
-      const C = rng.pick([1, 2, 3, 4, 5, 6, 8].map((t) => t * 10).filter((t) => t !== A));
-      const B = rng.nonZero(15) * 10;
-      const E = (A - C) * x + B;
-      if (E === 0 || Math.abs(E) > 600 || E % 5 !== 0) continue;
-      return decimalProblem(d, A, B, C, E, x, 100);
+      const [p, q] = rng.shuffle([2, 3, 4, 5, 6, 7]).slice(0, 2);
+      if (rng.bool(0.3)) {
+        // (x − 4)/3 = (1/7)x
+        const x = q * rng.int(1, Math.floor(30 / q));
+        const b = (p * x) / q - x;
+        if (!Number.isInteger(b) || b === 0 || Math.abs(b) > 12) continue;
+        return fracProblem(d, [{ t: 'q', a: 1, b, p }], [{ t: 'x', c: fr(1, q) }]);
+      }
+      const a1 = rng.int(1, 3);
+      const a2 = rng.int(1, 3);
+      if (q * a1 === p * a2) continue;
+      const x = rng.nonZero(12);
+      const b1 = rng.nonZero(9);
+      const b2Num = q * (a1 * x + b1) - p * a2 * x;
+      if (b2Num % p !== 0) continue;
+      const b2 = b2Num / p;
+      if (b2 === 0 || Math.abs(b2) > 12) continue;
+      return fracProblem(d, [{ t: 'q', a: a1, b: b1, p }], [{ t: 'q', a: a2, b: b2, p: q }]);
     }
   }
-  return fracBothSides(rng, d, 36);
+  if (form === 2) {
+    // 小数で 両辺に x(右辺は 数から 始まる こともある: 1.1x + 1.4 = 3 − 0.5x)
+    for (;;) {
+      const x = rng.nonZero(9);
+      const A = rng.nonZero(19, 2);
+      const C = rng.nonZero(9);
+      if (A === C || A % 10 === 0) continue;
+      const B = rng.nonZero(30);
+      const E = (A - C) * x + B;
+      if (E === 0 || Math.abs(E) > 60) continue;
+      return decimalProblem(d, A, B, C, E, 10, rng.bool());
+    }
+  }
+  // 1/p x + a = 1/q x + b の 数を 大きく(⅓x − 4 = ⅕x、½x + 5 = ⅕x − 1)
+  const [p, q] = rng.shuffle([2, 3, 4, 5, 6]).slice(0, 2);
+  const L = lcm(p, q);
+  const x = L * rng.nonZero(Math.max(1, Math.floor(36 / L)));
+  const a = rng.nonZero(9);
+  const b = x / p + a - x / q;
+  if (b === 0) return genFraction(rng, d);
+  return fracProblem(d, [{ t: 'x', c: fr(1, p) }, { t: 'n', c: fr(a) }], [{ t: 'x', c: fr(1, q) }, { t: 'n', c: fr(b) }]);
 }
 
-/** 小数の 係数: (A x + B) / s = (C x + E) / s(s = 10 か 100)。両辺を s 倍する */
-function decimalProblem(d: Difficulty, A: number, B: number, C: number, E: number, x: number, s: number): Problem {
-  const left = `${decCoef(A, s)}${decSigned(B, s)}`;
-  const right = C === 0 ? dec(E, s) : `${decCoef(C, s)}${decSigned(E, s)}`;
+/**
+ * 小数の 係数: (A x + B) / s = (C x + E) / s(s = 10 か 100)。両辺を s 倍して 整数の 方程式に する。
+ * rightConstFirst なら 右辺を 数から 書く(3 − 0.5x)
+ */
+function decimalProblem(d: Difficulty, A: number, B: number, C: number, E: number, s: number, rightConstFirst = false): Problem {
+  const dterm = (n: number, x: boolean, first: boolean): string => {
+    const v = dec(Math.abs(n), s);
+    const body = x ? (v === '1' ? 'x' : `${v}x`) : v;
+    return first ? `${n < 0 ? '-' : ''}${body}` : ` ${n < 0 ? '-' : '+'} ${body}`;
+  };
+  const left = `${dterm(A, true, true)}${dterm(B, false, false)}`;
+  const right = C === 0 ? dec(E, s) : rightConstFirst ? `${dterm(E, false, true)}${dterm(C, true, false)}` : `${dterm(C, true, true)}${dterm(E, false, false)}`;
   const eq = `${left} = ${right}`;
-  const scaled = `${lin(A, B)} = ${lin(C, E)}`;
-  const steps = [eq, `${scaled} \\quad ${text(`(両辺を ${s} 倍する)`)}`];
-  steps.push(`${coef(A)}${C !== 0 ? moved(C, 'x') : ''} = ${E}${moved(B)} \\quad ${text('(移項)')}`);
-  steps.push(`${coef(A - C)} = ${E - B}`);
-  if (A - C !== 1) steps.push(`x = ${x}`);
-  steps.push(answerLine(x));
+  const L: Side = [{ t: 'x', c: A }, { t: 'n', c: B }];
+  const R: Side = C === 0 ? [{ t: 'n', c: E }] : rightConstFirst ? [{ t: 'n', c: E }, { t: 'x', c: C }] : [{ t: 'x', c: C }, { t: 'n', c: E }];
   return eqProblem({
     d,
     id: 'g1.eq.fraction',
     eq,
-    answer: x,
+    answer: rat(E - B, A - C),
     hint: `両辺を ${s} 倍して 小数を 消そう(すべての 項に ${s} を かける)`,
-    explanation: steps,
+    explanation: [eq, ...solveSteps(L, R, `(両辺を ${s} 倍する)`)],
     // 左辺の 数の項に s を かけ忘れた: Ax + B/s = Cx + E
     mistakes: [mistakeNum(rat(s * E - B, s * (A - C)), `両辺を ${s} 倍するときは、数の項にも ${s} を かけるよ`)],
-    tags: ['eq_decimal'],
+    tags: s === 100 ? ['eq_decimal', 'eq_decimal_hundredths'] : ['eq_decimal'],
     key: `eqd:${eq}`,
-    verify: `((${E})-(${B}))/((${A})-(${C}))`,
+    verify: verifyOf(L, R),
   });
 }
 
-/** 分数の 係数: (num/p)x + a = (1/q)x + b(q = 0 なら 右辺は b だけ)。両辺に 分母の 最小公倍数を かける */
-function fracProblem(d: Difficulty, s: { p: number; q: number; a: number; b: number; x: number; num: number }): Problem {
-  const { p, q, a, b, x, num } = s;
-  const L = q === 0 ? p : (p * q) / gcd(p, q);
-  const xTerm = (n: number, den: number) => (n === 1 ? `\\frac{x}{${den}}` : `\\frac{${n}}{${den}}x`);
-  const left = `${xTerm(num, p)}${signed(a)}`;
-  const right = q === 0 ? String(b) : `${xTerm(1, q)}${signed(b)}`;
-  const eq = `${left} = ${right}`;
-  const lx = (num * L) / p;
-  const rx = q === 0 ? 0 : L / q;
-  const steps = [eq, `${lin(lx, L * a)} = ${lin(rx, L * b)} \\quad ${text(`(両辺に ${L} を かけて 分母を はらう)`)}`];
-  steps.push(`${coef(lx)}${rx !== 0 ? moved(rx, 'x') : ''} = ${L * b}${moved(L * a)} \\quad ${text('(移項)')}`);
-  steps.push(`${coef(lx - rx)} = ${L * (b - a)}`);
-  if (lx - rx !== 1) steps.push(`x = ${x}`);
-  steps.push(answerLine(x));
+/** 分数の 係数の 項。over なら x/p と 書く(係数が 1/p のとき)。q は 分子が 1 次式の 分数 (ax + b)/p */
+type FTerm = { t: 'x'; c: Fr; over?: boolean } | { t: 'n'; c: Fr } | { t: 'q'; a: number; b: number; p: number };
+type FSide = FTerm[];
+
+function fracTermTex(t: FTerm, first: boolean): string {
+  const sg = (neg: boolean) => (first ? (neg ? '-' : '') : neg ? ' - ' : ' + ');
+  if (t.t === 'q') return `${first ? '' : ' + '}\\frac{${lin(t.a, t.b)}}{${t.p}}`;
+  const neg = t.c.n < 0;
+  const n = Math.abs(t.c.n);
+  if (t.t === 'n') return `${sg(neg)}${t.c.d === 1 ? n : `\\frac{${n}}{${t.c.d}}`}`;
+  if (t.c.d === 1) return `${sg(neg)}${n === 1 ? 'x' : `${n}x`}`;
+  return `${sg(neg)}${t.over && n === 1 ? `\\frac{x}{${t.c.d}}` : `\\frac{${n}}{${t.c.d}}x`}`;
+}
+const fracSideTex = (s: FSide): string => s.map((t, i) => fracTermTex(t, i === 0)).join('');
+const fracDens = (s: FSide): number[] => s.map((t) => (t.t === 'q' ? t.p : t.c.d));
+/** 両辺に L を かけて 整数の 式に */
+const scaleSide = (s: FSide, L: number): Side =>
+  s.map((t): Term => (t.t === 'q' ? { t: 'p', k: L / t.p, a: t.a, b: t.b } : { t: t.t, c: (t.c.n * L) / t.c.d }));
+
+/** 分数の 係数の 方程式。両辺に 分母の 最小公倍数を かけて(分母を はらって)解く */
+function fracProblem(d: Difficulty, left: FSide, right: FSide): Problem {
+  const L = [...fracDens(left), ...fracDens(right)].reduce(lcm, 1);
+  const eq = `${fracSideTex(left)} = ${fracSideTex(right)}`;
+  const Ls = scaleSide(left, L);
+  const Rs = scaleSide(right, L);
+  // かっこが 係数 1 の とき((x − 4) × 1)は かっこを 付けない
+  const tidy = (s: Side): Side => s.flatMap((t): Term[] => (t.t === 'p' && t.k === 1 ? flat([t]) : [t]));
+  const Lt = tidy(Ls);
+  const Rt = tidy(Rs);
+  // 分母を はらうとき 数の項に かけ忘れた(x の 項だけ L 倍)
+  const forgot = (s: FSide): { x: number; n: Fr } =>
+    s.reduce(
+      (v, t) =>
+        t.t === 'q' ? { x: v.x + (L / t.p) * t.a, n: frAdd(v.n, fr(t.b)) } : t.t === 'x' ? { x: v.x + (t.c.n * L) / t.c.d, n: v.n } : { x: v.x, n: frAdd(v.n, t.c) },
+      { x: 0, n: fr(0) },
+    );
+  const fl = forgot(left);
+  const frr = forgot(right);
+  const wrongN = frSub(frr.n, fl.n);
+  const mistakes: Mistake[] = fl.x !== frr.x ? [mistakeNum(rat(wrongN.n, wrongN.d * (fl.x - frr.x)), `分母を はらうときは、数の項にも ${L} を かけるよ`)] : [];
+  const hasQ = [...left, ...right].some((t) => t.t === 'q');
   return eqProblem({
     d,
     id: 'g1.eq.fraction',
     eq,
-    answer: x,
-    hint: q === 0 ? `両辺に ${L} を かけて 分母を はらおう` : `両辺に ${L}(分母 ${p} と ${q} の 最小公倍数)を かけて 分数を 消そう`,
-    explanation: steps,
-    // 分母を はらうとき 左辺の 数の項に かけ忘れた(x/3 + 2 = 5 → x + 2 = 15)
-    mistakes: [mistakeNum(solve(lx, a, rx, L * b), `分母を はらうときは、数の項にも ${L} を かけるよ`)],
-    tags: ['eq_fraction'],
+    answer: rat(sumN(Rt) - sumN(Lt), sumX(Lt) - sumX(Rt)),
+    hint: hasQ ? `両辺に ${L} を かけよう。分子の 式は かっこに 入れたまま かける` : `両辺に ${L}(分母の 最小公倍数)を かけて 分母を はらおう`,
+    explanation: [eq, ...solveSteps(Lt, Rt, `(両辺に ${L} を かけて 分母を はらう)`)],
+    mistakes,
+    tags: hasQ ? ['eq_fraction', 'eq_fraction_paren'] : [...left, ...right].some((t) => t.t === 'n' && t.c.d !== 1) ? ['eq_fraction', 'eq_fraction_const'] : ['eq_fraction'],
     key: `eqf:${eq}`,
-    verify: `((${b})-(${a}))/((${num})/${p}-${q === 0 ? 0 : `1/${q}`})`,
-  });
-}
-
-/** x/p + a = x/q + b(解の 絶対値は max まで) */
-function fracBothSides(rng: Rng, d: Difficulty, max: number): Problem {
-  const p = rng.pick([2, 3, 4, 6]);
-  const q = rng.pick([2, 3, 4, 6].filter((n) => n !== p));
-  const L = (p * q) / gcd(p, q);
-  const x = L * rng.nonZero(Math.max(1, Math.floor(max / L)));
-  const a = rng.nonZero(6);
-  const b = x / p + a - x / q;
-  if (b === 0) return fracBothSides(rng, d, max);
-  return fracProblem(d, { p, q, a, b, x, num: 1 });
-}
-
-/** (x + a)/p = (x + b)/q */
-function fracParenProblem(d: Difficulty, p: number, q: number, a: number, b: number, x: number): Problem {
-  const eq = `\\frac{${lin(1, a)}}{${p}} = \\frac{${lin(1, b)}}{${q}}`;
-  const L = (p * q) / gcd(p, q);
-  const lk = L / p;
-  const rk = L / q;
-  const steps = [
-    eq,
-    `${lk === 1 ? lin(1, a) : `${lk}(${lin(1, a)})`} = ${rk === 1 ? lin(1, b) : `${rk}(${lin(1, b)})`} \\quad ${text(`(両辺に ${L} を かける)`)}`,
-    `${lin(lk, lk * a)} = ${lin(rk, rk * b)}`,
-    `${coef(lk)}${moved(rk, 'x')} = ${rk * b}${moved(lk * a)}`,
-    `${coef(lk - rk)} = ${rk * b - lk * a}`,
-  ];
-  if (lk - rk !== 1) steps.push(`x = ${x}`);
-  steps.push(answerLine(x));
-  return eqProblem({
-    d,
-    id: 'g1.eq.fraction',
-    eq,
-    answer: x,
-    hint: `両辺に ${L} を かけよう。分子の 式は かっこに 入れたまま かける`,
-    explanation: steps,
-    // 分子の x だけに かけて、数の項に かけ忘れた
-    mistakes: lk !== rk ? [mistakeNum(solve(lk, a, rk, b), `分子は ひとまとまり。${lk === 1 ? rk : lk}(${plainMinus(lin(1, lk === 1 ? b : a))}) のように、数の項にも かけるよ`)] : [],
-    tags: ['eq_fraction', 'eq_fraction_paren'],
-    key: `eqf2:${eq}`,
-    verify: `(${p}*(${b})-${q}*(${a}))/(${q}-${p})`,
+    verify: verifyOf(Ls, Rs),
   });
 }
 
 // ---------------------------------------------------------------- 比例式
 
 /**
- * 比例式(比のカニ)。数の大きさは 学習プリント(x : 8 = 3 : 4)とチャレンジテスト((x + 2) : 9 = 10 : 6、正答率 52%)に合わせる。
- *   ★1: a : b = ka : x(k は 2〜5)
- *   ★2: x の位置が 4 か所のどれか。a : b = c : x で c が a の倍数でないこともある(4 : 6 = 10 : x)
- *   ★3: 半分は (x ± m) : b = c : d
+ * 比例式(比のカニ)。教科書の 2 節 2「比例式の利用」の 例 1・問 2、基本の問題・章の問題。
+ *   ★1: x が どこか 1 か所(x : 10 = 3 : 2、16 : x = 12 : 9)。数は 40 まで
+ *   ★2: ★1 の 数を 60 まで / 半分は (x ± m) が 1 か所(8 : 6 = (x − 6) : 18、(x − 2) : 3 = 4 : 2)
+ *   ★3: 両方に x(2x : (x − 2) = 15 : 6、(12 + x) : (31 + x) = 1 : 2、4 : 5 = (x − 3) : (5 + x))
  */
 function genRatio(rng: Rng, d: Difficulty): Problem {
-  if (d === 3 && rng.bool()) {
-    // (x + m) : b = c : d → (x + m) × d = b × c。整数の解になるまで 選び直す
-    let x: number, m: number, b: number, c: number, dd: number;
-    do {
-      x = rng.int(1, 12);
-      m = rng.nonZero(6);
-      b = rng.int(2, 9);
-      dd = rng.int(2, 9);
-      c = ((x + m) * dd) / b;
-    } while (x + m <= 0 || !Number.isInteger(c) || c < 2 || c > 30 || c === dd || b === dd);
-    const lhs = `(${lin(1, m)}) : ${b}`;
+  const id = 'g1.eq.ratio';
+  const hint = '外側どうし、内側どうしの 積が 等しい。a : b = c : d なら ad = bc';
+  if (d === 3) {
+    // (a1 x + b1) : (a2 x + b2) = p : q
+    for (;;) {
+      const a1 = rng.pick([1, 1, 2]);
+      const a2 = 1;
+      const x = rng.int(2, 30);
+      const b1 = a1 === 2 ? 0 : rng.int(-6, 15);
+      const b2 = rng.int(-6, 31);
+      const v1 = a1 * x + b1;
+      const v2 = a2 * x + b2;
+      if (v1 <= 0 || v2 <= 0 || v1 === v2 || (b1 === 0 && a1 === 1)) continue;
+      const g = gcd(v1, v2);
+      const t = rng.pick([1, 1, 2, 3]);
+      if (v1 / g > 6 || v2 / g > 6) continue;
+      const p = (v1 / g) * t;
+      const q = (v2 / g) * t;
+      if (p > 20 || q > 20 || q * a1 === p * a2) continue;
+      // 左の 比に x が 2 つ / 右の 比に x が 2 つ
+      // (5 + x) のように 数から 書く ことも ある(教科書の (12 + x) : (31 + x))
+      const rev1 = a1 === 1 && b1 > 0 && rng.bool(0.4);
+      const rev2 = b2 > 0 && rng.bool(0.4);
+      const ex = (a: number, b: number, rev: boolean) => (b === 0 ? coef(a) : rev ? `(${b} + x)` : `(${lin(a, b)})`);
+      const xLeft = rng.bool(0.6);
+      const ratioX = `${ex(a1, b1, rev1)} : ${ex(a2, b2, rev2)}`;
+      const eq = xLeft ? `${ratioX} = ${p} : ${q}` : `${p} : ${q} = ${ratioX}`;
+      // 外側の積 = 内側の積
+      const t1: Term = { t: 'p', k: q, a: a1, b: b1, rev: rev1 };
+      const t2: Term = { t: 'p', k: p, a: a2, b: b2, rev: rev2 };
+      const left: Side = xLeft ? [t1] : [t2];
+      const right: Side = xLeft ? [t2] : [t1];
+      const prod = (k: number, a: number, b: number, rev: boolean) => (b === 0 ? `${k} \\times ${coef(a)}` : `${k}${ex(a, b, rev)}`);
+      const first = xLeft ? `${prod(q, a1, b1, rev1)} = ${prod(p, a2, b2, rev2)}` : `${prod(p, a2, b2, rev2)} = ${prod(q, a1, b1, rev1)}`;
+      const p0 = sidesProblem(d, id, left, right, hint, ['eq_ratio', 'eq_ratio_both'], eq, [`${first} \\quad ${text('(外側の積 = 内側の積)')}`]);
+      // 1 行目(かっこの 式)は 上に 書いたので、solveSteps の 1 行目は 省く
+      p0.explanation.splice(1, 1);
+      return p0;
+    }
+  }
+  if (d === 2 && rng.bool()) {
+    // (x ± m) が 1 か所
+    for (;;) {
+      const p = rng.int(2, 9);
+      const q = rng.int(2, 9);
+      if (p === q) continue;
+      const t1 = rng.int(1, 3);
+      const t2 = rng.int(2, 6);
+      const nums = [p * t1, q * t1, p * t2, q * t2];
+      if (t1 === t2 || Math.max(...nums) > 40) continue;
+      const hole = rng.int(0, 3);
+      const v = nums[hole];
+      const m = rng.nonZero(8);
+      const x = v - m;
+      if (x <= 0) continue;
+      const show = nums.map((n, i) => (i === hole ? `(${lin(1, m)})` : String(n)));
+      const eq = `${show[0]} : ${show[1]} = ${show[2]} : ${show[3]}`;
+      // 外側の積 = 内側の積 → x の ある 積を 左辺に
+      const outerHas = hole === 0 || hole === 3;
+      const partner = nums[3 - hole];
+      const other = outerHas ? nums[1] * nums[2] : nums[0] * nums[3];
+      const left: Side = [{ t: 'p', k: partner, a: 1, b: m }];
+      const right: Side = [{ t: 'n', c: other }];
+      const first = `${partner}(${lin(1, m)}) = ${outerHas ? `${nums[1]} \\times ${nums[2]}` : `${nums[0]} \\times ${nums[3]}`} \\quad ${text('(外側の積 = 内側の積)')}`;
+      const p0 = sidesProblem(d, id, left, right, 'かっこごと 1 つの数と 思って、外側どうし・内側どうしの 積を 等しく おく', ['eq_ratio', 'eq_ratio_expr'], eq, [first]);
+      p0.explanation.splice(1, 1);
+      return p0;
+    }
+  }
+  // a : b = c : e で 1 か所が x
+  const max = d === 1 ? 40 : 60;
+  for (;;) {
+    const p = rng.int(1, 9);
+    const q = rng.int(2, 9);
+    if (p === q) continue;
+    const t1 = rng.int(1, 4);
+    const t2 = rng.int(2, 10);
+    if (t1 === t2) continue;
+    const nums = [p * t1, q * t1, p * t2, q * t2];
+    if (Math.max(...nums) > max) continue;
+    // 前の比と 後の比を 入れかえる(x : 10 = 3 : 2 のように 大きい 数の 比が 前)
+    const ns = rng.bool() ? nums : [nums[2], nums[3], nums[0], nums[1]];
+    const hole = rng.int(0, 3);
+    const value = ns[hole];
+    const show = ns.map((v, i) => (i === hole ? 'x' : String(v)));
+    const eq = `${show[0]} : ${show[1]} = ${show[2]} : ${show[3]}`;
+    const outerHasX = hole === 0 || hole === 3;
+    const xCoef = ns[3 - hole];
+    const other = outerHasX ? ns[1] * ns[2] : ns[0] * ns[3];
+    const outer = `${show[0]} \\times ${show[3]}`;
+    const inner = `${show[1]} \\times ${show[2]}`;
+    // 外どうし・内どうしを まちがえて かけた(a × c = b × e)
+    const [a, b, c, e] = ns;
+    const wrongPair = [rat(b * e, c), rat(a * c, e), rat(b * e, a), rat(a * c, b)][hole];
     return {
-      templateId: 'g1.eq.ratio',
+      templateId: id,
       difficulty: d,
-      prompt: `${lhs} = ${c} : ${dd} \\quad ${text('x を求めよ')}`,
-      promptText: `${plainMinus(lhs)} = ${c} : ${dd} の x を求めよ`,
-      answer: { kind: 'number', value: rat(x) },
-      hint: 'かっこごと 1 つの数と 思って、外どうし・内どうしの 積を 等しく おく',
-      explanation: [
-        `(${lin(1, m)}) \\times ${dd} = ${b} \\times ${c} \\quad ${text('(外側の積 = 内側の積)')}`,
-        `${lin(dd, m * dd)} = ${b * c}`,
-        `${dd}x = ${b * c}${moved(m * dd)}`,
-        `${dd}x = ${b * c - m * dd}`,
-        `x = ${x}`,
-        answerLine(x),
-      ],
-      // (x + m) × d の m に d を かけ忘れた
-      mistakes: [mistakeNum(rat(b * c - m, dd), `(${plainMinus(lin(1, m))}) × ${dd} は、${plainMinus(String(m))} にも ${dd} を かけるよ`)],
-      tags: ['eq_ratio', 'eq_ratio_expr'],
-      key: `eqr3:${m}:${b}:${c}:${dd}`,
-      verify: `(${b}*${c})/${dd}-(${m})`,
+      prompt: `${eq} \\quad ${text('x を求めよ')}`,
+      promptText: `${eq} の x を求めよ`,
+      answer: { kind: 'number', value: rat(value) },
+      hint,
+      explanation: [`${outerHasX ? outer : inner} = ${outerHasX ? inner : outer} \\quad ${text('(外側の積 = 内側の積)')}`, `${xCoef}x = ${other}`, `x = ${value}`, answerLine(value)],
+      mistakes: [mistakeNum(wrongPair, `かけるのは 外側どうし(${show[0]} と ${show[3]})と 内側どうし(${show[1]} と ${show[2]})だよ`)],
+      tags: ['eq_ratio'],
+      key: `eqr:${eq}`,
+      verify: hole === 0 ? `${b}*${c}/${e}` : hole === 1 ? `${a}*${e}/${c}` : hole === 2 ? `${a}*${e}/${b}` : `${b}*${c}/${a}`,
     };
   }
-  // a : b = c : e の形で、4 つのうち 1 つを x にする。c : e は a : b の k 倍(★2 以上は k が分数のことも)
-  const a = rng.int(2, 9);
-  let b = rng.int(2, 9);
-  while (b === a) b = rng.int(2, 9);
-  const k = rng.int(2, d === 1 ? 5 : 6);
-  let [c, e] = [a * k, b * k];
-  // ★2 以上の半分は 4 : 6 = 10 : 15 のように 何倍かが 整数でない形(a と b に 公約数が あるときだけ作れる)
-  const g = gcd(a, b);
-  if (d > 1 && g > 1 && rng.bool()) {
-    const ks = [2, 3, 4, 5, 6].filter((t) => t % g !== 0);
-    const t = rng.pick(ks);
-    [c, e] = [(a / g) * t, (b / g) * t];
-  }
-  const nums = [a, b, c, e];
-  const hole = d === 1 ? 3 : rng.int(0, 3);
-  const value = nums[hole];
-  const show = nums.map((v, i) => (i === hole ? 'x' : String(v)));
-  const prompt = `${show[0]} : ${show[1]} = ${show[2]} : ${show[3]}`;
-  // 外項の積 = 内項の積。x の ある側を 左に 書く
-  const outerHasX = hole === 0 || hole === 3;
-  const xCoef = nums[3 - hole];
-  const other = outerHasX ? b * c : a * e;
-  const outer = `${show[0]} \\times ${show[3]}`;
-  const inner = `${show[1]} \\times ${show[2]}`;
-  // 外どうし・内どうしを まちがえて かけた(a × c = b × e)
-  const wrongPair = [
-    rat(b * e, c), // hole 0: x × c = b × e
-    rat(a * c, e), // hole 1: a × c = x × e
-    rat(b * e, a), // hole 2: a × x = b × e
-    rat(a * c, b), // hole 3: a × c = b × x
-  ][hole];
-  return {
-    templateId: 'g1.eq.ratio',
-    difficulty: d,
-    prompt: `${prompt} \\quad ${text('x を求めよ')}`,
-    promptText: `${prompt} の x を求めよ`,
-    answer: { kind: 'number', value: rat(value) },
-    hint: '外側どうし、内側どうしの 積が 等しい。a : b = c : d なら ad = bc',
-    explanation: [
-      `${outerHasX ? outer : inner} = ${outerHasX ? inner : outer} \\quad ${text('(外側の積 = 内側の積)')}`,
-      `${xCoef}x = ${other}`,
-      `x = ${value}`,
-      answerLine(value),
-    ],
-    mistakes: [mistakeNum(wrongPair, `かけるのは 外側どうし(${show[0]} と ${show[3]})と 内側どうし(${show[1]} と ${show[2]})だよ`)],
-    tags: ['eq_ratio'],
-    key: `eqr:${prompt}`,
-    verify: hole === 0 ? `${b}*${c}/${e}` : hole === 1 ? `${a}*${e}/${c}` : hole === 2 ? `${a}*${e}/${b}` : `${b}*${c}/${a}`,
-  };
 }
 
 // ---------------------------------------------------------------- 文章題(ボス)
@@ -739,14 +933,14 @@ interface WordCase {
 }
 
 /**
- * 文章題。教科書の「方程式の利用」の 順:
- *   ★1: ある数(x の 3 倍に 5 を たすと 26)/ 代金と おつり
- *   ★2: 2 品の 代金 / 過不足(配る)/ 代金と おつり
- *   ★3: 過不足 / 速さ(追いつく)/ 年れい(x 年後に 3 倍)
+ * 文章題。教科書の 2 節「1 次方程式の利用」「比例式の利用」の 場面:
+ *   ★1: ある数(x を 3 倍して 5 を たすと 26)/ 代金(ペン n 本と ノート)/ テープを 分ける(姉が 50 cm 長い)
+ *   ★2: 2 品の 個数と 代金(90 円と 140 円を 合わせて 15 個で 1800 円)/ 過不足(配る)/ 比例式(ソース 2 : 3、ケチャップ 120 mL)
+ *   ★3: 追いつく(速さ)/ 値段と 持っている 金額(5 本だと 150 円 たりない、4 本だと 80 円 余る)/ 比例式(合計を 3 : 5 に 分ける)
  * 解は どれも 整数(速さも 割りきれる 数を 選ぶ)
  */
 function wordCase(rng: Rng, d: Difficulty): WordCase {
-  const kind = d === 1 ? rng.pick(['number', 'change']) : d === 2 ? rng.pick(['two', 'share', 'change']) : rng.pick(['share', 'speed', 'age']);
+  const kind = d === 1 ? rng.pick(['number', 'two', 'tape']) : d === 2 ? rng.pick(['count', 'share', 'ratio']) : rng.pick(['speed', 'money', 'ratioTotal']);
   if (kind === 'number') {
     const a = rng.int(2, 6);
     let b = rng.int(2, 9);
@@ -764,22 +958,6 @@ function wordCase(rng: Rng, d: Difficulty): WordCase {
       steps: [`${a}x = ${c} - ${b} = ${c - b}`, `x = ${x}`],
     };
   }
-  if (kind === 'change') {
-    const price = rng.pick([80, 120, 150, 200]);
-    const n = rng.int(3, 8);
-    const paid = rng.pick([1000, 2000]);
-    const change = paid - price * n;
-    if (change <= 0) return wordCase(rng, d);
-    return {
-      story: `1 個 x 円の おかしを ${n} 個 買って ${paid} 円 出したら、おつりは ${change} 円だった`,
-      equation: `${paid} - ${n}x = ${change}`,
-      wrong: [`${n}x - ${paid} = ${change}`, `${paid} + ${n}x = ${change}`, `${n}x = ${change}`],
-      answer: price,
-      unit: '円',
-      verify: `(${paid}-${change})/${n}`,
-      steps: [`-${n}x = ${change} - ${paid}`, `${n}x = ${price * n}`, `x = ${price}`],
-    };
-  }
   if (kind === 'two') {
     const price = rng.pick([60, 80, 90, 110, 120, 150]);
     const n = rng.int(2, 6);
@@ -795,23 +973,82 @@ function wordCase(rng: Rng, d: Difficulty): WordCase {
       steps: [`${n}x = ${total} - ${other} = ${total - other}`, `x = ${price}`],
     };
   }
-  if (kind === 'share') {
-    // 過不足: per x + short = (per + 1) x − extra → x = short + extra
-    const per = rng.int(3, 6);
-    const short = rng.int(2, 9);
-    let extra = rng.int(2, 9);
-    // 余りと 不足が 同じだと 選択肢が 重なる
-    if (extra === short) extra = short === 9 ? 2 : short + 1;
-    const people = short + extra;
+  if (kind === 'tape') {
+    // 姉と 弟で 分ける。弟の 長さを x
+    const x = rng.int(4, 15) * 10;
+    const diff = rng.int(1, 6) * 10;
+    const total = 2 * x + diff;
     return {
-      story: `あめを 何人かに 配る。1 人に ${per} 個ずつ 配ると ${short} 個 余り、1 人に ${per + 1} 個ずつ 配ると ${extra} 個 足りない。人数を x 人 とする`,
-      equation: `${per}x + ${short} = ${per + 1}x - ${extra}`,
-      wrong: [`${per}x - ${short} = ${per + 1}x + ${extra}`, `${per}x + ${short} = ${per + 1}x + ${extra}`, `${per}x + ${extra} = ${per + 1}x - ${short}`],
+      story: `${total} cm の テープを 姉と 弟で 分ける。姉の ほうが ${diff} cm 長く なるように する。弟の 長さを x cm と する`,
+      equation: `x + (x + ${diff}) = ${total}`,
+      wrong: [`x + (x - ${diff}) = ${total}`, `x + ${diff} = ${total}`, `2x = ${total} + ${diff}`],
+      answer: x,
+      unit: 'cm',
+      verify: `(${total}-${diff})/2`,
+      steps: [`2x + ${diff} = ${total}`, `2x = ${total - diff}`, `x = ${x}`],
+    };
+  }
+  if (kind === 'count') {
+    // 安い品物の 個数を x: p1 x + p2(n − x) = T
+    for (;;) {
+      const [p1, p2] = rng.shuffle([30, 60, 90, 120, 140, 150, 250]).slice(0, 2).sort((u, v) => u - v);
+      const n = rng.int(8, 15);
+      const x = rng.int(2, n - 2);
+      const T = p1 * x + p2 * (n - x);
+      if (T % 10 !== 0) continue;
+      return {
+        story: `1 個 ${p1} 円の おかしと 1 個 ${p2} 円の おかしを 合わせて ${n} 個 買ったら、代金の 合計は ${T} 円だった。${p1} 円の おかしの 個数を x 個 とする`,
+        equation: `${p1}x + ${p2}(${n} - x) = ${T}`,
+        wrong: [`${p1}x + ${p2}x = ${T}`, `${p2}x + ${p1}(${n} - x) = ${T}`, `${p1}x + ${p2}(x - ${n}) = ${T}`],
+        answer: x,
+        unit: '個',
+        verify: `(${T}-${p2}*${n})/(${p1}-${p2})`,
+        steps: [`${p1}x + ${p2 * n} - ${p2}x = ${T}`, `${p1 - p2}x = ${T - p2 * n}`, `x = ${x}`],
+      };
+    }
+  }
+  if (kind === 'share') {
+    // 過不足: a 枚ずつ 配ると s 枚 たりない、b 枚ずつ 配ると e 枚 余る → ax − s = bx + e
+    const b = rng.int(2, 5);
+    const a = b + 1;
+    const s = rng.int(2, 12);
+    let e = rng.int(2, 15);
+    // たりない数と 余る数が 同じだと 選択肢が 重なる
+    if (e === s) e++;
+    const people = s + e;
+    return {
+      story: `折り紙を 何人かの 子どもに 配る。1 人に ${a} 枚ずつ 配ると ${s} 枚 たりない。1 人に ${b} 枚ずつ 配ると ${e} 枚 余る。子どもの 人数を x 人 とする`,
+      equation: `${a}x - ${s} = ${b}x + ${e}`,
+      wrong: [`${a}x + ${s} = ${b}x - ${e}`, `${a}x - ${s} = ${b}x - ${e}`, `${a}x - ${e} = ${b}x + ${s}`],
       answer: people,
       unit: '人',
-      verify: `${short}+${extra}`,
-      steps: [`${per}x - ${per + 1}x = -${extra} - ${short}`, `-x = -${people}`, `x = ${people}`],
+      verify: `(${e}+${s})/(${a}-${b})`,
+      steps: [`${a}x - ${b}x = ${e} + ${s}`, `x = ${people}`],
     };
+  }
+  if (kind === 'ratio') {
+    // ソースと ケチャップを p : q で 混ぜる。ケチャップ K mL のとき ソース x mL
+    for (;;) {
+      const [p, q] = rng.pick([
+        [2, 3],
+        [3, 4],
+        [2, 5],
+        [3, 5],
+        [4, 5],
+      ]);
+      const K = q * rng.int(4, 40);
+      const x = (p * K) / q;
+      if (K > 300 || K % 10 !== 0) continue;
+      return {
+        story: `ソースと ケチャップを ${p} : ${q} の 割合で 混ぜる。ケチャップを ${K} mL 使うとき、ソースを x mL とする`,
+        equation: `x : ${K} = ${p} : ${q}`,
+        wrong: [`x : ${K} = ${q} : ${p}`, `${K} : x = ${p} : ${q}`, `x : ${p} = ${q} : ${K}`],
+        answer: x,
+        unit: 'mL',
+        verify: `${K}*${p}/${q}`,
+        steps: [`x \\times ${q} = ${K} \\times ${p}`, `${q}x = ${K * p}`, `x = ${x}`],
+      };
+    }
   }
   if (kind === 'speed') {
     // 追いつく: 弟が 出て t 分後に 兄が 追いかける。v1(x + t) = v2 x → 割りきれる 数を 選ぶ
@@ -821,8 +1058,9 @@ function wordCase(rng: Rng, d: Difficulty): WordCase {
       const x = rng.int(2, 12);
       const v2 = (v1 * (x + t)) / x;
       if (!Number.isInteger(v2) || v2 % 10 !== 0 || v2 > 250) continue;
+      const bike = v2 > 120;
       return {
-        story: `弟が 家を 出て 分速 ${v1} m で 歩いた。その ${t} 分後に 兄が 家を 出て、分速 ${v2} m で 同じ道を 追いかけた。兄が 家を 出てから 追いつくまでの 時間を x 分 とする`,
+        story: `弟が 家を 出て 分速 ${v1} m で 歩いた。その ${t} 分後に 兄が 家を 出て、${bike ? '自転車で ' : ''}分速 ${v2} m で 同じ道を 追いかけた。兄が 家を 出てから 追いつくまでの 時間を x 分 とする`,
         equation: `${v1}(x + ${t}) = ${v2}x`,
         wrong: [`${v1}x = ${v2}(x + ${t})`, `${v1}(x - ${t}) = ${v2}x`, `${v1}x + ${t} = ${v2}x`],
         answer: x,
@@ -832,19 +1070,49 @@ function wordCase(rng: Rng, d: Difficulty): WordCase {
       };
     }
   }
-  // 年れい: 父 F 才、子 C 才。x 年後に 父の 年れいが 子の 3 倍 → F + x = 3(C + x)
-  const C = rng.int(5, 12);
-  const x = rng.int(1, 8);
-  const F = 3 * C + 2 * x;
-  return {
-    story: `いま 父は ${F} 才、子は ${C} 才 です。父の 年れいが 子の 年れいの 3 倍に なるのは 何年後か。x 年後 とする`,
-    equation: `${F} + x = 3(${C} + x)`,
-    wrong: [`${F} + x = 3 \\times ${C} + x`, `${F} = 3(${C} + x)`, `3(${F} + x) = ${C} + x`],
-    answer: x,
-    unit: '年後',
-    verify: `(${F}-3*${C})/2`,
-    steps: [`${F} + x = ${3 * C} + 3x`, `x - 3x = ${3 * C} - ${F}`, `-2x = ${3 * C - F}`, `x = ${x}`],
-  };
+  if (kind === 'money') {
+    // 値段と 持っている 金額: n1 本 買うには s 円 たりない、n2 本 なら e 円 余る → n1 x − s = n2 x + e
+    for (;;) {
+      const n2 = rng.int(3, 6);
+      const n1 = n2 + 1;
+      const x = rng.int(10, 30) * 10;
+      const s = rng.int(1, 25) * 10;
+      const e = x - s;
+      if (e <= 0 || e === s) continue;
+      return {
+        story: `同じ 値段の 花を 買う。${n1} 本 買うには 持っている お金では ${s} 円 たりず、${n2} 本 買うと ${e} 円 余る。花 1 本の 値段を x 円 とする`,
+        equation: `${n1}x - ${s} = ${n2}x + ${e}`,
+        wrong: [`${n1}x + ${s} = ${n2}x - ${e}`, `${n1}x - ${s} = ${n2}x - ${e}`, `${n1}x - ${e} = ${n2}x + ${s}`],
+        answer: x,
+        unit: '円',
+        verify: `(${e}+${s})/(${n1}-${n2})`,
+        steps: [`${n1}x - ${n2}x = ${e} + ${s}`, `x = ${x}`],
+      };
+    }
+  }
+  // 合計を p : q に 分ける(ミルクティーを 1200 mL、牛乳と 紅茶を 3 : 5)
+  for (;;) {
+    const [p, q] = rng.pick([
+      [1, 2],
+      [1, 3],
+      [2, 3],
+      [3, 5],
+      [3, 4],
+    ]);
+    const unit = rng.int(2, 25) * 10;
+    const total = (p + q) * unit;
+    if (total > 1500) continue;
+    const x = p * unit;
+    return {
+      story: `牛乳と 紅茶を ${p} : ${q} の 割合で 混ぜて、ミルクティーを ${total} mL 作る。牛乳を x mL とする`,
+      equation: `x : (${total} - x) = ${p} : ${q}`,
+      wrong: [`x : ${total} = ${p} : ${q}`, `x : (${total} - x) = ${q} : ${p}`, `(${total} - x) : x = ${p} : ${q}`],
+      answer: x,
+      unit: 'mL',
+      verify: `${total}*${p}/(${p}+${q})`,
+      steps: [`${q}x = ${p}(${total} - x)`, `${q}x = ${p * total} - ${p}x`, `${p + q}x = ${p * total}`, `x = ${x}`],
+    };
+  }
 }
 
 function genWord(rng: Rng, d: Difficulty): Problem {

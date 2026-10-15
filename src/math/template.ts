@@ -80,7 +80,9 @@ function sameAnswer(a: AnswerSpec, b: AnswerSpec): boolean {
   if (a.kind === 'choice' && b.kind === 'choice') return a.correct === b.correct;
   if (a.kind === 'expression' && b.kind === 'expression') return judgeExpression(a.expected, b.expected).correct;
   if (a.kind === 'numbers' && b.kind === 'numbers') {
-    const key = (xs: Rational[]) => xs.map(toString).sort().join(',');
+    // 順番が 決まった 答え(座標)は 順番も 比べる。(3, −3) と (−3, 3) は 別の まちがい
+    const ordered = a.ordered || b.ordered;
+    const key = (xs: Rational[]) => (ordered ? xs.map(toString) : xs.map(toString).sort()).join(',');
     return key(a.values) === key(b.values);
   }
   return false;
