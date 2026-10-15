@@ -45,8 +45,10 @@ FILL = {
 # 影の 色に 吸われて 消える。FASTOCTREE は 少ない色も 残す
 COLORS = {
     'enemy_shadow_x': 24,
+    'enemy_twin_dragons': 24,
 }
-OCTREE = {'enemy_shadow_x', 'char_cat_x'}
+# 湖の双子竜は 青い竜と しぶきが 大半を しめ、MEDIANCUT だと 緑の竜まで 青に なる(2026-10-16)
+OCTREE = {'enemy_shadow_x', 'char_cat_x', 'enemy_twin_dragons'}
 # 小さく並べて出す アイコン(書き出した画像の 絵の部分だけを 正方形に 切り出す)。
 # ピタは 人と並べるため 枠の下に小さく置いてあるので、ヒントの行などに そのまま使うと 小さすぎる(先生の試遊 2026-09-28)
 ICONS = {
