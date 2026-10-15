@@ -1,7 +1,7 @@
 import { mistakeNum, registerTemplate, type Difficulty, type Mistake, type Problem, type ProblemBasis } from '@/math/template';
 import type { Rng } from '@/math/rng';
 import { add, isZero, rat, sub, toTex } from '@/math/rational';
-import { paren, plainMinus, text, textVars } from '@/math/format';
+import { paren, plainMinus, text } from '@/math/format';
 import { parseExpression, polyToTex } from '@/math/expr';
 
 /**
@@ -748,7 +748,7 @@ function genNotation(rng: Rng, d: Difficulty): Problem {
           : [`${total} - ${k}a`, change, `${total} 円 出して、1冊 a 円の ノートを ${k} 冊 買うと、おつりは ${change} 円${rel.word}`];
     const all = ['\\leqq', '\\geqq', '<', '>'].map((t) => `${lhs} ${t} ${rhs}`);
     task = {
-      from: textVars(`「${story}」を 不等式で 表すと?`),
+      from: text(`「${story}」を 不等式で 表すと?`),
       fromText: `「${story}」を 不等式で 表すと?`,
       correct: `${lhs} ${rel.tex} ${rhs}`,
       wrong: all.filter((s) => s !== `${lhs} ${rel.tex} ${rhs}`),
@@ -881,7 +881,7 @@ function genMeaning(rng: Rng, d: Difficulty): Problem {
     difficulty: d,
     // 文章の 問題は 短くても 本文の 書体で(数式の 書体だと ほかの 問題と 字が ちがって 見える。先生の判定 2026-10-15)
     layout: 'prose',
-    prompt: `${textVars(c.story)} \\; ${c.expr} ${t(' は 何を 表す?')}`,
+    prompt: `${text(c.story)} \\; ${c.expr} ${t(' は 何を 表す?')}`,
     promptText: `${c.story}${plainMinus(c.expr.replace(/\\frac\{(\w+)\}\{(\w+)\}/, '$1/$2'))} は 何を 表す?`,
     answer: { kind: 'choice', options, correct },
     hint: '式の 中の 文字と 数が、それぞれ 何の 量か 考えよう',
@@ -938,11 +938,11 @@ function genNumberForm(rng: Rng, d: Difficulty): Problem {
     difficulty: d,
     // 文章の 問題は 短くても 本文の 書体で(数式の 書体だと ほかの 問題と 字が ちがって 見える。先生の判定 2026-10-15)
     layout: 'prose',
-    prompt: textVars(`${c.story} を 文字式で 表すと?`),
+    prompt: text(`${c.story} を 文字式で 表すと?`),
     promptText: `${c.story} を 文字式で 表すと?`,
     answer: { kind: 'choice', options, correct },
     hint: c.hint,
-    explanation: [textVars(c.story), `${text('答え: ')} ${show(c.correct)}`],
+    explanation: [text(c.story), `${text('答え: ')} ${show(c.correct)}`],
     mistakes: [{ answer: { kind: 'choice', options, correct: options.indexOf(show(c.wrong[c.say[0]])) }, say: c.say[1] }],
     tags: ['number_form'],
     key: `numform:${c.story}`,
@@ -976,11 +976,11 @@ function genModel(rng: Rng, d: Difficulty): Problem {
     difficulty: d,
     // 文章の 問題は 短くても 本文の 書体で(数式の 書体だと ほかの 問題と 字が ちがって 見える。先生の判定 2026-10-15)
     layout: 'prose',
-    prompt: `${textVars(`${c.story} を 文字式で 表すと?`)}`,
+    prompt: `${text(`${c.story} を 文字式で 表すと?`)}`,
     promptText: `${c.story} を 文字式で 表すと?`,
     answer: { kind: 'choice', options: options.map(tex), correct },
     hint: '言葉を 前から 順に 式に 置きかえてみよう',
-    explanation: [textVars(c.story), `${text('答え: ')} ${tex(c.correct)}`, ...fractionForms(tex(c.correct))],
+    explanation: [text(c.story), `${text('答え: ')} ${tex(c.correct)}`, ...fractionForms(tex(c.correct))],
     tags: ['model_expression'],
     key: `model:${c.story}`,
     verify: String(correct),
@@ -1473,12 +1473,12 @@ function genBossSignChoice(rng: Rng, d: Difficulty): Problem {
     difficulty: d,
     // 文章の 問題は 短くても 本文の 書体で(数式の 書体だと ほかの 問題と 字が ちがって 見える。先生の判定 2026-10-15)
     layout: 'prose',
-    prompt: textVars('a が 負の数の とき、値が 正の数に なる 式は どれ?'),
+    prompt: text('a が 負の数の とき、値が 正の数に なる 式は どれ?'),
     promptText: 'a が 負の数の とき、値が 正の数に なる 式は どれ?',
     answer: { kind: 'choice', options, correct },
     hint: 'a = −2 の ように、負の数を 1 つ 決めて 代入してみよう',
     explanation: [
-      textVars('a = −2 を 代入して 確かめる:'),
+      text('a = −2 を 代入して 確かめる:'),
       ...all.map(([tex, v]) => `${tex} \\;\\to\\; ${tex.replace(/a/g, '(-2)')} = ${v}`),
       `${text('答え: ')} ${right[0]}`,
     ],
@@ -1570,11 +1570,11 @@ function genBossRelation(rng: Rng, d: Difficulty): Problem {
     difficulty: d,
     // 文章の 問題は 短くても 本文の 書体で(数式の 書体だと ほかの 問題と 字が ちがって 見える。先生の判定 2026-10-15)
     layout: 'prose',
-    prompt: textVars(`「${c.story}」を 式で 表すと?`),
+    prompt: text(`「${c.story}」を 式で 表すと?`),
     promptText: `「${c.story}」を 式で 表すと?`,
     answer: { kind: 'choice', options, correct },
     hint: c.hint,
-    explanation: [textVars(c.story), `${text('答え: ')} ${c.correct}`],
+    explanation: [text(c.story), `${text('答え: ')} ${c.correct}`],
     mistakes,
     tags: [c.tag],
     key: `boss_rel:${c.story}`,

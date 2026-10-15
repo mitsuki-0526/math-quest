@@ -489,6 +489,11 @@ describe('第2章 教科書の 本文から 足した形(2026-10-13)', () => {
           if (id === 'g1.expr.boss_relation' || p.tags.some((t) => sentence.includes(t))) expect(p.layout, p.promptText).toBe('prose');
         });
   });
+  it('どの 章の 問題文でも \\text の 中に 文字(x・y・a…)を 入れない(方程式の「x を求めよ」、比例の「y を x の式で」も)', () => {
+    const loneVar = /\\text\{[^}]*(?<![A-Za-z])[abcnxy](?![A-Za-z])[^}]*\}/;
+    const ids = ['basic', 'linear', 'paren', 'fraction', 'ratio', 'word'].map((s) => `g1.eq.${s}`).concat(['g1.func.prop', 'g1.func.invprop', 'g1.func.coord', 'g1.func.graph']);
+    for (const id of ids) for (const d of [1, 2, 3] as const) each(id, d, (p) => expect(p.prompt, p.promptText).not.toMatch(loneVar));
+  });
   it('同類項 ★2 に「2 つの式 … の 和を 求めよ」は 出ない(先生の判定「試験でも 見かけない」)', () => {
     each('g1.expr.collect', 2, (p) => expect(p.promptText, p.promptText).not.toMatch(/和を|2 つの式/));
   });
