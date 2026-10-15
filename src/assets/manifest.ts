@@ -29,6 +29,7 @@ export const assetManifest: Record<string, AssetEntry> = {
   char_teo: { emoji: '🧔', label: 'テオ' },
   char_elder: { emoji: '👴', label: '村長' },
   char_mei: { emoji: '👧', label: 'ミオ' },
+  char_cat_x: { emoji: '🐈‍⬛', label: 'エックス(黒猫)' },
   char_rena: { emoji: '🛡️', label: 'レナ' },
 
   // --- 第1章の敵 ---

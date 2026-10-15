@@ -30,14 +30,14 @@ function signedTex(c: number, v = ''): string {
 
 /**
  * 式の値(代入)。先生の印(2026-10-13)「代入が 難しい。最初は 2x など 1 つの項で よい。今の 問題は もう 1 段 上で」で 1 段ずつ 上げた。
- *   ★1: 1 つの項 ax に 正の数(x = 3 のとき 4x)
+ *   ★1: 1 つの項 ax に 正の数(x = 3 のとき 4x。x は 2〜9。先生の要望 2026-10-15 で 6 → 9)
  *   ★2: ax + b に 正の数(以前の ★1)/ 3 回に 1 回 1 つの項に 負の数(x = −3 のとき 4x)
  *   ★3: 負の数の 代入(以前の ★2: 2x + 7、5 − 2x、−x、x²、−x²、12/x)/ 4 回に 1 回 2 文字の 代入
  * 累乗の 式(−4x²、5x³)と 2 文字で 累乗を ふくむ 式は、修練の泉(チャレンジテスト基準)の ★3 と ボスで 出す
  */
 function genSubst(rng: Rng, d: Difficulty, basis: ProblemBasis = 'textbook'): Problem {
   if (d === 3 && basis === 'challenge') return genSubstPowerOrTwo(rng, d);
-  if (d === 1) return genSubstOneTerm(rng, d, rng.int(2, 6));
+  if (d === 1) return genSubstOneTerm(rng, d, rng.int(2, 9));
   if (d === 3) return rng.int(0, 3) === 0 ? genSubstTwoLinear(rng, d) : genSubstNegative(rng, d);
   if (rng.int(0, 2) === 0) return genSubstOneTerm(rng, d, -rng.int(1, 6));
   {

@@ -39,7 +39,14 @@ MARGIN = 0.06  # 透過素材のまわりの余白(割合)
 # 枠の高さのうち、その素材が占める割合(既定 1)。小さい生き物を人と並べたときに大きく見えすぎないように
 FILL = {
     'char_pita': 0.55,  # 手のひらサイズのフクロウ
+    'char_cat_x': 0.5,  # 小さな黒猫(第3章の影の正体)
 }
+# 色選びの 上書き。紫の 影・黒猫のように 暗い色が 大半を しめる 絵は、MEDIANCUT だと 色数を 増やしても 小さな 黄色い目・銀の ベルが
+# 影の 色に 吸われて 消える。FASTOCTREE は 少ない色も 残す
+COLORS = {
+    'enemy_shadow_x': 24,
+}
+OCTREE = {'enemy_shadow_x', 'char_cat_x'}
 # 小さく並べて出す アイコン(書き出した画像の 絵の部分だけを 正方形に 切り出す)。
 # ピタは 人と並べるため 枠の下に小さく置いてあるので、ヒントの行などに そのまま使うと 小さすぎる(先生の試遊 2026-09-28)
 ICONS = {
@@ -76,7 +83,7 @@ def fit_cover(im, grid):
     return im
 
 
-def pixelate(im, grid, colors, alpha):
+def pixelate(im, grid, colors, alpha, method=Image.Quantize.MEDIANCUT):
     small = im.resize(grid, Image.BOX)
     if alpha:
         a = small.getchannel('A').point(lambda v: 255 if v > 128 else 0)
@@ -87,7 +94,7 @@ def pixelate(im, grid, colors, alpha):
             bg = Image.new('RGB', grid, avg)
             bg.paste(rgb, (0, 0), a)
             rgb = bg
-        q = rgb.quantize(colors=colors, method=Image.Quantize.MEDIANCUT).convert('RGBA')
+        q = rgb.quantize(colors=colors, method=method).convert('RGBA')
         q.putalpha(a)
     else:
         q = small.convert('RGB').quantize(colors=colors, method=Image.Quantize.MEDIANCUT).convert('RGB')
@@ -103,7 +110,8 @@ def process(kind, filename):
         im = fit_transparent(im.convert('RGBA'), grid, FILL.get(asset_id, 1.0))
     else:
         im = fit_cover(im.convert('RGB'), grid)
-    out = pixelate(im, grid, spec['colors'], spec['alpha'])
+    method = Image.Quantize.FASTOCTREE if asset_id in OCTREE else Image.Quantize.MEDIANCUT
+    out = pixelate(im, grid, COLORS.get(asset_id, spec['colors']), spec['alpha'], method)
     os.makedirs(os.path.join(OUT, kind), exist_ok=True)
     dest = os.path.join(OUT, kind, asset_id + '.png')
     out.save(dest, optimize=True)

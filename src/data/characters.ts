@@ -20,7 +20,7 @@ export const characters = {
   noa: { name: 'ノア', emoji: '🧙' },
   zenon: { name: 'ゼノン', emoji: '🧙‍♂️' },
   mei: { name: 'ミオ', sprite: 'char_mei', emoji: '👧' },
-  cat_x: { name: 'エックス', emoji: '🐈‍⬛' },
+  cat_x: { name: 'エックス', sprite: 'char_cat_x', emoji: '🐈‍⬛' },
   // 第4章のボス「湖の双子竜」は 1 体の敵だが、会話では 2 頭が別々に話す
   narabi: { name: 'ナラビ', sprite: 'enemy_twin_dragons', emoji: '🐉' },
   sakasa: { name: 'サカサ', sprite: 'enemy_twin_dragons', emoji: '🐲' },
@@ -35,6 +35,8 @@ export type CharacterId = keyof typeof characters;
  */
 export const npcLooks: Record<string, CharacterId> = {
   羊飼いの少女: 'mei',
+  // 第3章の 未知なる影 X の 正体。名前(エックス)が つく前は「黒猫」
+  黒猫: 'cat_x',
 };
 
 /** 主人公の見た目(最初に選ぶ)。立ち絵の素材IDとプレースホルダ */

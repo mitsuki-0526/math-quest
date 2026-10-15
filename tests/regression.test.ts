@@ -12,19 +12,21 @@ describe('レビュー指摘の回帰', () => {
     expect(polyToTex(parseExpression('6pi')!)).toBe(String.raw`6\pi `);
   });
 
-  it('速さの文章題の答えは丸めない(14/3 が正解、4.67 は不正解)', () => {
+  it('分数の解は丸めない(2/3 が正解、0.67 は不正解)', () => {
+    // 2026-10-15 から 速さの文章題は 割りきれる数だけにした。分数の解は 基本の方程式 ★3(6x = 4)で 確かめる
     const rng = createRng(1);
     for (let i = 0; i < 3000; i++) {
-      const p = getTemplate('g1.eq.word').generate(rng, 3);
-      if (p.answer.kind !== 'number' || !p.promptText.includes('分速')) continue;
+      const p = getTemplate('g1.eq.basic').generate(rng, 3);
+      if (p.answer.kind !== 'number') continue;
       const v = p.answer.value;
-      if (v.d === 1n) continue;
+      // 1/2 や 3/4 のように 小数で 書ききれる 分数は とばす
+      if (10n ** 6n % v.d === 0n) continue;
       expect(judge(p.answer, `${v.n}/${v.d}`).correct).toBe(true);
       const approx = (Number(v.n) / Number(v.d)).toFixed(2);
       expect(judge(p.answer, approx).correct).toBe(false);
       return;
     }
-    throw new Error('分数解の速さの問題が生成されなかった');
+    throw new Error('分数の解の問題が生成されなかった');
   });
 
   it('座標は順番も判定し、逆順には理由を添える', () => {
