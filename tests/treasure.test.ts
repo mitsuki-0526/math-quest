@@ -2,8 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createNewSave, gradeOfClass, schoolInfo, migrate } from '@/engine/save';
 import { grantTreasure, hasTreasure, treasureShortfall } from '@/engine/treasure';
+import { unitTrophies } from '@/engine/trophy';
 import { config } from '@/data/config';
-import { STAR_SHARD_ID, TREASURE_MAP_ID, isEquipment } from '@/data/grade1/items';
+import { grade1 } from '@/data/grade1/chapters';
+import { TREASURE_MAP_ID, isEquipment } from '@/data/grade1/items';
+import type { SaveData } from '@/engine/save';
+
+/** 章の すべての 出題タイプに 正解数を 入れる */
+function solveAll(d: SaveData, chapters: string[], correct: number): void {
+  for (const c of grade1.chapters.filter((x) => chapters.includes(x.id)))
+    for (const t of c.templates ?? []) d.stats[t] = { asked: correct, correct, streakBest: 0 };
+}
 
 /**
  * 宝の地図(クラスに 1 枚だけ。先生の ごほうびの 宝探し 2026-10-16)。
@@ -69,30 +78,54 @@ describe('宝の地図: サーバーの 早い者勝ち', () => {
   });
 });
 
-describe('宝の地図: 端末側', () => {
-  it('ゴールドと 星のかけらが 足りるまで 買えない', () => {
+describe('単元トロフィー(まんべんなく 解いたか)', () => {
+  it('段階は 単元の中で いちばん 正解の 少ない 出題タイプで 決まる', () => {
     const d = createNewSave('ゆう');
-    expect(treasureShortfall(d)).toEqual({ gold: config.treasure.price, shards: config.treasure.shards });
+    solveAll(d, ['g1c1'], config.trophy.gold);
+    const [u] = unitTrophies(d, ['g1c1']);
+    expect(u.unit).toBe('正の数と負の数');
+    expect(u.tier).toBe(3);
+    // 1 つの 出題タイプだけ 少ないと、そこで 止まる(得意な タイプだけ 解いても 上がらない)
+    const weak = u.templates[2];
+    d.stats[weak].correct = config.trophy.bronze;
+    const [v] = unitTrophies(d, ['g1c1']);
+    expect(v.tier).toBe(1);
+    expect(v.weakest).toBe(weak);
+    expect(v.nextAt).toBe(config.trophy.silver);
+  });
+
+  it('解放ずみの 単元だけを 数える', () => {
+    const d = createNewSave('ゆう');
+    expect(unitTrophies(d, ['g1c1', 'g1c3']).map((u) => u.chapterId)).toEqual(['g1c1', 'g1c3']);
+    expect(unitTrophies(d, ['g1c1', 'g1c3']).every((u) => u.tier === 0)).toBe(true);
+  });
+});
+
+describe('宝の地図: 端末側', () => {
+  it('ゴールドと、解放ずみの 全単元の トロフィーが そろうまで 買えない', () => {
+    const d = createNewSave('ゆう');
+    const open = ['g1c1', 'g1c2'];
+    expect(treasureShortfall(d, open).gold).toBe(config.treasure.price);
+    expect(treasureShortfall(d, open).units.map((u) => u.chapterId)).toEqual(open);
     d.player.gold = config.treasure.price + 10;
-    d.inventory[STAR_SHARD_ID] = config.treasure.shards + 1;
-    expect(treasureShortfall(d)).toEqual({ gold: 0, shards: 0 });
+    solveAll(d, ['g1c1'], config.trophy.silver);
+    expect(treasureShortfall(d, open).units.map((u) => u.chapterId)).toEqual(['g1c2']);
+    solveAll(d, ['g1c2'], config.trophy.silver);
+    expect(treasureShortfall(d, open)).toEqual({ gold: 0, units: [] });
   });
 
   it('受け取ると 代金を 引く。2 回 呼んでも 二重には 引かない', () => {
     const d = createNewSave('ゆう');
     d.player.gold = config.treasure.price + 10;
-    d.inventory[STAR_SHARD_ID] = config.treasure.shards + 1;
     grantTreasure(d);
     grantTreasure(d);
     expect(hasTreasure(d)).toBe(true);
     expect(d.player.gold).toBe(10);
-    expect(d.inventory[STAR_SHARD_ID]).toBe(1);
     expect(d.inventory[TREASURE_MAP_ID]).toBe(1);
   });
 
   it('だいじなものは 装備の 一覧に 出ない', () => {
     expect(isEquipment(TREASURE_MAP_ID)).toBe(false);
-    expect(isEquipment(STAR_SHARD_ID)).toBe(false);
     expect(isEquipment('iron_sword')).toBe(true);
   });
 });

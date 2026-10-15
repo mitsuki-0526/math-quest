@@ -4,7 +4,7 @@ import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { addItem, equip, playerStats } from '@/engine/player';
 import { getTown } from '@/data/grade1/town';
-import { getItem, isEquipment, STAR_SHARD_ID, TREASURE_MAP_ID } from '@/data/grade1/items';
+import { getItem, isEquipment, TREASURE_MAP_ID } from '@/data/grade1/items';
 import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
@@ -15,6 +15,7 @@ import '@/data/grade1/problems';
 import { getTemplate } from '@/math/template';
 import { describeError, type TreasureStatus } from '@/engine/api';
 import { grantTreasure, hasTreasure, requestTreasure, treasureShortfall } from '@/engine/treasure';
+import { TROPHY_EMOJI, TROPHY_NAMES, type TrophyTier } from '@/engine/trophy';
 import { Bar, Button } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 
@@ -81,9 +82,13 @@ export function TownScene({ townId }: { townId: string }) {
 
   async function buyTreasure() {
     const lack = treasureShortfall(save!);
-    if (lack.gold > 0 || lack.shards > 0) {
-      const parts = [lack.gold > 0 ? `${lack.gold} G` : '', lack.shards > 0 ? `${getItem(STAR_SHARD_ID).name} ${lack.shards}個` : ''].filter(Boolean);
-      setMsg(`${characters.teo.name}「こいつは クラスに 1枚きりの 品だ。あと ${parts.join(' と ')} 足りないぜ。計算で 稼いでこい!」`);
+    if (lack.gold > 0 || lack.units.length > 0) {
+      const tier = TROPHY_NAMES[config.treasure.trophyTier as TrophyTier];
+      const parts = [
+        lack.gold > 0 ? `あと ${lack.gold} G` : '',
+        lack.units.length > 0 ? `${lack.units.map((u) => u.unit).join('・')}の ${tier}トロフィー` : '',
+      ].filter(Boolean);
+      setMsg(`${characters.teo.name}「こいつは クラスに 1枚きりの 品だ。${parts.join('と、')}が 足りないぜ。どの 単元も まんべんなく 解いてこい!」`);
       return;
     }
     setTreasureBusy(true);
@@ -182,7 +187,8 @@ export function TownScene({ townId }: { townId: string }) {
                     {getItem(TREASURE_MAP_ID).emoji} {getItem(TREASURE_MAP_ID).name} <small>クラスに 1枚だけ。先に 買った 1人の もの</small>
                   </span>
                   <span class="shop-price">
-                    {config.treasure.price} G{config.treasure.shards > 0 ? ` + ${getItem(STAR_SHARD_ID).emoji}×${config.treasure.shards}` : ''}
+                    {config.treasure.price} G
+                    {config.treasure.trophyTier > 0 ? ` + 全単元${TROPHY_EMOJI[config.treasure.trophyTier as TrophyTier]}` : ''}
                   </span>
                   <Button disabled={hasTreasure(save) || treasure.soldOut || treasureBusy} onClick={() => void buyTreasure()}>
                     {hasTreasure(save) ? '持っている' : treasure.soldOut ? '売り切れ' : treasureBusy ? '…' : 'かう'}
@@ -232,7 +238,7 @@ export function TownScene({ townId }: { townId: string }) {
               </div>
               {daily && !daily.claimed && (
                 <p class="note">
-                  📜 今日のクエスト: 「{getTemplate(daily.templateId).title}」を {daily.target}問 正解する({daily.correct}/{daily.target})— 達成で +{config.daily.rewardGold}G +{config.daily.rewardExp}経験値 +{getItem(STAR_SHARD_ID).name}
+                  📜 今日のクエスト: 「{getTemplate(daily.templateId).title}」を {daily.target}問 正解する({daily.correct}/{daily.target})— 達成で +{config.daily.rewardGold}G +{config.daily.rewardExp}経験値
                 </p>
               )}
               {daily?.claimed && <p class="muted">📜 今日のクエストは 達成ずみ。明日 また 新しい単元が 出る</p>}

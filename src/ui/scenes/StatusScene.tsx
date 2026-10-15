@@ -2,13 +2,14 @@ import { popScene } from '@/engine/scenes';
 import { saveStore } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { playerStats, levelCap } from '@/engine/player';
-import { expToNext } from '@/data/config';
+import { config, expToNext } from '@/data/config';
 import { getItem } from '@/data/grade1/items';
 import { perks } from '@/data/skills';
 import { grade1 } from '@/data/grade1/chapters';
 import { characters, playerSprite } from '@/data/characters';
 import '@/data/grade1/problems';
-import { allTemplates } from '@/math/template';
+import { allTemplates, getTemplate } from '@/math/template';
+import { TROPHY_EMOJI, TROPHY_NAMES, unitTrophies, type TrophyTier } from '@/engine/trophy';
 import { Bar, Button, Panel } from '@/ui/components/Ui';
 import { Sprite } from '@/ui/components/Sprite';
 
@@ -45,6 +46,7 @@ export function StatusScene() {
   const next = expToNext(p.level);
   const cap = levelCap();
   const templates = allTemplates();
+  const trophies = unitTrophies(save);
   const rows = templates
     .map((t) => ({ t, s: save.stats[t.id] }))
     .filter((r) => r.s && r.s.asked > 0)
@@ -125,6 +127,28 @@ export function StatusScene() {
               </li>
             ))}
           </ul>
+          <h3 class="panel-title" style={{ marginTop: 14 }}>
+            単元トロフィー
+          </h3>
+          {/* 単元の中で いちばん 正解の 少ない 出題タイプを 見せる: 次に 何を 解けば まんべんなく なるかが 分かるように */}
+          <ul class="trophy-list">
+            {trophies.map((u) => (
+              <li key={u.chapterId} class={`tier-${u.tier}`}>
+                <span class="trophy-medal" title={TROPHY_NAMES[u.tier]}>
+                  {TROPHY_EMOJI[u.tier]}
+                </span>
+                <b>{u.unit}</b>
+                <small>
+                  {u.nextAt === null
+                    ? '金 達成!'
+                    : `次の ${TROPHY_NAMES[(u.tier + 1) as TrophyTier]}まで: 「${getTemplate(u.weakest).title}」 ${u.weakestCorrect}/${u.nextAt}問`}
+                </small>
+              </li>
+            ))}
+          </ul>
+          <small class="muted">
+            単元の中の どの 出題タイプも {config.trophy.bronze}問 正解で 銅、{config.trophy.silver}問で 銀、{config.trophy.gold}問で 金(修練の泉で 選んで 練習できる)
+          </small>
           <h3 class="panel-title" style={{ marginTop: 14 }}>
             もちもの
           </h3>

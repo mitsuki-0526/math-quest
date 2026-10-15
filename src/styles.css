@@ -1938,6 +1938,32 @@ img.sprite {
 .perk-list li.got b {
   color: var(--gold-2);
 }
+/* 単元トロフィー: まだの 単元は うすく、金は 金箔の 色 */
+.trophy-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  font-size: 0.9em;
+}
+.trophy-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 6px;
+  align-items: center;
+}
+.trophy-list li small {
+  grid-column: 2;
+  color: rgba(255, 255, 255, 0.6);
+}
+.trophy-list li.tier-0 .trophy-medal {
+  opacity: 0.4;
+}
+.trophy-list li.tier-3 b {
+  color: var(--gold-2);
+}
 .perk-line {
   color: var(--verdigris);
   margin: 4px 0;

@@ -51,14 +51,12 @@ export const items: Record<string, ItemDef> = {
   recorder_pen: { id: 'recorder_pen', name: '記録者のペン', kind: 'accessory', emoji: '🖋️', description: '経験値 +10%', stat: { expMul: 1.1 } },
 
   // --- だいじなもの ---
-  star_shard: { id: 'star_shard', name: '星のかけら', kind: 'key', emoji: '🌟', description: '今日のクエストを 達成すると もらえる。宝の地図と 交換できる' },
   // 値段は店ではなく config.treasure で決まる(先生が スプレッドシートで 変えられるように)
   treasure_map: { id: 'treasure_map', name: '宝の地図', kind: 'key', emoji: '🗺️', description: 'クラスに 1枚だけの 地図。先生に 見せよう' },
 };
 
-/** 宝の地図(クラスに 1 枚だけ。売るクラスは 先生が 決める)と、交換に 要る かけら */
+/** 宝の地図(クラスに 1 枚だけ。売るクラスは 先生が 決める) */
 export const TREASURE_MAP_ID = 'treasure_map';
-export const STAR_SHARD_ID = 'star_shard';
 
 /** 装備できる種類か(だいじなもの・消耗品は 装備の一覧に 出さない) */
 export function isEquipment(id: string): boolean {
