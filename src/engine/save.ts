@@ -44,6 +44,8 @@ export interface SaveData {
   flags: Record<string, boolean>;
   /** 会話の効果で変わった表示名(例: 羊飼いの少女 → ミオ) */
   renames?: Record<string, string>;
+  /** 出題タイプごとの 最近 出た 問題の キー(最大 20)。地点を 移っても 同じ 問題を 出さない ため(先生の指摘 2026-10-14) */
+  recentProblems?: Record<string, string[]>;
   progress: {
     /** 現在の章ID(例: g1c1) */
     chapter: string;

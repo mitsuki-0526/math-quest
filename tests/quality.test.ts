@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import '@/data/grade1/problems';
-import { allTemplates, generateProblem, registerTemplate, type Problem, type Difficulty } from '@/math/template';
+import { allTemplates, generateProblem, MAX_GENERATION_ATTEMPTS, registerTemplate, type Problem, type Difficulty } from '@/math/template';
 import { rat } from '@/math/rational';
 import { createRng } from '@/math/rng';
 import { validateMath } from '@/math/quality/mathValidator';
@@ -106,7 +106,7 @@ describe('生成の 流れ(作り直し・代わり・ログ)', () => {
     const p = generateProblem('test.flaky', 3, [], createRng(1));
     expect(p.difficulty).toBe(2);
     const s = summarizeGeneration(getGenerationLog());
-    expect(s.byReason.BROKEN_TEXT).toBe(8);
+    expect(s.byReason.BROKEN_TEXT).toBe(MAX_GENERATION_ATTEMPTS);
     expect(getGenerationLog().some((e) => e.fallback === 'lower_star')).toBe(true);
     expect(formatSummary(s)).toMatch(/BROKEN_TEXT/);
   });
@@ -115,7 +115,7 @@ describe('生成の 流れ(作り直し・代わり・ログ)', () => {
     const p = generateProblem('test.flaky', 1, [], createRng(2));
     expect(p).toBeTruthy();
     expect(getGenerationLog().at(-1)?.fallback).toBe('unvalidated');
-    expect(summarizeGeneration().byReason.ANSWER_MISMATCH).toBe(8);
+    expect(summarizeGeneration().byReason.ANSWER_MISMATCH).toBe(MAX_GENERATION_ATTEMPTS);
   });
 
   it('ログには 個人情報を 入れない(問題と 理由だけ)', () => {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import '@/data/grade1/problems';
 import { createBattle, answer, timeout, continueAfterExplain, continueAfterVictory, useHint, flee, heal, type BattleContext } from '@/engine/battle';
 import { getEnemy } from '@/data/grade1/enemies';
+import { rememberProblem } from '@/engine/adaptive';
 import { createRng } from '@/math/rng';
 import { toString } from '@/math/rational';
 import { primeFactors, factorsToText } from '@/math/factorization';
@@ -237,5 +238,22 @@ describe('ボス戦の演出', () => {
     };
     expect(cols('challenge')).toBe(5);
     expect([3, 4]).toContain(cols());
+  });
+});
+
+describe('同じ 問題を くり返さない(先生の指摘 2026-10-14「2 章で 同じ 問題を 何回も 見た」)', () => {
+  it('前の 戦闘で 出た 問題(セーブの 履歴)も 避ける。出題タイプごとに 最近 20 問', () => {
+    // 代入 ★1(ax に 正の数)は 40 通り。20 問 前まで 出た 問題は 出ない
+    const history: Record<string, string[]> = {};
+    const keys: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      const s = createBattle(ctx({ encounters: [['letter_fairy']], pickDifficulty: () => 1, history: { ...history }, rng: createRng(1000 + i) }));
+      const k = s.problem!.key;
+      expect(keys.slice(-20), `${i} 問目 ${s.problem!.promptText}`).not.toContain(k);
+      keys.push(k);
+      const d = { recentProblems: history } as unknown as Parameters<typeof rememberProblem>[0];
+      rememberProblem(d, s.problem!);
+      Object.assign(history, d.recentProblems);
+    }
   });
 });

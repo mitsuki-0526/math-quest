@@ -19,7 +19,7 @@ import {
   type BattleState,
 } from '@/engine/battle';
 import { playerStats, gainExp, addItem, removeItem, applyDefeat } from '@/engine/player';
-import { currentDifficulty, isWeak, nodeDifficulty, recordAnswer, reviewTemplates, ensureDailyQuest } from '@/engine/adaptive';
+import { currentDifficulty, isWeak, nodeDifficulty, recordAnswer, rememberProblem, reviewTemplates, ensureDailyQuest } from '@/engine/adaptive';
 import { practiceTemplates, enemyForTemplate } from '@/engine/practice';
 import { perksGainedBetween, nextPerk, type Perk } from '@/data/skills';
 import { getTemplate } from '@/math/template';
@@ -105,6 +105,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
       isBoss,
       templateOverride: reviewTemplate.current ?? undefined,
       hardPerBattle: isBoss || review || tutorial ? undefined : config.battle.hardPerBattle,
+      history: save.recentProblems ?? {},
       basis: review ? 'challenge' : 'textbook',
     };
     ctxRef.current = ctx;
@@ -242,6 +243,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     const last = next.last!;
     updateSave((d) => {
       tally(d, problem, last.correct, elapsed, before.hintUsedForCurrent, false);
+      rememberProblem(d, problem);
       const change = recordAnswer(d, problem.templateId, last.correct, problem.tags);
       if (change !== 0) next = { ...next, log: [...next.log, change > 0 ? `${characters.pita.name}「調子いいね! 問題が 少し 難しくなるよ」` : `${characters.pita.name}「少し やさしい 問題に するね。ゆっくり いこう」`] };
     });
@@ -268,6 +270,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     setShake((n) => n + 1);
     updateSave((d) => {
       tally(d, before.problem!, false, before.timeLimit, before.hintUsedForCurrent, true);
+      rememberProblem(d, before.problem!);
       recordAnswer(d, before.problem!.templateId, false, before.problem!.tags);
     });
     setExplain({ problem: before.problem!, note: undefined, timeout: true });

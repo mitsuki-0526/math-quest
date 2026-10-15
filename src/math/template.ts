@@ -169,7 +169,7 @@ export function allTemplates(): ProblemTemplate[] {
 }
 
 /** 1 問を 渡すまでに 作る 候補の 上限 */
-export const MAX_GENERATION_ATTEMPTS = 8;
+export const MAX_GENERATION_ATTEMPTS = 12;
 
 /**
  * 問題を 作って ゲームに 渡す(品質の 仕組み。docs/difficulty.md「問題の品質の 仕組み」):
@@ -189,7 +189,9 @@ export function generateProblem(
 ): Problem {
   const t = getTemplate(templateId);
   const base = { templateId, difficulty, basis, validatorVersion: MATH_VALIDATOR_VERSION };
+  // 重複だけで 不合格に なった 候補。最後まで 合格が なければ、いちばん 前に 出た(最近 出ていない)ものを 使う
   let duplicateOnly: Problem | null = null;
+  let duplicateAge = Infinity;
   let last: Problem | null = null;
   for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
     let p: Problem;
@@ -203,7 +205,14 @@ export function generateProblem(
     const r = validateMath(p) ?? validateSpec(p) ?? judgeProblem(p) ?? checkDuplicate(p, { keys: recentKeys, shapes: recentShapes });
     logGeneration({ ...base, time: new Date().toISOString(), attempt, accepted: !r, reason: r?.reason, detail: r?.detail, key: p.key, question: p.promptText });
     if (!r) return p;
-    if ((r.reason === 'DUPLICATE' || r.reason === 'SAME_FORM') && !duplicateOnly) duplicateOnly = p;
+    if (r.reason === 'DUPLICATE' || r.reason === 'SAME_FORM') {
+      // 履歴の 中の 位置(小さいほど 前に 出た)。履歴に ない 形だけの 重複は いちばん よい
+      const age = r.reason === 'SAME_FORM' ? -1 : recentKeys.lastIndexOf(p.key);
+      if (!duplicateOnly || age < duplicateAge) {
+        duplicateOnly = p;
+        duplicateAge = age;
+      }
+    }
   }
   const fallback = (p: Problem, kind: 'allow_duplicate' | 'unvalidated') => {
     logGeneration({ ...base, time: new Date().toISOString(), attempt: MAX_GENERATION_ATTEMPTS + 1, accepted: true, fallback: kind, key: p.key, question: p.promptText });

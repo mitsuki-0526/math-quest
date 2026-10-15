@@ -3,11 +3,12 @@ import { reject, type Rejection } from './rejectReason';
 
 /**
  * 重複の 検査。まずは 簡単な 方法で:
- *   ・同じ問題(キーが 同じ)を 直近 6 問の 中で 出さない
+ *   ・同じ問題(キーが 同じ)を、同じ 出題タイプの 直近 20 問の 中で 出さない(呼ぶ側が その 出題タイプの 履歴を 渡す)。
+ *     以前は 戦闘の 中の 直近 6 問だけで、地点を 移ると また 同じ 問題が 出た(先生の指摘 2026-10-14)
  *   ・数だけ ちがう 同じ形の 問題を 3 問 続けない(「(+7) + (−2)」「(+3) + (−5)」「(+1) + (−9)」…)
  * 形は 問題文の 数を # に 置きかえた 文字列(将来 文の 近さで 比べるときも ここを 差しかえる)
  */
-export const RECENT_WINDOW = 6;
+export const RECENT_WINDOW = 20;
 
 export function shapeOf(p: Problem): string {
   return p.promptText.replace(/[−-]?\d+(\.\d+)?/g, '#');

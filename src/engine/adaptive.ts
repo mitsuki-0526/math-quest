@@ -1,5 +1,6 @@
 import { config } from '@/data/config';
-import type { Difficulty } from '@/math/template';
+import type { Difficulty, Problem } from '@/math/template';
+import { RECENT_WINDOW } from '@/math/quality/duplicateChecker';
 import type { SaveData, TemplateStats } from './save';
 import type { NodeDef } from './types';
 
@@ -14,6 +15,12 @@ function statsOf(save: SaveData, templateId: string): TemplateStats | undefined 
 
 export function currentDifficulty(save: SaveData, templateId: string): Difficulty {
   return (statsOf(save, templateId)?.level ?? 1) as Difficulty;
+}
+
+/** 出た 問題を セーブに 覚える(出題タイプごとに 最近 20 問)。次の 戦闘でも 同じ 問題を 避ける */
+export function rememberProblem(d: SaveData, p: Pick<Problem, 'templateId' | 'key'>): void {
+  const list = [...(d.recentProblems?.[p.templateId] ?? []).filter((k) => k !== p.key), p.key].slice(-RECENT_WINDOW);
+  d.recentProblems = { ...(d.recentProblems ?? {}), [p.templateId]: list };
 }
 
 /**
