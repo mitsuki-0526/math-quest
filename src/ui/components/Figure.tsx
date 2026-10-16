@@ -93,6 +93,12 @@ function NumberLine({ spec }: { spec: NumberLineSpec }) {
 
 // ---------------------------------------------------------------- 座標平面
 
+/**
+ * 座標平面の グラフの 線・点(と その名前)の 色。軸・格子・目盛りは 黒で、答えに かかわる ものだけ 赤
+ * (全部 黒だと 線と 格子の 見分けが つきにくい。先生の指摘 2026-10-16)
+ */
+const PLANE_MARK = '#d32f2f';
+
 function Plane({ spec }: { spec: PlaneSpec }) {
   const R = spec.range ?? 6;
   const S = 360; // 1辺の長さ
@@ -242,7 +248,7 @@ function Plane({ spec }: { spec: PlaneSpec }) {
         })}
       {/* グラフ */}
       {spec.graphs?.map((g, i) =>
-        path(g.type, g.a).map((d, k) => <path key={`p${i}-${k}`} d={d} fill="none" stroke="currentColor" stroke-width="2.2" />),
+        path(g.type, g.a).map((d, k) => <path key={`p${i}-${k}`} d={d} fill="none" stroke={PLANE_MARK} stroke-width="2.4" />),
       )}
       {/* グラフの 名前(ア・イ・ウ)。比例の 直線は 右の はし(図の 枠に かかる 手前)に 置く */}
       {spec.graphs?.map((g, i) => {
@@ -264,7 +270,7 @@ function Plane({ spec }: { spec: PlaneSpec }) {
             16,
           ) ?? [lx + 14, ly];
         return (
-          <text key={`l${i}`} x={pos[0]} y={pos[1] + 6} text-anchor="middle" font-size="16" font-weight="bold" fill="currentColor">
+          <text key={`l${i}`} x={pos[0]} y={pos[1] + 6} text-anchor="middle" font-size="16" font-weight="bold" fill={PLANE_MARK}>
             {g.label}
           </text>
         );
@@ -279,8 +285,8 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       {/* 点 */}
       {spec.points?.map((p) => (
         <g key={p.label}>
-          <circle cx={px(p.x)} cy={py(p.y)} r="5" fill="currentColor" stroke="#fff" stroke-width="1.4" />
-          <text x={px(p.x) + 8} y={py(p.y) - 8} font-size="15" font-weight="bold" fill="currentColor">
+          <circle cx={px(p.x)} cy={py(p.y)} r="5" fill={PLANE_MARK} stroke="#fff" stroke-width="1.4" />
+          <text x={px(p.x) + 8} y={py(p.y) - 8} font-size="15" font-weight="bold" fill={PLANE_MARK}>
             {p.label}
           </text>
         </g>
