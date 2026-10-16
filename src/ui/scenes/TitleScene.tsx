@@ -4,7 +4,7 @@ import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button, Panel } from '@/ui/components/Ui';
 import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, updateSave, splitClass, type SaveData } from '@/engine/save';
 import { pushScene, resetScenes } from '@/engine/scenes';
-import { api, hasServer, describeError, isNetworkError, ApiFailure, type AccountInfo, type Identity } from '@/engine/api';
+import { api, hasServer, describeError, isNetworkError, ApiFailure, type AccountInfo, type CarryCandidate, type Identity } from '@/engine/api';
 import { bootstrap, getIdentity, login, ownerKey, resumeOffline, scheduleSync, stampSchool } from '@/engine/sync';
 import { markEntered, sessionStore } from '@/engine/session';
 import { useStore } from '@/engine/store';
@@ -23,7 +23,13 @@ import type { PlayerLook } from '@/engine/save';
  */
 const TEACHER_CLASS = 'teacher';
 
-type Stage = 'loading' | 'google' | 'login' | 'offline' | 'name' | 'local';
+type Stage = 'loading' | 'google' | 'login' | 'offline' | 'name' | 'local' | 'carry';
+
+/** 「2026-10-16T…」→「10/16」 */
+const shortDate = (iso: string) => {
+  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${Number(m[1])}/${Number(m[2])}` : '';
+};
 
 /**
  * クラスを えらぶ 欄。クラス名が どれも「学年-組」(「3-1」)なら、学年と 組の 2 つの 欄に 分ける
@@ -109,6 +115,8 @@ export function TitleScene() {
   const [name, setName] = useState(DEFAULT_PLAYER_NAME);
   const [look, setLook] = useState<PlayerLook>('neutral');
   const [pendingIdentity, setPendingIdentity] = useState<Identity | null>(null);
+  /** 前の セーブの 候補と いまの セーブ(どちらで 続けるか 聞く) */
+  const [carry, setCarry] = useState<{ cands: CarryCandidate[]; current: SaveData | null } | null>(null);
   /** 申請の 欄を 開いているか(申請中に 直すとき) */
   const [applying, setApplying] = useState(false);
   // サーバーなしのときは持ち主なしの端末セーブだけを見る
@@ -176,6 +184,12 @@ export function TitleScene() {
     try {
       // 端末内のセーブは持ち主ごとに分かれているので、この人のものだけが候補になる
       const r = await login(id, loadLocalSave(ownerKey(id)));
+      // サーバーの 更新で 前の セーブが 別の 行に 残っていたら、どちらで 続けるか 本人に 聞く(先生の希望 2026-10-17)
+      if (r.carry?.length) {
+        setCarry({ cands: r.carry, current: r.save });
+        setStage('carry');
+        return;
+      }
       if (r.save) enterGame(r.save);
       else {
         setPendingIdentity(getIdentity());
@@ -231,6 +245,24 @@ export function TitleScene() {
   }
 
   // 「3-1」は「3年1組」と 読みやすく 出す
+  /** 選んだ セーブで 続ける。'keep' は いまの セーブ(なければ 名前を 決めて はじめから) */
+  async function onCarry(pick: number | 'keep') {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.carry(pick);
+      if (r.save) enterGame(r.save);
+      else {
+        setPendingIdentity(getIdentity());
+        setStage('name');
+      }
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const who = (id: { class: string; number: string }) => {
     if (id.class === TEACHER_CLASS) return '先生';
     const sc = splitClass(id.class);
@@ -316,6 +348,23 @@ export function TitleScene() {
                 <Button onClick={() => void connect()}>もう一度 つなぐ</Button>
               </>
             )}
+          </div>
+        )}
+
+        {stage === 'carry' && carry && (
+          <div class="stack">
+            <p class="note">前の セーブが 見つかりました。どちらで 続けますか?</p>
+            {carry.cands.map((c) => (
+              <Button key={c.id} primary disabled={busy} onClick={() => void onCarry(c.id)}>
+                前の セーブ: {c.name} Lv{c.level}
+                {shortDate(c.updatedAt) && `(${shortDate(c.updatedAt)} まで 遊んだ)`}
+              </Button>
+            ))}
+            <Button disabled={busy} onClick={() => void onCarry('keep')}>
+              {carry.current ? `いまの セーブ: ${carry.current.player.name} Lv${carry.current.player.level}` : 'はじめから(いまの セーブは ない)'}
+            </Button>
+            <p class="muted">選ばなかった セーブも 消えずに 残ります(まちがえたときは 先生に 言えば 戻せます)</p>
+            {error && <p class="warn">{error}</p>}
           </div>
         )}
 

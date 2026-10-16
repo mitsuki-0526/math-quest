@@ -88,6 +88,16 @@ export interface LoginResult {
   account?: { class: string; number: string; grade?: number };
   /** 先生が この人の セーブを消した日時(ISO)。これより前に はじめた 端末内のセーブは 捨てる */
   resetAt?: string;
+  /** 前の セーブらしい 行(学校アカウント方式)。あれば どちらで 続けるか 生徒に 聞く */
+  carry?: CarryCandidate[];
+}
+
+/** 前の セーブの 候補(サーバーの 更新で key の 形が 変わった・先生が 古い 行に email を 書いた とき) */
+export interface CarryCandidate {
+  id: number;
+  name: string;
+  level: number;
+  updatedAt: string;
 }
 export interface SaveResult {
   ok: true;
@@ -259,6 +269,8 @@ export const api = {
   load: (id: Identity) => post<LoadResult>({ action: 'load', class: id.class, number: id.number, pass: id.pass }),
   feedback: (id: Identity, feedback: FeedbackInput) =>
     post<{ ok: true }>({ action: 'feedback', class: id.class, number: id.number, pass: id.pass, feedback }),
+  /** 前の セーブで 続ける(pick = 候補の id)か、いまの セーブの まま('keep')か。学校アカウント方式だけ */
+  carry: (pick: number | 'keep') => post<{ ok: true; save: SaveData | null }>({ action: 'carry', pick }),
   /** 名簿に ない 生徒が クラス・番号を 申請する(学校アカウント方式だけ。先生が 承認すると 入れる) */
   apply: (cls: string, number: string) => post<{ ok: true; pending: { class: string; number: string } }>({ action: 'apply', class: cls, number }),
   /** 宝の地図の 売れ具合を 聞く(buy=true なら 買う。売り切れなら 買えずに 状態だけ 返る) */
@@ -294,6 +306,8 @@ export function describeError(e: unknown): string {
       return '名簿に まちがいが あるため 入れません。先生に 知らせてください';
     case 'pending':
       return '先生の 確認を 待っています。確認が すんだら「もう一度 つなぐ」を 押してください';
+    case 'bad_carry':
+      return 'セーブを 切りかえられませんでした。先生に 知らせてください';
     case 'number_taken':
       return 'その クラス・番号は もう ほかの 人が 使っています。番号を 確かめてください';
     case 'already_registered':

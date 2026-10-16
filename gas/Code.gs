@@ -21,7 +21,8 @@
  *   - 合言葉方式(予備): アカウントが取れない環境では、クラス・番号・合言葉で入る
  *
  * シート:
- *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at | reset_at
+ *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at | reset_at | email
+ *              email = 学校アカウント(セーブを 本人に 結びつける。更新や 進級で クラス・番号が 変わっても 引き継ぐ)
  *   roster   : 承認 | email | name | grade | class | number | memo (先生の名簿。memo は自由記入でプログラムは読まない。
  *              列は 見出しで 探すので 並べ替えてもよい。grade = 学年(3)、class = 組(1)。ゲームの中の クラス名は「3-1」。
  *              前の版の 書き方(class に「1-2」、grade は 空でも可)も そのまま 読める。
@@ -47,6 +48,8 @@
  *   { action:'feedback', class, number, pass, feedback:{ fun, difficulty, comment, level, chapter, answered, correct } } → { ok }
  *   { action:'review', class, number, pass, marks:[{ node, template, star, rating, comment, flagged }] } → { ok, count }(先生だけ。問題の見本帳の印)
  *   { action:'apply', class, number }              → { ok, pending:{ class, number } }(学校アカウント方式で 名簿に ない 生徒が クラス・番号を 申請する)
+ *   login の 応答の carry: [{ id, name, level, updatedAt }] = 前の セーブらしい 行(学校アカウント方式)。ゲームが 生徒に どちらで 続けるか 聞く
+ *   { action:'carry', pick: 行の id | 'keep' }       → { ok, save }(前の セーブで 続ける / いまの セーブの まま)
  *        感想(体験版の試遊)。feedback シートに 1 行足す
  *   { action:'treasure', class, number, pass, buy } → { ok, treasure:{ onSale, soldOut, mine, opensAt? } }
  *        宝の地図(クラスに 1 枚だけ)。config の treasure_grade(学年)・treasure_class(組)で 売る クラスを 決める。buy=true なら早い者勝ちで買う
@@ -56,7 +59,7 @@
 
 var SHEETS = {
   // reset_at: 先生がセーブを消した日時。これより前に始めたセーブ(端末に残ったもの)は受け取らない
-  students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at', 'reset_at'],
+  students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at', 'reset_at', 'email'],
   roster: ['承認', 'email', 'name', 'grade', 'class', 'number', 'memo'],
   feedback: ['time', 'class', 'number', 'fun', 'difficulty', 'comment', 'level', 'chapter', 'answered', 'correct'],
   review: ['time', 'node', 'template', 'star', 'rating', 'comment', 'flagged'],
@@ -72,6 +75,8 @@ var DEFAULT_APP_BASE = 'https://mitsuki-0526.github.io/math-quest/';
 /** 初回セットアップ。エディタから手で実行する。 */
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  // 何かを 変える 前に セーブを 写しておく(更新で 引き継ぎに 失敗しても 戻せるように。先生の指摘 2026-10-17)
+  var bak = backupStudents();
   Object.keys(SHEETS).forEach(function (name) {
     var sh = ss.getSheetByName(name) || ss.insertSheet(name);
     if (sh.getLastRow() === 0) {
@@ -99,6 +104,12 @@ function setup() {
   ensureConfig('treasure_open', false); // 宝の地図を売るか(TRUE / FALSE)。始めは止めておき、先生が TRUE にしたら売る
   ensureConfig('treasure_from', ''); // 宝の地図を売り始める日時(例: 2026-11-01 または 2026-11-01 08:30)。空ならすぐ
   ensureConfig('treasure_until', ''); // 売るのをやめる日(この日の終わりまで売る。時刻も書ける)。空ならずっと
+  // 古い 版の students には 後から 足した 列(reset_at・email)の 見出しが ない
+  var st = ss.getSheetByName('students');
+  var head = st.getRange(1, 1, 1, SHEETS.students.length).getValues()[0];
+  SHEETS.students.forEach(function (h, j) {
+    if (!cellText(head[j])) st.getRange(1, j + 1).setValue(h);
+  });
   var roster = ss.getSheetByName('roster');
   ensureRosterApprovedColumn(roster);
   ensureRosterGradeColumn(roster);
@@ -121,7 +132,7 @@ function setup() {
     un.appendRow(['*', true, false, false, false, false, false, false]);
     un.getRange(2, 2, 1, 7).insertCheckboxes();
   }
-  Logger.log('セットアップ完了。デプロイして URL を生徒に配ってください。teacher_pass は先生用の合言葉です(好きな値に変えてよい)。');
+  Logger.log('セットアップ完了。' + (bak ? 'students シートを「' + bak + '」に 写しました。' : '') + 'デプロイして URL を生徒に配ってください。生徒が 開く 前に メニューの「引き継ぎを 点検する」を 押してください。');
 }
 
 // ------------------------------------------------------------------ 授業の管理(先生のメニュー)
@@ -139,6 +150,10 @@ function onOpen() {
     .addSeparator()
     .addItem('Classroom から 名簿を 取り込む', 'menuImportClassroom')
     .addItem('名簿の 申請を すべて 承認する(承認待ちの 行)', 'menuApproveAll')
+    .addSeparator()
+    .addItem('引き継ぎを 点検する(更新の あと、生徒が 開く 前に)', 'menuCarryover')
+    .addItem('セーブを 引き継ぐ(students シートで 2 行を 選ぶ)', 'menuTransfer')
+    .addItem('いま バックアップを 取る', 'menuBackup')
     .addSeparator()
     .addItem('選んだ生徒のセーブを消す(students シートで行を選ぶ)', 'menuWipeSelected')
     .addItem('全員のセーブを消す', 'menuWipeAll')
@@ -168,6 +183,7 @@ function writeSummary() {
   values.forEach(function (v) {
     var cls = cellText(v[ci]);
     if (!cls || cls === TEACHER_CLASS || !v[si]) return; // 先生の試し遊びは 数えない
+    if (isRetiredKey(v[0])) return; // 退避・引き継ぎ済みの 行(同じ 生徒を 2 回 数えない)
     try {
       var save = JSON.parse(v[si]);
       if (save && save.tally) list.push({ cls: cls, tally: save.tally });
@@ -832,38 +848,52 @@ function isTeacherEmail(email) {
  * 名簿のまちがい(同じアカウントが2行・同じクラス番号に2人)は、別の人のデータに触れてしまうので入れずに知らせる
  * 戻り値: { class, number, grade? } / { error: 'not_in_roster' | 'roster_conflict' }
  */
-function rosterEntry(email) {
+/**
+ * 名簿の 行を 読みそろえる(email の ある 行だけ)。クラスは ゲームの 中の 名前(「3-1」)、番号は「07」→「7」。
+ * 戻り値: [{ email, class, number, grade, approved }]
+ */
+function rosterRows() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('roster');
-  if (!sh || sh.getLastRow() < 2) return { error: 'not_in_roster' };
+  if (!sh || sh.getLastRow() < 2) return [];
   var width = Math.max(sh.getLastColumn(), 3);
   var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
   var values = sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues();
-  var mine = [];
-  var pending = null;
-  var byKey = {};
+  var out = [];
   for (var i = 0; i < values.length; i++) {
     var e = cellText(values[i][cols.email - 1]).toLowerCase();
+    if (!e) continue;
     var g = cols.grade ? rosterGrade(values[i][cols.grade - 1]) : 0;
     // ゲームの 中の クラス名は「学年-組」(「3-1」)。前の版の「1-2」と 書いた 行も そのまま
     var c = fullClass(g, values[i][cols['class'] - 1]);
     var n = cellText(values[i][cols.number - 1]);
-    if (!e) continue;
     if (/^\d+$/.test(n)) n = String(Number(n)); // "07" → "7"
     // 承認の 列が あれば、チェックの 入った 行だけが 有効(生徒の 申請は 先生が 確かめてから)
     var approved = !cols.approved || isChecked(values[i][cols.approved - 1]);
-    if (!approved || !c || !n) {
+    out.push({ email: e, class: c, number: n, grade: g, approved: approved });
+  }
+  return out;
+}
+
+function rosterEntry(email) {
+  var rows = rosterRows();
+  if (!rows.length) return { error: 'not_in_roster' };
+  var mine = [];
+  var pending = null;
+  var byKey = {};
+  rows.forEach(function (r) {
+    if (!r.approved || !r['class'] || !r.number) {
       // 承認待ち・番号が まだの 行(Classroom から 取り込んだ 直後など)。本人には 申請の 状態として 知らせる
-      if (e === email && !pending) pending = { class: c, number: n };
-      continue;
+      if (r.email === email && !pending) pending = { class: r['class'], number: r.number };
+      return;
     }
-    var k = key(c, n);
+    var k = key(r['class'], r.number);
     byKey[k] = (byKey[k] || 0) + 1;
-    if (e === email) {
-      var entry = { class: c, number: n };
-      if (g) entry.grade = g;
+    if (r.email === email) {
+      var entry = { class: r['class'], number: r.number };
+      if (r.grade) entry.grade = r.grade;
       mine.push(entry);
     }
-  }
+  });
   if (mine.length === 0) return pending ? { error: 'pending', pending: pending } : { error: 'not_in_roster' };
   if (mine.length > 1 || byKey[key(mine[0]['class'], mine[0].number)] > 1) {
     logRow('roster_conflict', mine[0]['class'], mine[0].number, '名簿に重複があります');
@@ -1203,7 +1233,7 @@ function accountInfo() {
   var teacher = isTeacherEmail(email);
   var entry = teacher ? teacherEntry(email) : rosterEntry(email);
   if (entry.error) return { mode: 'google', teacher: false, registered: null, player: null, error: entry.error, pending: entry.pending };
-  var row = findStudent(entry['class'], entry.number);
+  var row = accountStudent(email, entry['class'], entry.number, false, true);
   var save = row ? parseSave(row) : null;
   return {
     mode: 'google',
@@ -1237,24 +1267,25 @@ function handleAccount(email, body) {
   try {
     if (body.action === 'feedback') return writeFeedback(cls, num, body.feedback);
     if (body.action === 'review') return teacher ? writeReview(body.marks) : { ok: false, error: 'not_teacher' };
-    var row = findStudent(cls, num);
+    // 本人の 行(email → key → 書き方だけ ちがう key の 順に 探す。見つけた 行は 今の key に 書き直す)
+    var row = accountStudent(email, cls, num, body.action === 'login', false);
     var now = new Date().toISOString();
     var account = { class: cls, number: num };
     // 名簿に 学年が 書いてあれば 知らせる(ゲームは これを セーブに 書く。なければ クラス名から 決める)
     if (entry.grade) account.grade = entry.grade;
     if (body.action === 'login') {
-      if (!row) {
-        sheet('students').appendRow([literal(key(cls, num)), literal(cls), numberCell(num), '', '', '', '', '', now, now]);
-        logRow('register', cls, num, '');
-        return { ok: true, isNew: true, save: null, unlock: unlockFor(cls, teacher), teacher: teacher, account: account };
-      }
       setCell(row.rowIndex, 'last_seen', now);
+      // 前の セーブらしい 行が あれば、どちらで 続けるか 生徒に 聞く(先生用の 行は 聞かない)
+      var carry = teacher ? [] : carryCandidates(email, key(cls, num), row.rowIndex);
+      if (carry.length)
+        return { ok: true, isNew: !row.save_json, save: parseSave(row), unlock: unlockFor(cls, teacher), teacher: teacher, account: account, resetAt: String(row.reset_at || ''), carry: carry };
       return { ok: true, isNew: !row.save_json, save: parseSave(row), unlock: unlockFor(cls, teacher), teacher: teacher, account: account, resetAt: String(row.reset_at || '') };
     }
     if (!row) return { ok: false, error: 'not_registered' };
     if (body.action === 'save') return storeSave(row, body.save);
     if (body.action === 'load') return { ok: true, save: parseSave(row) };
     if (body.action === 'treasure') return treasure(row, cls, num, teacher, body.buy === true);
+    if (body.action === 'carry') return teacher ? { ok: false, error: 'bad_carry' } : chooseCarry(email, cls, num, row, body.pick);
     return { ok: false, error: 'unknown_action' };
   } finally {
     lock.releaseLock();
@@ -1375,6 +1406,368 @@ function gameConfigOverrides(cfg) {
   return out;
 }
 
+// ------------------------------------------------------------------ 引き継ぎ(更新・進級で クラスや 番号の 書き方が 変わっても セーブを 失わない)
+
+/**
+ * 生徒の 行の 探し方(先生の指摘 2026-10-17: 更新の あと key の 形式が 変わり、全員が はじめからに なった)。
+ *   1. 学校アカウント方式では students の email 列で 本人の 行を 探す(クラス・番号が 変わっても 見つかる。進級にも ついてくる)
+ *   2. key(「1-2|7」)が 同じ 行
+ *   3. key の 書き方だけ ちがう 行(「1年2組|07」と「1-2|7」など。canonKey で そろえて 比べる)
+ * 見つけた 行の key が 今の 書き方と ちがえば 書き直す(次からは 1 で 見つかる)
+ */
+var MOVED_PREFIX = '退避|';
+var DONE_PREFIX = '引継ぎ済|';
+/** 生徒が「いまの セーブの まま」を 選んだ 前の 行(中身は 残す。先生の メニューで 戻せる) */
+var KEPT_PREFIX = '見送り|';
+
+/** 全角の 数字・記号を 半角に */
+function halfWidth(s) {
+  return String(s).replace(/[０-９]/g, function (c) {
+    return String.fromCharCode(c.charCodeAt(0) - 0xfee0);
+  });
+}
+
+/** クラスの 書き方を そろえる(「1年2組」「１－２」「1 - 2」→「1-2」) */
+function canonClass(v) {
+  var c = halfWidth(cellText(v))
+    .replace(/[\s　]+/g, '')
+    .replace(/[‐－ー−–]/g, '-');
+  var m = /^([1-3])年(.+?)組?$/.exec(c);
+  if (m) return m[1] + '-' + m[2];
+  return c.replace(/組$/, '');
+}
+
+/** 番号の 書き方を そろえる(「07」「7.0」「７」→「7」) */
+function canonNumber(v) {
+  var n = halfWidth(cellText(v)).trim();
+  return /^\d+(\.0+)?$/.test(n) ? String(Number(n)) : n;
+}
+
+function canonKey(k) {
+  var s = String(k == null ? '' : k);
+  var i = s.lastIndexOf('|');
+  if (i < 0) return s;
+  return canonClass(s.slice(0, i)) + '|' + canonNumber(s.slice(i + 1));
+}
+
+/** 退避・引き継ぎ済みの 行(だれの 行としても 使わない。集計にも 入れない) */
+function isRetiredKey(k) {
+  var s = String(k);
+  return s.indexOf(MOVED_PREFIX) === 0 || s.indexOf(DONE_PREFIX) === 0 || s.indexOf(KEPT_PREFIX) === 0;
+}
+
+/** 退避した 行の もとの key(「退避|1-2|07|2026-10-17」→「1-2|07」) */
+function movedFrom(k) {
+  var s = String(k);
+  if (s.indexOf(MOVED_PREFIX) !== 0) return s;
+  return s.slice(MOVED_PREFIX.length).replace(/\|\d{4}-\d{2}-\d{2}$/, '');
+}
+
+/**
+ * 本人の 前の セーブらしい 行(いま 使う 行の ほかに)。生徒に どちらで 続けるか 聞く(先生の希望 2026-10-17)。
+ *   - email 列が 本人の もの(先生が 古い 行に 書いた ときも)
+ *   - email の ない 行で、key の 書き方だけ ちがう もの(退避した 行も もとの key で 比べる)
+ * セーブの ない 行・引き継ぎ済み・見送りの 行は のぞく
+ */
+function carryCandidates(email, k, targetRow) {
+  var idx = studentIndex();
+  var n = idx.keys.length;
+  if (!n || !email) return [];
+  var ck = canonKey(k);
+  var upd = sheet('students')
+    .getRange(2, SHEETS.students.indexOf('updated_at') + 1, n, 1)
+    .getValues();
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    var rowIndex = i + 2;
+    var kk = idx.keys[i];
+    if (rowIndex === targetRow || !cellText(upd[i][0])) continue;
+    if (kk.indexOf(DONE_PREFIX) === 0 || kk.indexOf(KEPT_PREFIX) === 0) continue;
+    var mine = idx.emails[i] === email || (!idx.emails[i] && canonKey(movedFrom(kk)) === ck);
+    if (!mine) continue;
+    var row = readStudent(rowIndex);
+    var save = parseSave(row);
+    if (!save || !save.player) continue;
+    out.push({ id: rowIndex, name: String(save.player.name || ''), level: Number(save.player.level || 1), updatedAt: String(save.updatedAt || row.updated_at || '') });
+  }
+  return out;
+}
+
+/** 生徒の 選んだ ほうで 続ける。pick = 前の 行の id か 'keep'(いまの まま) */
+function chooseCarry(email, cls, num, row, pick) {
+  var cands = carryCandidates(email, key(cls, num), row.rowIndex);
+  var now = new Date().toISOString();
+  if (pick === 'keep') {
+    cands.forEach(function (c) {
+      var kk = String(readStudent(c.id).key);
+      setCell(c.id, 'key', asText(KEPT_PREFIX + movedFrom(kk) + '|' + now.slice(0, 10)));
+    });
+    logRow('carry_keep', cls, num, cands.length + ' 行を 見送り');
+    return { ok: true, save: parseSave(readStudent(row.rowIndex)) };
+  }
+  var hit = cands.filter(function (c) {
+    return c.id === Number(pick);
+  })[0];
+  if (!hit) return { ok: false, error: 'bad_carry' };
+  var r = transferSave(hit.id, row.rowIndex);
+  if (!r.ok) return { ok: false, error: 'bad_carry' };
+  // ほかの 候補は もう 聞かない
+  cands.forEach(function (c) {
+    if (c.id === hit.id) return;
+    var kk = String(readStudent(c.id).key);
+    setCell(c.id, 'key', asText(KEPT_PREFIX + movedFrom(kk) + '|' + now.slice(0, 10)));
+  });
+  return { ok: true, save: parseSave(readStudent(row.rowIndex)) };
+}
+
+/** students の key と email の 列だけ 読む(セーブの 中身は 大きいので 全部は 読まない) */
+function studentIndex() {
+  var sh = sheet('students');
+  var last = sh.getLastRow();
+  if (last < 2) return { keys: [], emails: [] };
+  var emailCol = SHEETS.students.indexOf('email') + 1;
+  var keys = sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) {
+    return String(r[0]);
+  });
+  var emails = sh
+    .getRange(2, emailCol, last - 1, 1)
+    .getValues()
+    .map(function (r) {
+      return cellText(r[0]).toLowerCase();
+    });
+  return { keys: keys, emails: emails };
+}
+
+function readStudent(rowIndex) {
+  var values = sheet('students').getRange(rowIndex, 1, 1, SHEETS.students.length).getValues()[0];
+  var row = { rowIndex: rowIndex };
+  SHEETS.students.forEach(function (h, j) {
+    row[h] = values[j];
+  });
+  return row;
+}
+
+/** key が 同じ 行 → なければ 書き方だけ ちがう 行(0 始まりの 番号。なければ −1) */
+function keyIndex(idx, k) {
+  var exact = idx.keys.indexOf(k);
+  if (exact >= 0) return exact;
+  var ck = canonKey(k);
+  for (var i = 0; i < idx.keys.length; i++) if (!isRetiredKey(idx.keys[i]) && canonKey(idx.keys[i]) === ck) return i;
+  return -1;
+}
+
+/** 行の key・クラス・番号を 今の 書き方に 書き直す */
+function rekeyStudent(row, cls, num) {
+  var k = key(cls, num);
+  if (String(row.key) === k) return;
+  setCell(row.rowIndex, 'key', literal(k));
+  setCell(row.rowIndex, 'class', literal(cls));
+  setCell(row.rowIndex, 'number', numberCell(num));
+  logRow('rekey', cls, num, '引き継ぎ: ' + String(row.key) + ' → ' + k);
+  row.key = k;
+}
+
+/** だれの 行でも なくなった 行を 退避する(中身は 残す。持ち主は 次に 入ったとき email で 見つかる) */
+function moveAside(rowIndex, oldKey) {
+  setCell(rowIndex, 'key', asText(MOVED_PREFIX + oldKey + '|' + new Date().toISOString().slice(0, 10)));
+  logRow('move_aside', '', '', String(oldKey));
+}
+
+/**
+ * 学校アカウント方式の 生徒の 行。create なら なければ 作る、peek なら 何も 書かない(タイトル画面の 表示用)。
+ * key の 行が ほかの アカウントの もの(email が ちがう)なら 退避して、その人には email で 見つけてもらう
+ */
+function accountStudent(email, cls, num, create, peek) {
+  var idx = studentIndex();
+  var k = key(cls, num);
+  // 退避した 行も email が 残っていれば 本人の 行(来たら 今の key に 戻す)
+  var byEmail = email ? idx.emails.indexOf(email) : -1;
+  var byKey = keyIndex(idx, k);
+  var other = byKey >= 0 && idx.emails[byKey] && idx.emails[byKey] !== email;
+  if (peek) {
+    var at = byEmail >= 0 ? byEmail : other ? -1 : byKey;
+    return at < 0 ? null : readStudent(at + 2);
+  }
+  if (other) {
+    moveAside(byKey + 2, idx.keys[byKey]);
+    byKey = -1;
+  }
+  if (byEmail >= 0 && byKey >= 0 && byKey !== byEmail) {
+    // 本人の 行(email)と、email の ない 古い 行が 両方 ある: 本人の 行を 使い、古い 行は 退避(中身は 残す。「セーブを 引き継ぐ」で 戻せる)
+    moveAside(byKey + 2, idx.keys[byKey]);
+    byKey = -1;
+  }
+  var target = byEmail >= 0 ? byEmail : byKey;
+  if (target < 0) {
+    if (!create) return null;
+    var now = new Date().toISOString();
+    var rowValues = [literal(k), literal(cls), numberCell(num), '', '', '', '', '', now, now, ''];
+    rowValues[SHEETS.students.indexOf('email')] = asText(email);
+    sheet('students').appendRow(rowValues);
+    logRow('register', cls, num, '');
+    return readStudent(sheet('students').getLastRow());
+  }
+  var row = readStudent(target + 2);
+  rekeyStudent(row, cls, num);
+  if (email && cellText(row.email).toLowerCase() !== email) {
+    setCell(row.rowIndex, 'email', asText(email));
+    row.email = email;
+  }
+  return row;
+}
+
+/**
+ * セーブを 別の 行へ 移す(メニュー「セーブを 引き継ぐ」)。移した セーブの 日時を 今に するので、
+ * 生徒の 端末に 残った 古い セーブ(今日 はじめからに なった 分)に 上書きされない
+ */
+function transferSave(fromRow, toRow) {
+  var from = readStudent(fromRow);
+  var to = readStudent(toRow);
+  if (!from.save_json) return { ok: false, error: '移す セーブが ありません(' + from.key + ')' };
+  var save;
+  try {
+    save = JSON.parse(from.save_json);
+  } catch (e) {
+    return { ok: false, error: 'セーブが 壊れていて 読めません(' + from.key + ')' };
+  }
+  var now = new Date().toISOString();
+  save.updatedAt = now;
+  // 先生が 消した 日時(reset_at)より 前に はじめた セーブは 受け取らない しくみなので、はじめた 日時も 今に する
+  save.createdAt = now;
+  setCell(toRow, 'save_json', asText(JSON.stringify(save)));
+  setCell(toRow, 'updated_at', "'" + now);
+  setCell(toRow, 'player_name', asText(String((save.player && save.player.name) || '').slice(0, 20)));
+  if (!cellText(to.email) && cellText(from.email)) setCell(toRow, 'email', asText(cellText(from.email)));
+  // 移した 先に あった セーブは 消さずに 元の 行へ(入れかえ。まちがえて 移しても「セーブを 引き継ぐ」で 戻せる)
+  setCell(fromRow, 'save_json', to.save_json ? asText(String(to.save_json)) : '');
+  setCell(fromRow, 'updated_at', to.save_json ? "'" + String(to.updated_at || '') : '');
+  setCell(fromRow, 'player_name', to.save_json ? asText(String(to.player_name || '')) : '');
+  setCell(fromRow, 'email', '');
+  setCell(fromRow, 'key', asText(DONE_PREFIX + String(from.key) + '|' + now.slice(0, 10)));
+  logRow('transfer', cellText(to['class']), cellText(to.number), String(from.key) + ' → ' + String(to.key));
+  return { ok: true, name: String((save.player && save.player.name) || ''), level: Number((save.player && save.player.level) || 1) };
+}
+
+/**
+ * 引き継ぎの 点検(メニュー)。名簿の 全員に ついて、次に 入ったとき どの 行が 使われるかを 調べる。
+ * 戻り値: { ok: 件数, carry: [引き継がれる 人], fresh: [はじめからに なる 人], orphans: [どの 名簿の 人にも 使われない セーブ] }
+ */
+function carryoverReport() {
+  var idx = studentIndex();
+  var used = {};
+  var res = { ok: 0, carry: [], fresh: [], orphans: [] };
+  rosterRows().forEach(function (r) {
+    if (!r.approved || !r.email || !r['class'] || !r.number) return;
+    var k = key(r['class'], r.number);
+    var byEmail = idx.emails.indexOf(r.email);
+    var byKey = keyIndex(idx, k);
+    if (byKey >= 0 && idx.emails[byKey] && idx.emails[byKey] !== r.email) byKey = -1;
+    var at = byEmail >= 0 ? byEmail : byKey;
+    var label = r['class'] + ' ' + r.number + '番';
+    if (at < 0) res.fresh.push(label);
+    else {
+      used[at] = true;
+      if (idx.keys[at] === k) res.ok++;
+      else res.carry.push(label + '(' + idx.keys[at] + ' → ' + k + ')');
+    }
+  });
+  if (idx.keys.length) {
+    var saves = sheet('students')
+      .getRange(2, SHEETS.students.indexOf('save_json') + 1, idx.keys.length, 1)
+      .getValues();
+    idx.keys.forEach(function (k, i) {
+      if (used[i] || !saves[i][0] || String(k).indexOf(TEACHER_CLASS + '|') === 0) return;
+      // 引き継ぎ済み・見送り(生徒が 選んだ あとの 残り)は 数えない。退避は 持ち主が まだ 来ていない ので 数える
+      if (String(k).indexOf(DONE_PREFIX) === 0 || String(k).indexOf(KEPT_PREFIX) === 0) return;
+      res.orphans.push(k);
+    });
+  }
+  return res;
+}
+
+/** setup の たびに students を 写しておく(新しい 3 つだけ 残す)。更新で 何か あっても 戻せるように */
+function backupStudents() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var src = ss.getSheetByName('students');
+  if (!src || src.getLastRow() < 2) return '';
+  var name = 'students_bak_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmm');
+  if (ss.getSheetByName(name)) return name;
+  src.copyTo(ss).setName(name);
+  var olds = ss
+    .getSheets()
+    .map(function (s) {
+      return s.getName();
+    })
+    .filter(function (n) {
+      return n.indexOf('students_bak_') === 0;
+    })
+    .sort();
+  olds.slice(0, Math.max(0, olds.length - 3)).forEach(function (n) {
+    ss.deleteSheet(ss.getSheetByName(n));
+  });
+  return name;
+}
+
+/** メニュー: students シートで 2 つの 行を 選び、片方の セーブを もう片方へ 移す */
+function menuTransfer() {
+  var ui = SpreadsheetApp.getUi();
+  var list = SpreadsheetApp.getActiveRangeList();
+  var rows = [];
+  (list ? list.getRanges() : []).forEach(function (r) {
+    if (r.getSheet().getName() !== 'students') return;
+    for (var i = r.getRow(); i <= r.getLastRow(); i++) if (i >= 2 && rows.indexOf(i) < 0) rows.push(i);
+  });
+  if (rows.length !== 2) {
+    ui.alert('students シートで、セーブを 移したい 2 つの 行を 選んでから 押してください(Ctrl を 押しながら クリックで 2 行 選べます)');
+    return;
+  }
+  var a = readStudent(rows[0]);
+  var b = readStudent(rows[1]);
+  var info = function (r) {
+    var s = r.save_json ? JSON.parse(r.save_json) : null;
+    var p = (s && s.player) || {};
+    return r.key + ' … ' + (s ? (p.name || '') + ' Lv' + (p.level || 1) + '(最後に 保存: ' + String(r.updated_at || '').slice(0, 10) + ')' : 'セーブなし');
+  };
+  var ans = ui.alert(
+    'セーブを 引き継ぐ',
+    'A: ' + info(a) + '\nB: ' + info(b) + '\n\n「はい」= A の セーブを B へ 移す\n「いいえ」= B の セーブを A へ 移す\n\n移した 先に あった セーブは 元の 行へ 入れかわります(消えません)。元の 行は「' + DONE_PREFIX + '…」に なります',
+    ui.ButtonSet.YES_NO_CANCEL,
+  );
+  if (ans === ui.Button.CANCEL || ans === ui.Button.CLOSE) return;
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  var r;
+  try {
+    r = ans === ui.Button.YES ? transferSave(rows[0], rows[1]) : transferSave(rows[1], rows[0]);
+  } finally {
+    lock.releaseLock();
+  }
+  if (!r.ok) {
+    ui.alert(r.error);
+    return;
+  }
+  // 開いている ゲームを タイトルに 戻して、次に 入ったとき 移した セーブを 読ませる
+  setConfig('session_epoch', literal(new Date().toISOString()));
+  ui.alert(r.name + '(Lv' + r.level + ')の セーブを 移しました。開いている ゲームは 2分以内に タイトルに 戻ります');
+}
+
+/** メニュー: 引き継ぎを 点検する(更新の あと、生徒が 開く 前に 押す) */
+function menuCarryover() {
+  var r = carryoverReport();
+  var lines = ['名簿の 生徒 ' + (r.ok + r.carry.length + r.fresh.length) + ' 人を 調べました。', '', '✅ そのまま 続きから: ' + r.ok + ' 人'];
+  if (r.carry.length) lines.push('', '🔁 次に 入ったとき 引き継ぐ(書き方が 変わった・クラスが 変わった): ' + r.carry.length + ' 人', r.carry.slice(0, 15).join('\n') + (r.carry.length > 15 ? '\n…' : ''));
+  if (r.fresh.length) lines.push('', '🆕 はじめからに なる(セーブが 見つからない): ' + r.fresh.length + ' 人', r.fresh.slice(0, 15).join('、') + (r.fresh.length > 15 ? ' …' : ''));
+  if (r.orphans.length)
+    lines.push('', '⚠️ 名簿の だれにも 使われない セーブ: ' + r.orphans.length + ' 行', r.orphans.slice(0, 15).join('、') + (r.orphans.length > 15 ? ' …' : ''), '→ 上の「はじめからに なる」人の ものなら、students シートで 2 行を 選んで「セーブを 引き継ぐ」');
+  SpreadsheetApp.getUi().alert('引き継ぎの 点検', lines.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/** メニュー: いま バックアップを 取る */
+function menuBackup() {
+  var name = backupStudents();
+  SpreadsheetApp.getUi().alert(name ? 'students シートを「' + name + '」に 写しました(新しい 3 つだけ 残します)' : '写す セーブが ありません');
+}
+
 // ------------------------------------------------------------------ シート操作
 
 function sheet(name) {
@@ -1388,22 +1781,10 @@ function key(cls, num) {
 }
 
 function findStudent(cls, num) {
-  var sh = sheet('students');
-  var last = sh.getLastRow();
-  if (last < 2) return null;
-  var keys = sh.getRange(2, 1, last - 1, 1).getValues();
-  var k = key(cls, num);
-  for (var i = 0; i < keys.length; i++) {
-    if (String(keys[i][0]) === k) {
-      var values = sh.getRange(i + 2, 1, 1, SHEETS.students.length).getValues()[0];
-      var row = { rowIndex: i + 2 };
-      SHEETS.students.forEach(function (h, j) {
-        row[h] = values[j];
-      });
-      return row;
-    }
-  }
-  return null;
+  var i = keyIndex(studentIndex(), key(cls, num));
+  if (i < 0) return null;
+  // 書き方だけ ちがう 行も 見つける(key は 書き直さない: 合言葉方式は 生徒が 打った 番号なので、「07」と「7」で 行き来する)
+  return readStudent(i + 2);
 }
 
 function setCell(rowIndex, column, value) {

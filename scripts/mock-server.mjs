@@ -14,6 +14,8 @@
  *   売るかどうかは MOCK_TREASURE_OPEN(FALSE で 止める。本物は config の treasure_open)。
  *   売る期間は MOCK_TREASURE_FROM / MOCK_TREASURE_UNTIL(例: 2026-11-01、2026-11-01 08:30。本物は config の treasure_from / treasure_until)
  *   GET ?action=__admin&op=treasure_reset で 売り切れを 戻す(本物は treasure シートの行を消す)
+ * 引き継ぎ(本物は 前の セーブらしい 行を 生徒に 聞く): GET ?action=__admin&op=legacy&email=s1@school.example で、その人の 今の セーブを
+ *   書き方だけ ちがう key(「1-2|07」)の 行に 写す(レベル +5)。次に 入ると「前の セーブ」として 聞かれる
  * 授業の管理(先生のメニューの代わり): GET ?action=__admin&op=reset|close|open|summary&token=dev-token
  *   summary は「集計を更新する」と同じ集計(gas/Code.gs の summarizeTallies をそのまま使う)を返す
  */
@@ -23,7 +25,7 @@ import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 // 本物と同じ集計にするため、Code.gs の関数を読み込む(関数と定数の定義だけなので そのまま評価できる)
-const gasSummary = new Function(`${readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8')}; return { summarizeTallies, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS, treasurePeriod, treasureSwitchOn, treasureTarget };`)();
+const gasSummary = new Function(`${readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8')}; return { summarizeTallies, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS, treasurePeriod, treasureSwitchOn, treasureTarget, canonKey };`)();
 const TOKEN = process.env.MOCK_TOKEN ?? 'dev-token';
 const UNLOCK = (process.env.MOCK_UNLOCK ?? 'g1c1').split(',');
 const ALL = ['g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'];
@@ -88,6 +90,16 @@ function handle(action, p) {
     if (p.op === 'close') session.open = false;
     if (p.op === 'open') session.open = true;
     if (p.op === 'treasure_reset') treasureBuyers = [];
+    if (p.op === 'legacy') {
+      const k = entryKey(String(p.email ?? MOCK_EMAIL).toLowerCase());
+      const row = k && students.get(k);
+      if (!row?.save) return { ok: false, error: 'no_save' };
+      const [c, n] = k.split('|');
+      const old = structuredClone(row.save);
+      old.player.level += 5;
+      old.player.name += '(前)';
+      students.set(`${c}|0${n}`, { passHash: '', salt: '', save: old, updatedAt: old.updatedAt });
+    }
     // メニュー「名簿の 申請を すべて 承認する」
     if (p.op === 'approve') {
       for (const [mail, a] of PENDING) ROSTER.set(mail, `${a.class}|${Number(a.number)}`);
@@ -174,16 +186,46 @@ function handleAccount(action, p, email) {
     if (!students.has(k)) students.set(k, { passHash: '', salt: '', save: null, updatedAt: '' });
     const row = students.get(k);
     const account = ROSTER_GRADE.has(k) ? { class: cls, number: num, grade: ROSTER_GRADE.get(k) } : { class: cls, number: num };
-    return { ok: true, isNew: !row.save, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher, account, resetAt: row.resetAt ?? '' };
+    const carry = teacher ? [] : carryCandidates(k);
+    return { ok: true, isNew: !row.save, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher, account, resetAt: row.resetAt ?? '', ...(carry.length ? { carry } : {}) };
   }
   const row = students.get(k);
   if (!row) return { ok: false, error: 'not_registered' };
+  if (action === 'carry') return chooseCarry(k, row, p.pick);
   if (action === 'save') return storeSave(row, p.save);
   if (action === 'load') return { ok: true, save: row.save };
   if (action === 'feedback') return storeFeedback(k, p.feedback);
   if (action === 'review') return teacher ? storeReview(p.marks) : { ok: false, error: 'not_teacher' };
   if (action === 'treasure') return treasure(cls, num, teacher, p.buy === true);
   return { ok: false, error: 'unknown_action' };
+}
+
+/** gas/Code.gs の carryCandidates と 同じ 考え方: 書き方だけ ちがう key の 行で、セーブの ある もの。id は 行の 並び順 */
+function carryCandidates(k) {
+  const keys = [...students.keys()];
+  return keys
+    .map((kk, i) => ({ kk, i, row: students.get(kk) }))
+    .filter(({ kk, row }) => kk !== k && !row.retired && row.save?.player && gasSummary.canonKey(kk) === gasSummary.canonKey(k))
+    .map(({ i, row }) => ({ id: i + 2, name: row.save.player.name, level: row.save.player.level, updatedAt: row.save.updatedAt ?? '' }));
+}
+
+/** gas/Code.gs の chooseCarry と 同じ: 選んだ 前の セーブと 入れかえる / いまの まま(前の 行は 見送り) */
+function chooseCarry(k, row, pick) {
+  const cands = carryCandidates(k);
+  const keys = [...students.keys()];
+  if (pick === 'keep') {
+    for (const c of cands) students.get(keys[c.id - 2]).retired = true;
+    return { ok: true, save: row.save };
+  }
+  const hit = cands.find((c) => c.id === Number(pick));
+  if (!hit) return { ok: false, error: 'bad_carry' };
+  const from = students.get(keys[hit.id - 2]);
+  const now = new Date().toISOString();
+  const moved = { ...from.save, updatedAt: now, createdAt: now };
+  [from.save, from.updatedAt] = [row.save, row.updatedAt];
+  [row.save, row.updatedAt] = [moved, now];
+  for (const c of cands) students.get(keys[c.id - 2]).retired = true;
+  return { ok: true, save: row.save };
 }
 
 /** gas/Code.gs の applyRoster と 同じ 判定(クラスは 一覧の 中、番号は 1〜99、ほかの 人の 番号は 選べない) */

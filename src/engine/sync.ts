@@ -1,5 +1,5 @@
 import { createStore } from './store';
-import { api, hasServer, saveBeacon, ApiFailure, type AccountInfo, type Identity } from './api';
+import { api, hasServer, saveBeacon, ApiFailure, type AccountInfo, type CarryCandidate, type Identity } from './api';
 import { saveStore, writeLocalSave, clearLocalSave, saveChangedHooks, setSaveOwner, schoolInfo, type SaveData } from './save';
 import { unlockedChapters } from './progress';
 import { applyConfigOverrides } from '@/data/config';
@@ -127,7 +127,7 @@ export async function bootstrap(cls: string): Promise<{ classes: string[]; accou
  * local は「この人の」端末内セーブ(持ち主キーで読んだもの)を渡す。
  * 戻り値: 採用したセーブ(null = 新規)
  */
-export async function login(id: Identity, local: SaveData | null): Promise<{ save: SaveData | null; isNew: boolean; teacher: boolean }> {
+export async function login(id: Identity, local: SaveData | null): Promise<{ save: SaveData | null; isNew: boolean; teacher: boolean; carry?: CarryCandidate[] }> {
   const r = await api.login(id);
   generation++;
   clearTimer();
@@ -148,9 +148,9 @@ export async function login(id: Identity, local: SaveData | null): Promise<{ sav
   // ローカルセーブがサーバーより新しければローカルを採用して押し上げる
   if (local && (!server || local.updatedAt > server.updatedAt)) {
     if (server || !r.isNew) scheduleSync(0);
-    return { save: local, isNew: false, teacher: r.teacher };
+    return { save: local, isNew: false, teacher: r.teacher, carry: r.carry };
   }
-  return { save: server, isNew: r.isNew && !server, teacher: r.teacher };
+  return { save: server, isNew: r.isNew && !server, teacher: r.teacher, carry: r.carry };
 }
 
 /**
