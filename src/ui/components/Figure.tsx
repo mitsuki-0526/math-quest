@@ -1,4 +1,4 @@
-import type { FigureSpec, NumberLineSpec, PlaneSpec, AnglesSpec, SectorSpec, SolidSpec, ProjectionSpec, ChartSpec, TableSpec } from '@/math/figure';
+import type { FigureSpec, NumberLineSpec, PlaneSpec, AnglesSpec, SectorSpec, SolidSpec, ProjectionSpec, ChartSpec, TableSpec, GridSpec } from '@/math/figure';
 
 /**
  * 問題の図を SVG で描く(要件 F48)。
@@ -22,6 +22,8 @@ export function Figure({ spec }: { spec: FigureSpec }) {
       return <Chart spec={spec} />;
     case 'table':
       return <DataTable spec={spec} />;
+    case 'grid':
+      return <Grid spec={spec} />;
   }
 }
 
@@ -204,15 +206,25 @@ function Angles({ spec }: { spec: AnglesSpec }) {
         const [x2, y2] = spec.throughLines ? pt(deg + 180) : ([c, c] as const);
         return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" stroke-width="2" />;
       })}
+      {spec.outline && (
+        <path
+          d={spec.rays.map((deg, i) => `${i === 0 ? 'M' : 'L'}${pt(deg)[0]},${pt(deg)[1]}`).join(' ') + ' Z'}
+          fill="rgba(230,194,92,0.10)"
+          stroke="currentColor"
+          stroke-width="2"
+        />
+      )}
       {spec.marks.map((m, i) => {
-        const a1 = spec.rays[m.from];
-        const a2 = spec.rays[m.to];
-        const r = 34 + i * 12;
+        // 小さい 角度から 大きい 角度へ 描く(半直線の 順に よらず、内側の 弧に なる)
+        const a1 = Math.min(spec.rays[m.from], spec.rays[m.to]);
+        const a2 = Math.max(spec.rays[m.from], spec.rays[m.to]);
+        // 角の 印が 重ならないように、2 つめ以降は 外へ 大きく ずらす(小さい 角の 二等分線で 40° と x が 重なった)
+        const r = 34 + i * 24;
         const [sx, sy] = pt(a1, r);
         const [ex, ey] = pt(a2, r);
         const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
         const mid = (a1 + a2) / 2;
-        const [lx, ly] = pt(mid, r + 22);
+        const [lx, ly] = pt(mid, r + 18);
         return (
           <g key={i}>
             <path d={`M${sx},${sy} A${r},${r} 0 ${large} 0 ${ex},${ey}`} fill="none" stroke="var(--gold-2)" stroke-width="2" />
@@ -222,7 +234,97 @@ function Angles({ spec }: { spec: AnglesSpec }) {
           </g>
         );
       })}
+      {spec.rayLabels?.map((t, i) => {
+        if (!t) return null;
+        const [x, y] = pt(spec.rays[i], L + 16);
+        return (
+          <text key={`r${i}`} x={x} y={y + 6} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
+            {t}
+          </text>
+        );
+      })}
+      {spec.center && (
+        <text x={c - 8} y={c + 22} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
+          {spec.center}
+        </text>
+      )}
       <circle cx={c} cy={c} r="3" fill="currentColor" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------- 方眼の図形(図形の移動)
+
+function Grid({ spec }: { spec: GridSpec }) {
+  const cell = 28;
+  const pad = 22;
+  const W = spec.w * cell + pad * 2;
+  const H = spec.h * cell + pad * 2;
+  const px = (x: number) => pad + x * cell;
+  const py = (y: number) => pad + (spec.h - y) * cell;
+  const fill = { from: 'rgba(230,194,92,0.45)', to: 'rgba(120,180,230,0.40)', other: 'rgba(200,200,200,0.18)' } as const;
+  const stroke = { from: 'var(--gold-2)', to: 'var(--sky)', other: 'currentColor' } as const;
+  return (
+    <svg class="figure" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="方眼の図">
+      <defs>{ARROW}</defs>
+      {Array.from({ length: spec.w + 1 }, (_, i) => (
+        <line key={`v${i}`} x1={px(i)} y1={py(0)} x2={px(i)} y2={py(spec.h)} stroke="currentColor" stroke-width="0.6" opacity="0.25" />
+      ))}
+      {Array.from({ length: spec.h + 1 }, (_, i) => (
+        <line key={`h${i}`} x1={px(0)} y1={py(i)} x2={px(spec.w)} y2={py(i)} stroke="currentColor" stroke-width="0.6" opacity="0.25" />
+      ))}
+      {spec.shapes.map((sh, i) => {
+        const d = sh.points.map(([x, y], k) => `${k === 0 ? 'M' : 'L'}${px(x)},${py(y)}`).join(' ') + ' Z';
+        const cx = sh.points.reduce((a, [x]) => a + x, 0) / sh.points.length;
+        const cy = sh.points.reduce((a, [, y]) => a + y, 0) / sh.points.length;
+        return (
+          <g key={`s${i}`}>
+            <path d={d} fill={fill[sh.tone]} stroke={stroke[sh.tone]} stroke-width="2.2" stroke-linejoin="round" />
+            <text x={px(cx)} y={py(cy) + 6} text-anchor="middle" font-size="17" font-weight="bold" fill="currentColor">
+              {sh.label}
+            </text>
+            {sh.vertexLabels?.map((t, k) => {
+              const [x, y] = sh.points[k];
+              // 頂点の 名前は 図形の 外側(重心から 離れる 向き)に 置く
+              const dx = x - cx;
+              const dy = y - cy;
+              const len = Math.hypot(dx, dy) || 1;
+              return (
+                <text key={k} x={px(x) + (dx / len) * 13} y={py(y) - (dy / len) * 13 + 5} text-anchor="middle" font-size="14" font-style="italic" fill="currentColor">
+                  {t}
+                </text>
+              );
+            })}
+          </g>
+        );
+      })}
+      {spec.lines?.map((l, i) => (
+        <g key={`l${i}`}>
+          <line
+            x1={px(l.x1)}
+            y1={py(l.y1)}
+            x2={px(l.x2)}
+            y2={py(l.y2)}
+            stroke="var(--ember)"
+            stroke-width="2"
+            stroke-dasharray={l.arrow ? undefined : '6 4'}
+            marker-end={l.arrow ? 'url(#fig-arrow)' : undefined}
+          />
+          {l.label && (
+            <text x={px(l.x2) + 6} y={py(l.y2) + (l.y2 > l.y1 ? -4 : 14)} font-size="16" font-style="italic" fill="var(--ember)">
+              {l.label}
+            </text>
+          )}
+        </g>
+      ))}
+      {spec.points?.map((p) => (
+        <g key={p.label}>
+          <circle cx={px(p.x)} cy={py(p.y)} r="4.5" fill="var(--ember)" stroke="#fff" stroke-width="1.2" />
+          <text x={px(p.x) + 8} y={py(p.y) - 7} font-size="16" font-style="italic" font-weight="bold" fill="var(--ember)">
+            {p.label}
+          </text>
+        </g>
+      ))}
     </svg>
   );
 }
@@ -281,6 +383,41 @@ function Solid({ spec }: { spec: SolidSpec }) {
         {t}
       </text>
     ) : null;
+
+  /** 頂点の 名前(教科書の 書き方: 直方体は 上の 面 ABCD・下の 面 EFGH、三角柱は ABC と DEF) */
+  const vname = (x: number, y: number, t: string) => (
+    <text x={x} y={y} text-anchor="middle" font-size="15" font-style="italic" fill="currentColor">
+      {t}
+    </text>
+  );
+  const vertexNames = () => {
+    if (!spec.vertices) return null;
+    if (spec.shape === 'prism4')
+      return (
+        <>
+          {vname(104, 52, 'A')}
+          {vname(60, 86, 'B')}
+          {vname(198, 84, 'C')}
+          {vname(240, 56, 'D')}
+          {vname(122, 166, 'E')}
+          {vname(60, 214, 'F')}
+          {vname(198, 216, 'G')}
+          {vname(242, 176, 'H')}
+        </>
+      );
+    if (spec.shape === 'prism3')
+      return (
+        <>
+          {vname(136, 72, 'A')}
+          {vname(70, 210, 'B')}
+          {vname(200, 216, 'C')}
+          {vname(190, 100, 'D')}
+          {vname(112, 240, 'E')}
+          {vname(252, 238, 'F')}
+        </>
+      );
+    return null;
+  };
 
   const body = () => {
     switch (spec.shape) {
@@ -359,8 +496,9 @@ function Solid({ spec }: { spec: SolidSpec }) {
   };
 
   return (
-    <svg class="figure" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="立体の見取図">
+    <svg class="figure" viewBox={`0 0 ${W} ${spec.vertices ? H + 10 : H}`} role="img" aria-label="立体の見取図">
       {body()}
+      {vertexNames()}
     </svg>
   );
 }

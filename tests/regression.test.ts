@@ -53,17 +53,19 @@ describe('レビュー指摘の回帰', () => {
     }
   });
 
-  it('角度★2 の図には x の位置が描かれ、対頂角と隣の角で図が変わる', () => {
+  it('角度★2 の図には x の位置が描かれ、問題の 形で 図が変わる(2026-10-16 教科書の 角に 合わせて 対頂角は やめた)', () => {
     const rng = createRng(5);
     const seen = new Set<string>();
     for (let i = 0; i < 200; i++) {
       const p = getTemplate('g1.geo.angle').generate(rng, 2);
-      expect(p.figure?.kind).toBe('angles');
+      // 回転の 角(正六角形)は 角に 印を 付けない。作図できる 角は 図なし
+      if (p.tags.includes('angle_rotation') || p.tags.includes('angle_construct')) continue;
+      expect(p.figure?.kind, p.promptText).toBe('angles');
       if (p.figure?.kind !== 'angles') continue;
       const xMark = p.figure.marks.find((m) => m.label === 'x');
-      expect(xMark).toBeDefined();
-      seen.add(`${xMark!.from}-${xMark!.to}`);
+      expect(xMark, p.promptText).toBeDefined();
+      seen.add(`${p.tags[0]}:${xMark!.from}-${xMark!.to}`);
     }
-    expect(seen.size).toBe(2);
+    expect(seen.size).toBeGreaterThanOrEqual(4);
   });
 });

@@ -747,31 +747,205 @@ describe('第4章 比例と反比例', () => {
   });
 });
 
-describe('第5章・第6章 図形', () => {
-  it('おうぎ形 ★1: 半径は 3・4・6・8・12、中心角は 120° まで', () => {
+// 第5〜7章: 教科書 5〜7 章の 本文(2026-10-16。refs/prints/5章〜7章_honbun-features.md)に 合わせた 範囲
+const tagsOf = (id: string, d: Difficulty) => {
+  const seen = new Set<string>();
+  each(id, d, (p) => p.tags.forEach((t) => seen.add(t)));
+  return [...seen].sort();
+};
+/** π の 答えの 係数(5/3π → 1.666…) */
+const piCoef = (p: Problem) => {
+  if (p.answer.kind !== 'expression') return NaN;
+  const m = p.answer.expected.match(/^(\d+)(?:\/(\d+))?π$/);
+  return m ? Number(m[1]) / Number(m[2] ?? 1) : NaN;
+};
+
+describe('第5章 平面図形', () => {
+  it('角: 対頂角(2 年)・三角形の 内角の和(小学校)は 出さない。★1 は 一直線と 角の二等分線、★3 は 2 つの 二等分線(章の問題)と 作図できる 角', () => {
+    expect(tagsOf('g1.geo.angle', 1)).toEqual(['angle_bisector', 'angle_straight']);
+    expect(tagsOf('g1.geo.angle', 2)).toEqual(['angle_bisector', 'angle_construct', 'angle_right', 'angle_rotation', 'angle_straight']);
+    expect(tagsOf('g1.geo.angle', 3)).toEqual(['angle_construct', 'angle_right', 'angle_rotation', 'angle_two_bisectors']);
+    for (const d of [1, 2, 3] as const)
+      each('g1.geo.angle', d, (p) => {
+        expect(p.promptText, p.promptText).not.toMatch(/対頂角|内角/);
+        expect(answerOf(p), p.promptText).toBeGreaterThan(0);
+        expect(answerOf(p), p.promptText).toBeLessThanOrEqual(180);
+        expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+        // 回転の 角は 反時計回りに 60°・120°・180°(300° のように 大きく 回る 問題は 出さない)
+        if (p.tags.includes('angle_rotation')) expect([60, 120, 180]).toContain(answerOf(p));
+        if (p.tags.includes('angle_two_bisectors') && p.promptText.includes('∠ECF')) expect(answerOf(p)).toBe(90);
+      });
+  });
+
+  it('おうぎ形: ★1 は 割合(中心角/360)と 半径 3・4・6・8・12 の 弧(120° まで・整数の π)、★2 は 弧と 面積(整数の π)、★3 は 中心角と 分数の π(分母 9 まで)', () => {
+    expect(tagsOf('g1.geo.sector', 1)).toEqual(['sector_arc', 'sector_ratio']);
+    expect(tagsOf('g1.geo.sector', 2)).toEqual(['sector_arc', 'sector_area', 'sector_ratio']);
+    expect(tagsOf('g1.geo.sector', 3)).toEqual(['sector_angle', 'sector_arc', 'sector_area']);
     each('g1.geo.sector', 1, (p) => {
+      if (p.tags.includes('sector_ratio')) {
+        expect(Math.abs(answerOf(p) - numbersIn(p)[0] / 360), p.promptText).toBeLessThan(1e-9);
+        return;
+      }
       const [r, angle] = numbersIn(p);
       expect([3, 4, 6, 8, 12]).toContain(r);
       expect(angle).toBeLessThanOrEqual(120);
+      expect(Number.isInteger(piCoef(p)), p.promptText).toBe(true);
     });
+    each('g1.geo.sector', 2, (p) => {
+      if (p.tags.includes('sector_ratio')) return;
+      expect(numbersIn(p)[0]).toBeLessThanOrEqual(12);
+      expect(Number.isInteger(piCoef(p)), p.promptText).toBe(true);
+    });
+    let frac = 0;
+    each('g1.geo.sector', 3, (p) => {
+      if (p.tags.includes('sector_angle')) return expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+      const c = piCoef(p);
+      expect(Number.isNaN(c), p.promptText).toBe(false);
+      if (Number.isInteger(c)) return;
+      frac++;
+      const den = Number(p.answer.kind === 'expression' ? p.answer.expected.match(/\/(\d+)/)?.[1] : NaN);
+      expect(den, p.promptText).toBeLessThanOrEqual(9);
+    });
+    // 教科書の 例(半径 6・50° → 5/3π)の ような 分数の π も 出る
+    expect(frac).toBeGreaterThan(N / 10);
   });
 
-  it('球: 半径は 10 まで(直径なら 20 まで)、体積は 半径 3・6・9', () => {
-    for (const d of [1, 2, 3] as const) {
+  it('図形の移動: 方眼の 図の ㋐ と ㋑ は 合同で 方眼に おさまり、対称の軸の 正解の 線は A と A′ の 真ん中', () => {
+    let reflect = 0;
+    for (const d of [1, 2, 3] as const)
+      each('g1.geo.move', d, (p) => {
+        if (p.figure?.kind !== 'grid') return;
+        const fig = p.figure;
+        const [a, b] = fig.shapes;
+        const sides = (ps: [number, number][]) =>
+          ps
+            .map((q, i) => (q[0] - ps[(i + 1) % 3][0]) ** 2 + (q[1] - ps[(i + 1) % 3][1]) ** 2)
+            .sort((x, y) => x - y)
+            .join(',');
+        expect(sides(a.points), p.key).toBe(sides(b.points));
+        for (const [x, y] of [...a.points, ...b.points]) expect(x >= 0 && x <= fig.w && y >= 0 && y <= fig.h, p.key).toBe(true);
+        if (p.tags.includes('move_reflect') && p.answer.kind === 'choice') {
+          const name = p.answer.options[p.answer.correct].match(/([アイウ])/)?.[1];
+          const line = fig.lines?.find((l) => l.label === name);
+          expect(line, p.key).toBeDefined();
+          const [A, A2] = [a.points[0], b.points[0]];
+          if (line!.x1 === line!.x2) expect(line!.x1 * 2).toBe(A[0] + A2[0]);
+          else expect(line!.y1 * 2).toBe(A[1] + A2[1]);
+          reflect++;
+        }
+      });
+    expect(reflect).toBeGreaterThan(20);
+  });
+
+  it('作図: ★1 は ことば、★2 は 線の 上の 点の 性質と 基本の 角、★3 は 組み合わせ(円の 中心・AED・75°)', () => {
+    expect(tagsOf('g1.geo.construct', 1)).toEqual(['construct_term']);
+    expect(tagsOf('g1.geo.construct', 2)).toEqual(['construct_angle', 'construct_prop']);
+    expect(tagsOf('g1.geo.construct', 3)).toEqual(['construct_angle', 'construct_use']);
+  });
+});
+
+describe('第6章 空間図形', () => {
+  it('球: 教科書の 半径(★1 は 6 まで、体積は 半径 3・6)。★2 から 体積が 分数の π(半径 2 → 32/3π)。半球は ★3', () => {
+    let frac = 0;
+    for (const d of [1, 2, 3] as const)
       each('g1.solid.sphere', d, (p) => {
         const n = numbersIn(p)[0];
         const r = p.promptText.startsWith('直径') ? n / 2 : n;
-        if (p.tags.includes('sphere_volume')) expect([3, 6, 9]).toContain(r);
-        else expect(r).toBeLessThanOrEqual(10);
+        expect(r, p.promptText).toBeLessThanOrEqual(10);
+        if (d === 1) {
+          if (p.tags.includes('sphere_volume')) expect([3, 6]).toContain(r);
+          else expect(r).toBeLessThanOrEqual(6);
+        }
+        if (d < 3) expect(p.tags[0], p.promptText).not.toMatch(/hemi/);
+        const want = p.tags.includes('sphere_area') ? 4 * r * r : p.tags.includes('sphere_volume') ? (4 * r ** 3) / 3 : p.tags.includes('hemisphere_volume') ? (2 * r ** 3) / 3 : 3 * r * r;
+        expect(Math.abs(piCoef(p) - want), p.promptText).toBeLessThan(1e-9);
+        if (!Number.isInteger(piCoef(p))) frac++;
       });
-    }
+    expect(frac).toBeGreaterThan(N / 10);
+  });
+
+  it('円錐: 側面積 = π × 母線 × 半径(展開図の 中心角 = 360° × 半径 ÷ 母線 が 整数)', () => {
+    let n = 0;
+    each('g1.solid.surface', 3, (p) => {
+      if (!p.tags.includes('cone_side') && !p.tags.includes('surface_cone')) return;
+      const [r, l] = numbersIn(p);
+      expect(Number.isInteger((360 * r) / l), p.promptText).toBe(true);
+      expect(piCoef(p), p.promptText).toBe(l * r + (p.tags.includes('surface_cone') ? r * r : 0));
+      n++;
+    });
+    each('g1.solid.projection', 3, (p) => {
+      if (!p.tags.includes('net_cone_angle')) return;
+      const [r, l] = numbersIn(p);
+      expect(answerOf(p), p.promptText).toBe((360 * r) / l);
+    });
+    expect(n).toBeGreaterThan(N / 3);
+  });
+
+  it('位置関係: 直方体の どの 辺も ねじれの位置は 4 本・平行は 3 本、面に 平行・垂直な 辺は 4 本(図に 頂点の 名前)。正五角柱の 底面の 辺と ねじれは 7 本', () => {
+    for (const d of [2, 3] as const)
+      each('g1.solid.relation', d, (p) => {
+        if (!p.promptText.startsWith('図の 直方体')) return;
+        expect(p.figure?.kind === 'solid' && p.figure.vertices, p.promptText).toBe(true);
+        if (p.answer.kind !== 'number') return;
+        if (p.tags.includes('relation_skew')) expect(answerOf(p)).toBe(4);
+        if (p.tags.includes('relation_parallel')) expect(answerOf(p)).toBe(3);
+        if (p.tags.includes('relation_face_parallel') || p.tags.includes('relation_face_perp')) expect(answerOf(p)).toBe(4);
+      });
+    each('g1.solid.relation', 3, (p) => {
+      if (p.tags.includes('relation_prism_n') && p.promptText.startsWith('正五角柱で、底面')) expect(answerOf(p)).toBe(7);
+    });
   });
 });
 
 describe('第7章 データの活用', () => {
-  it('確率(多数回の試行): 相対度数は 小数第 2 位まで、★2 は表つき、★3 の予想は整数', () => {
-    each('g1.data.prob', 1, (p) => expect(Math.abs(answerOf(p) * 100 - Math.round(answerOf(p) * 100)), p.promptText).toBeLessThan(1e-9));
-    each('g1.data.prob', 2, (p) => expect(p.figure?.kind).toBe('table'));
-    each('g1.data.prob', 3, (p) => expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true));
+  it('度数分布: 表(以上・未満)で 出す。相対度数は 合計 20・25・50 なら わり切れ、30・40・42 人などは 小数第 2 位に 四捨五入', () => {
+    for (const d of [1, 2, 3] as const)
+      each('g1.data.freq', d, (p) => {
+        if (!p.tags.includes('freq_hist')) expect(p.figure?.kind, p.promptText).toBe('table');
+        if (p.tags.includes('freq_relative') || p.tags.includes('freq_relative_round') || p.tags.includes('freq_cum_relative')) {
+          expect(Math.abs(answerOf(p) * 100 - Math.round(answerOf(p) * 100)), p.promptText).toBeLessThan(1e-9);
+        }
+      });
+  });
+
+  it('境目の 値は「以上」の 階級に 入る(9.0 秒 → 9.0 以上 9.4 未満)', () => {
+    let n = 0;
+    for (const d of [1, 2] as const)
+      each('g1.data.freq', d, (p) => {
+        if (!p.tags.includes('freq_boundary') || p.answer.kind !== 'choice') return;
+        const x = p.promptText.match(/で、(\d+(\.\d+)?) /)![1];
+        expect(p.answer.options[p.answer.correct], p.promptText).toContain(`${x} 以上`);
+        n++;
+      });
+    expect(n).toBeGreaterThan(20);
+  });
+
+  it('中央値: 偶数個は 真ん中 2 つの 平均(★2 から)。平均値: ★2 は 小数第 1 位まで、★3 は 3 けたの 記録を 四捨五入して 整数', () => {
+    let even = 0;
+    each('g1.data.median', 2, (p) => {
+      if (!p.tags.includes('median_even')) return;
+      const xs = p.promptText.match(/^[\d, ]+/)![0].split(',').map((s) => Number(s.trim())).filter((v) => !Number.isNaN(v) && v > 0);
+      const s = [...xs].sort((a, b) => a - b);
+      expect(xs.length % 2, p.promptText).toBe(0);
+      expect(answerOf(p), p.promptText).toBe((s[s.length / 2 - 1] + s[s.length / 2]) / 2);
+      even++;
+    });
+    expect(even).toBeGreaterThan(N / 4);
+    each('g1.data.mean', 2, (p) => expect(Math.abs(answerOf(p) * 10 - Math.round(answerOf(p) * 10)), p.promptText).toBeLessThan(1e-9));
+    each('g1.data.mean', 3, (p) => {
+      if (p.tags.includes('mean_round')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+    });
+  });
+
+  it('確率(多数回の試行): ★1 の 相対度数は 小数第 3 位まで(200 回 中 43 回 → 0.215)、確率の 推定は 表つきで 小数第 2 位、予想は 整数', () => {
+    each('g1.data.prob', 1, (p) => expect(Math.abs(answerOf(p) * 1000 - Math.round(answerOf(p) * 1000)), p.promptText).toBeLessThan(1e-9));
+    for (const d of [2, 3] as const)
+      each('g1.data.prob', d, (p) => {
+        if (p.tags.includes('prob_estimate')) {
+          expect(p.figure?.kind).toBe('table');
+          expect(Math.abs(answerOf(p) * 100 - Math.round(answerOf(p) * 100)), p.promptText).toBeLessThan(1e-9);
+        }
+        if (p.tags.includes('prob_predict') || p.tags.includes('prob_predict_shoe')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+      });
   });
 });

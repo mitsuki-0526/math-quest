@@ -35,6 +35,11 @@ export interface AnglesSpec {
   throughLines?: boolean;
   /** 角の表示: 2本の ray の番号と、ラベル(数値 or "x") */
   marks: { from: number; to: number; label: string }[];
+  /** 半直線の 先の 点の 名前(A・B・C …)と 中心の 名前(O)。∠AOB の 形で 問う ときに 使う(教科書の 書き方) */
+  rayLabels?: string[];
+  center?: string;
+  /** 半直線の 先を 順に 結ぶ(正六角形の 外わく) */
+  outline?: boolean;
 }
 
 /** おうぎ形(第5章) */
@@ -55,6 +60,21 @@ export interface SolidSpec {
   shape: 'prism3' | 'prism4' | 'cylinder' | 'pyramid4' | 'cone' | 'sphere';
   /** 寸法のラベル(底面の辺・半径・高さなど) */
   labels: { base?: string; base2?: string; height?: string; radius?: string; slant?: string };
+  /** 頂点の 名前を 書く(直方体 A〜H・三角柱 A〜F)。辺や 面の 位置関係を 問う ときに 使う */
+  vertices?: boolean;
+}
+
+/**
+ * 方眼に かいた 多角形(第5章 図形の移動)。座標は 方眼の ます目(左下が 0, 0、上が +)。
+ * 移動の 前を 'from'、後を 'to' で 塗り分ける。回転の 中心(点)・対称の軸(線)・矢印も 描ける
+ */
+export interface GridSpec {
+  kind: 'grid';
+  w: number;
+  h: number;
+  shapes: { points: [number, number][]; label: string; tone: 'from' | 'to' | 'other'; vertexLabels?: string[] }[];
+  points?: { x: number; y: number; label: string }[];
+  lines?: { x1: number; y1: number; x2: number; y2: number; label?: string; arrow?: boolean }[];
 }
 
 /** 投影図(第6章): 上から見た図と正面から見た図 */
@@ -86,4 +106,4 @@ export interface TableSpec {
   caption?: string;
 }
 
-export type FigureSpec = NumberLineSpec | PlaneSpec | AnglesSpec | SectorSpec | SolidSpec | ProjectionSpec | ChartSpec | TableSpec;
+export type FigureSpec = NumberLineSpec | PlaneSpec | AnglesSpec | SectorSpec | SolidSpec | ProjectionSpec | ChartSpec | TableSpec | GridSpec;
