@@ -98,12 +98,14 @@ export interface LoadResult {
 }
 /**
  * 宝の地図(クラスに 1 枚だけ)の 売れ具合。決めるのは サーバー(早い者勝ちを 1 か所で 判定するため)。
- * onSale = この人の クラスで 売っている、soldOut = クラスの だれかが 買った、mine = 買ったのは この人
+ * onSale = この人の クラスで 売っている、soldOut = クラスの だれかが 買った、mine = 買ったのは この人、
+ * opensAt = 売る期間の 前(「11/1」など。先生が 決めた 発売日を 道具屋に 出して、ためる 目あてにする)
  */
 export interface TreasureStatus {
   onSale: boolean;
   soldOut: boolean;
   mine: boolean;
+  opensAt?: string;
 }
 export interface TreasureResult {
   ok: true;

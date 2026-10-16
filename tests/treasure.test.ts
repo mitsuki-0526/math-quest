@@ -18,15 +18,15 @@ function solveAll(d: SaveData, chapters: string[], correct: number): void {
  * 宝の地図(クラスに 1 枚だけ。先生の ごほうびの 宝探し 2026-10-16)。
  * 早い者勝ちは サーバー(gas/Code.gs の treasure())で 決まるので、本物の 関数を シートの 偽物で 動かして 確かめる
  */
-type Status = { onSale: boolean; soldOut: boolean; mine: boolean };
+type Status = { onSale: boolean; soldOut: boolean; mine: boolean; opensAt?: string };
 type Row = unknown[];
 
-function gas(classes: unknown) {
+function gas(classes: unknown, from: unknown = '', until: unknown = '') {
   const code = readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8');
   const rows: Row[] = [];
   // 後に 書いた 関数宣言が 勝つので、シートや 設定を 読む 関数だけ 差し替える
   const stub = `
-    function readConfig() { return { treasure_classes: __classes }; }
+    function readConfig() { return { treasure_classes: __classes, treasure_from: __from, treasure_until: __until }; }
     function parseSave(row) { return row.save; }
     function logRow() {}
     function treasureSheet() {
@@ -36,12 +36,13 @@ function gas(classes: unknown) {
         appendRow: function (v) { __rows.push(v.map(function (x) { return typeof x === 'string' && x.charAt(0) === "'" ? x.slice(1) : x; })); },
       };
     }
-    return { treasure: treasure };`;
-  const mod = new Function('__classes', '__rows', `${code}\n${stub}`)(classes, rows) as {
+    return { treasure: treasure, treasurePeriod: treasurePeriod };`;
+  const mod = new Function('__classes', '__rows', '__from', '__until', `${code}\n${stub}`)(classes, rows, from, until) as {
     treasure: (row: unknown, cls: string, num: string, teacher: boolean, buy: boolean) => { treasure: Status };
+    treasurePeriod: (from: unknown, until: unknown, now: Date) => { open: boolean; opensAt?: string };
   };
   const row = { save: { player: { name: 'ゆうしゃ', level: 9 } } };
-  return { rows, call: (cls: string, num: string, buy: boolean, teacher = false) => mod.treasure(row, cls, num, teacher, buy).treasure };
+  return { rows, period: mod.treasurePeriod, call: (cls: string, num: string, buy: boolean, teacher = false) => mod.treasure(row, cls, num, teacher, buy).treasure };
 }
 
 describe('宝の地図: サーバーの 早い者勝ち', () => {
@@ -75,6 +76,39 @@ describe('宝の地図: サーバーの 早い者勝ち', () => {
     expect(g.call('teacher', 't1', true, true).mine).toBe(true);
     expect(g.call('teacher', 't2', true, true).mine).toBe(true);
     expect(g.call('teacher', 't3', false, true).soldOut).toBe(false);
+  });
+});
+
+describe('宝の地図: 売る期間(先生が スプレッドシートで 決める)', () => {
+  const at = (v: string) => new Date(v);
+  it('始まる前は 売らず、発売日を 返す。時刻も 書ける', () => {
+    const { period } = gas('1-2');
+    expect(period('2026-11-01', '', at('2026-10-31T23:59:00'))).toEqual({ open: false, opensAt: '11/1' });
+    expect(period('2026/11/1 08:30', '', at('2026-11-01T08:00:00'))).toEqual({ open: false, opensAt: '11/1 8:30' });
+    expect(period('2026/11/1 08:30', '', at('2026-11-01T08:30:00')).open).toBe(true);
+  });
+
+  it('終わりの日は その日の 終わりまで 売る', () => {
+    const { period } = gas('1-2');
+    expect(period('', '2026-11-30', at('2026-11-30T23:59:00')).open).toBe(true);
+    expect(period('', '2026-11-30', at('2026-12-01T00:00:00')).open).toBe(false);
+    expect(period('', '2026-11-30 15:40', at('2026-11-30T15:40:00')).open).toBe(false);
+  });
+
+  it('シートが 日付型に 変えた 値も 読める。読めない 値・空欄は いつでも 売る', () => {
+    const { period } = gas('1-2');
+    expect(period(new Date(2026, 10, 1), new Date(2026, 10, 30), at('2026-11-30T12:00:00')).open).toBe(true);
+    expect(period(new Date(2026, 10, 1), '', at('2026-10-20T12:00:00')).opensAt).toBe('11/1');
+    expect(period('来月', 'そのうち', at('2026-10-20T12:00:00')).open).toBe(true);
+    expect(period('', '', at('2026-10-20T12:00:00')).open).toBe(true);
+  });
+
+  it('期間の 外では 買えない(先生は 試せる)', () => {
+    const g = gas('1-2', '2999-01-01');
+    expect(g.call('1-2', '7', true)).toEqual({ onSale: false, soldOut: false, mine: false, opensAt: '1/1' });
+    expect(g.rows).toHaveLength(0);
+    expect(g.call('teacher', 't1', true, true).mine).toBe(true);
+    expect(gas('1-2', '', '2000-01-01').call('1-2', '7', true).onSale).toBe(false);
   });
 });
 

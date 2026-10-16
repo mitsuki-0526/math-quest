@@ -43,8 +43,9 @@
  *   { action:'feedback', class, number, pass, feedback:{ fun, difficulty, comment, level, chapter, answered, correct } } → { ok }
  *   { action:'review', class, number, pass, marks:[{ node, template, star, rating, comment, flagged }] } → { ok, count }(先生だけ。問題の見本帳の印)
  *        感想(体験版の試遊)。feedback シートに 1 行足す
- *   { action:'treasure', class, number, pass, buy } → { ok, treasure:{ onSale, soldOut, mine } }
+ *   { action:'treasure', class, number, pass, buy } → { ok, treasure:{ onSale, soldOut, mine, opensAt? } }
  *        宝の地図(クラスに 1 枚だけ)。config の treasure_classes に書いたクラスでだけ売る。buy=true なら早い者勝ちで買う
+ *        売る期間は config の treasure_from / treasure_until(空なら いつでも)。始まる前は opensAt(「11/1」など)を返す
  */
 
 var SHEETS = {
@@ -88,6 +89,8 @@ function setup() {
   ensureConfig('open_hours', ''); // 受付する時間(例: 08:30-12:30,13:20-15:40)。空なら一日中
   ensureConfig('session_epoch', ''); // メニューの「全員をタイトルに戻す」で書き換わる
   ensureConfig('treasure_classes', ''); // 宝の地図を売るクラス(例: 1-2,2-3)。空ならどこでも売らない
+  ensureConfig('treasure_from', ''); // 宝の地図を売り始める日時(例: 2026-11-01 または 2026-11-01 08:30)。空ならすぐ
+  ensureConfig('treasure_until', ''); // 売るのをやめる日(この日の終わりまで売る。時刻も書ける)。空ならずっと
   var roster = ss.getSheetByName('roster');
   // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
   roster.getRange('B:C').setNumberFormat('@');
@@ -679,6 +682,9 @@ function treasureClasses() {
 function treasure(row, cls, num, teacher, buy) {
   var onSale = teacher || treasureClasses().indexOf(cls) >= 0;
   if (!onSale) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
+  // 先生は 期間の 外でも 試せる
+  var period = teacher ? { open: true } : treasurePeriod(readConfig().treasure_from, readConfig().treasure_until, new Date());
+  if (!period.open) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false, opensAt: period.opensAt } };
   var sh = treasureSheet();
   var values = sh.getLastRow() > 1 ? sh.getRange(2, 2, sh.getLastRow() - 1, 2).getValues() : [];
   var mine = false;
@@ -700,6 +706,41 @@ function treasure(row, cls, num, teacher, buy) {
     soldOut = !teacher;
   }
   return { ok: true, treasure: { onSale: true, soldOut: soldOut && !mine, mine: mine } };
+}
+
+/**
+ * 売る期間か。from / until は シートの 値(日付型にも 文字列にもなる)。
+ * until が 日付だけなら その日の 終わりまで売る。書き方が 読めない値は 空と 同じ(打ちまちがいで 売れなくならない)
+ * 戻り値: { open, opensAt? }。opensAt = 始まる前なら「11/1」「11/1 8:30」(道具屋に 発売予定として 出す)
+ */
+function treasurePeriod(fromValue, untilValue, now) {
+  var from = periodDate(fromValue, false);
+  var until = periodDate(untilValue, true);
+  if (from && now < from.date) {
+    var d = from.date;
+    var label = d.getMonth() + 1 + '/' + d.getDate() + (from.hasTime ? ' ' + d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2) : '');
+    return { open: false, opensAt: label };
+  }
+  if (until && now >= until.date) return { open: false };
+  return { open: true };
+}
+
+/** 「2026-11-01」「2026/11/1 08:30」や 日付型を 日時にする。endOfDay なら 日付だけのとき 翌日 0 時(その日を ふくむ) */
+function periodDate(v, endOfDay) {
+  if (v instanceof Date) {
+    var t = v.getHours() !== 0 || v.getMinutes() !== 0;
+    var d0 = new Date(v.getTime());
+    if (endOfDay && !t) d0.setDate(d0.getDate() + 1);
+    return { date: d0, hasTime: t };
+  }
+  var m = String(v == null ? '' : v)
+    .trim()
+    .match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?$/);
+  if (!m) return null;
+  var hasTime = m[4] !== undefined;
+  var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hasTime ? Number(m[4]) : 0, hasTime ? Number(m[5]) : 0);
+  if (endOfDay && !hasTime) d.setDate(d.getDate() + 1);
+  return { date: d, hasTime: hasTime };
 }
 
 /** 古い版で作ったスプレッドシートには treasure シートがないので、初めて使うときに作る */

@@ -181,6 +181,19 @@ export function TownScene({ townId }: { townId: string }) {
                 <span>{tab === 'tools' ? '道具屋' : '武具屋'}</span>
                 <span class="gold">{save.player.gold} G</span>
               </div>
+              {/* 売る期間の 前: 発売日だけ 見せて、ためる 目あてにする */}
+              {tab === 'tools' && treasure?.opensAt && (
+                <div class="shop-row shop-row-treasure">
+                  <span class="shop-item">
+                    {getItem(TREASURE_MAP_ID).emoji} {getItem(TREASURE_MAP_ID).name} <small>{treasure.opensAt} 発売予定。クラスに 1枚だけ</small>
+                  </span>
+                  <span class="shop-price">
+                    {config.treasure.price} G
+                    {config.treasure.trophyTier > 0 ? ` + 全単元${TROPHY_EMOJI[config.treasure.trophyTier as TrophyTier]}` : ''}
+                  </span>
+                  <Button disabled>まだ</Button>
+                </div>
+              )}
               {tab === 'tools' && treasure?.onSale && (
                 <div class="shop-row shop-row-treasure">
                   <span class="shop-item">
