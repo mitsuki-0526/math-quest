@@ -23,7 +23,8 @@
  * シート:
  *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at | reset_at
  *   roster   : 承認 | email | name | grade | class | number | memo (先生の名簿。memo は自由記入でプログラムは読まない。
- *              列は 見出しで 探すので 並べ替えてもよい。grade(学年)が 空なら クラス名の 先頭の 数字から 決まる。
+ *              列は 見出しで 探すので 並べ替えてもよい。grade = 学年(3)、class = 組(1)。ゲームの中の クラス名は「3-1」。
+ *              前の版の 書き方(class に「1-2」、grade は 空でも可)も そのまま 読める。
  *              承認 = チェックの 入った 行だけが 有効。名簿に ない 生徒は ゲームから クラス・番号を 申請でき、承認なしの 行が 足される。
  *              name は Classroom から 取り込んだ 氏名(先生が 番号を 確かめるため。プログラムは 読まない))
  *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
@@ -48,7 +49,7 @@
  *   { action:'apply', class, number }              → { ok, pending:{ class, number } }(学校アカウント方式で 名簿に ない 生徒が クラス・番号を 申請する)
  *        感想(体験版の試遊)。feedback シートに 1 行足す
  *   { action:'treasure', class, number, pass, buy } → { ok, treasure:{ onSale, soldOut, mine, opensAt? } }
- *        宝の地図(クラスに 1 枚だけ)。config の treasure_classes に書いたクラスでだけ売る。buy=true なら早い者勝ちで買う
+ *        宝の地図(クラスに 1 枚だけ)。config の treasure_grade(学年)・treasure_class(組)で 売る クラスを 決める。buy=true なら早い者勝ちで買う
  *        売る期間は config の treasure_from / treasure_until(空なら いつでも)。始まる前は opensAt(「11/1」など)を返す
  *        config の treasure_open(チェックボックス)を FALSE にすると、期間に かかわらず 売らない
  */
@@ -93,7 +94,8 @@ function setup() {
   ensureConfig('open_days', ''); // 受付する曜日(例: 月火水木金)。空なら毎日
   ensureConfig('open_hours', ''); // 受付する時間(例: 08:30-12:30,13:20-15:40)。空なら一日中
   ensureConfig('session_epoch', ''); // メニューの「全員をタイトルに戻す」で書き換わる
-  ensureConfig('treasure_classes', ''); // 宝の地図を売るクラス(例: 1-2,2-3)。空ならどこでも売らない
+  ensureConfig('treasure_grade', ''); // 宝の地図を売る学年(例: 3。複数なら 1,3)。空ならどこでも売らない
+  ensureConfig('treasure_class', ''); // 宝の地図を売る組(例: 1。複数なら 1,2)。空なら その学年の 全部の組
   ensureConfig('treasure_open', false); // 宝の地図を売るか(TRUE / FALSE)。始めは止めておき、先生が TRUE にしたら売る
   ensureConfig('treasure_from', ''); // 宝の地図を売り始める日時(例: 2026-11-01 または 2026-11-01 08:30)。空ならすぐ
   ensureConfig('treasure_until', ''); // 売るのをやめる日(この日の終わりまで売る。時刻も書ける)。空ならずっと
@@ -681,14 +683,28 @@ function passTreasure(cls, num, pass, buy) {
   return treasure(row, cls, num, cls === TEACHER_CLASS, buy === true);
 }
 
-/** config の treasure_classes(「1-2,2-3」)。1 つだけ書くと日付に化けることがあるので cellText で読む */
-function treasureClasses() {
-  return cellText(readConfig().treasure_classes)
+/** 「1,3」「1、2」→ ['1', '3']。1 つだけ 書くと 数や 日付に なることが あるので cellText で 読む */
+function listOf(v) {
+  return cellText(v)
     .split(/[,、\s]+/)
-    .map(function (s) {
-      return s.trim();
+    .map(function (x) {
+      return x.trim();
     })
     .filter(Boolean);
+}
+
+/**
+ * この クラス(「3-1」)で 宝の地図を 売るか。treasure_grade(学年)と treasure_class(組。空なら その学年の 全部の組)で 決める。
+ * 前の版の treasure_classes(「1-2,2-3」)も 読む(書いてあれば そのクラスでも 売る)
+ */
+function treasureTarget(cls, gradeValue, classValue, oldValue) {
+  var sc = splitClass(cls);
+  var grades = listOf(gradeValue).map(function (g) {
+    return String(rosterGrade(g));
+  });
+  var kumis = listOf(classValue).map(kumiText);
+  if (sc.grade && grades.indexOf(String(sc.grade)) >= 0 && (!kumis.length || kumis.indexOf(sc.kumi) >= 0)) return true;
+  return listOf(oldValue).indexOf(cls) >= 0;
 }
 
 /**
@@ -697,7 +713,8 @@ function treasureClasses() {
  * 同じ人が もう一度 買うと mine=true が返るだけ(応答が届かなかったときの やり直しで 二重に 記録しない)
  */
 function treasure(row, cls, num, teacher, buy) {
-  var onSale = teacher || treasureClasses().indexOf(cls) >= 0;
+  var cfg0 = readConfig();
+  var onSale = teacher || treasureTarget(cls, cfg0.treasure_grade, cfg0.treasure_class, cfg0.treasure_classes);
   if (!onSale) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
   // 先生は 売るのを 止めているときも、期間の 外でも 試せる
   if (!teacher && !treasureSwitchOn(readConfig().treasure_open)) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
@@ -822,7 +839,9 @@ function rosterEntry(email) {
   var byKey = {};
   for (var i = 0; i < values.length; i++) {
     var e = cellText(values[i][cols.email - 1]).toLowerCase();
-    var c = cellText(values[i][cols['class'] - 1]);
+    var g = cols.grade ? rosterGrade(values[i][cols.grade - 1]) : 0;
+    // ゲームの 中の クラス名は「学年-組」(「3-1」)。前の版の「1-2」と 書いた 行も そのまま
+    var c = fullClass(g, values[i][cols['class'] - 1]);
     var n = cellText(values[i][cols.number - 1]);
     if (!e) continue;
     if (/^\d+$/.test(n)) n = String(Number(n)); // "07" → "7"
@@ -837,7 +856,6 @@ function rosterEntry(email) {
     byKey[k] = (byKey[k] || 0) + 1;
     if (e === email) {
       var entry = { class: c, number: n };
-      var g = cols.grade ? rosterGrade(values[i][cols.grade - 1]) : 0;
       if (g) entry.grade = g;
       mine.push(entry);
     }
@@ -879,7 +897,7 @@ function applyRoster(email, clsIn, numIn) {
   var own = 0;
   for (var i = 0; i < values.length; i++) {
     var e = cellText(values[i][cols.email - 1]).toLowerCase();
-    var c = cellText(values[i][cols['class'] - 1]);
+    var c = fullClass(cols.grade ? rosterGrade(values[i][cols.grade - 1]) : 0, values[i][cols['class'] - 1]);
     var n = cellText(values[i][cols.number - 1]);
     if (/^\d+$/.test(n)) n = String(Number(n));
     var approved = !cols.approved || isChecked(values[i][cols.approved - 1]);
@@ -892,13 +910,13 @@ function applyRoster(email, clsIn, numIn) {
     }
   }
   var row = own || sh.getLastRow() + 1;
-  var grade = rosterGrade(cls);
+  // 学年の 列が あれば 学年と 組に 分けて 書く(「3-1」→ grade 3・class 1)
+  var sc = splitClass(cls);
+  var split = cols.grade && sc.grade;
   sh.getRange(row, cols.email).setValue(asText(email));
-  sh.getRange(row, cols['class']).setValue(literal(cls));
+  if (split) sh.getRange(row, cols.grade).setValue(sc.grade);
+  sh.getRange(row, cols['class']).setValue(literal(split ? sc.kumi : cls));
   sh.getRange(row, cols.number).setValue(literal(num));
-  // Classroom から 取り込んだ 行に 先生が 書いた 学年は 残す
-  var hasGrade = own && cols.grade && rosterGrade(values[own - 2][cols.grade - 1]);
-  if (cols.grade && grade && !hasGrade) sh.getRange(row, cols.grade).setValue(grade);
   if (cols.approved) {
     sh.getRange(row, cols.approved).insertCheckboxes();
     sh.getRange(row, cols.approved).setValue(false);
@@ -912,7 +930,10 @@ function applyRoster(email, clsIn, numIn) {
  * すでに 名簿に ある アカウントは 足さない。先生が 選んだ クラスなので 承認ずみに する
  * list: [{ email, name }]。戻り値: { added, skipped, noEmail }
  */
-function importRoster(cls, list) {
+function importRoster(gradeIn, kumiIn, list) {
+  var grade = rosterGrade(gradeIn);
+  var kumi = kumiText(kumiIn);
+  var cls = fullClass(grade, kumi);
   var sh = sheet('roster');
   ensureRosterNameColumn(sh);
   var width = Math.max(sh.getLastColumn(), 3);
@@ -925,7 +946,6 @@ function importRoster(cls, list) {
         existing[cellText(r[0]).toLowerCase()] = true;
       });
   }
-  var grade = rosterGrade(cls);
   var rows = [];
   var skipped = 0;
   var noEmail = 0;
@@ -946,7 +966,7 @@ function importRoster(cls, list) {
     row[cols.email - 1] = asText(email);
     if (cols.name) row[cols.name - 1] = asText(String(st.name || '').slice(0, 40));
     if (cols.grade && grade) row[cols.grade - 1] = grade;
-    row[cols['class'] - 1] = literal(cls);
+    row[cols['class'] - 1] = literal(cols.grade && grade ? kumi : cls);
     rows.push(row);
   });
   if (rows.length) {
@@ -997,13 +1017,21 @@ function menuImportClassroom() {
     ui.alert('番号が ちがいます');
     return;
   }
-  var ask = ui.prompt('ゲームの クラス名', '「' + course.name + '」の 生徒を、ゲームの どの クラスとして 登録しますか?\n(config の classes と 同じ 書き方。例: 1-2)', ui.ButtonSet.OK_CANCEL);
-  if (ask.getSelectedButton() !== ui.Button.OK) return;
-  var cls = ask.getResponseText().trim();
-  if (!cls || cls.length > 20) {
-    ui.alert('クラス名を 入れてください');
+  var askGrade = ui.prompt('学年', '「' + course.name + '」の 生徒は 何年生ですか?(1〜3 の 数字)', ui.ButtonSet.OK_CANCEL);
+  if (askGrade.getSelectedButton() !== ui.Button.OK) return;
+  var grade = rosterGrade(askGrade.getResponseText());
+  if (!grade) {
+    ui.alert('学年は 1〜3 の 数字で 入れてください');
     return;
   }
+  var askKumi = ui.prompt('組', '「' + course.name + '」の 生徒は 何組ですか?(例: 1)', ui.ButtonSet.OK_CANCEL);
+  if (askKumi.getSelectedButton() !== ui.Button.OK) return;
+  var kumi = kumiText(askKumi.getResponseText());
+  if (!kumi || kumi.length > 10) {
+    ui.alert('組を 入れてください');
+    return;
+  }
+  var cls = fullClass(grade, kumi);
   var list = [];
   var t;
   do {
@@ -1018,12 +1046,12 @@ function menuImportClassroom() {
   lock.waitLock(10000);
   var result;
   try {
-    result = importRoster(cls, list);
+    result = importRoster(grade, kumi, list);
   } finally {
     lock.releaseLock();
   }
   ui.alert(
-    cls + ' に ' + result.added + ' 人を 追加しました。' +
+    grade + '年 ' + kumi + '組(' + cls + ')に ' + result.added + ' 人を 追加しました。' +
       (result.skipped ? '\n(' + result.skipped + ' 人は すでに 名簿に いたので 足していません)' : '') +
       (result.noEmail ? '\n(' + result.noEmail + ' 人は メールアドレスが 取れませんでした。その生徒は ゲームから 申請してもらってください)' : '') +
       '\n\n出席番号(number)は 空です。先生が 書くか、生徒が ゲームを 開いて 番号を 申請し、先生が 承認に チェックを 入れます'
@@ -1127,6 +1155,30 @@ function ensureRosterApprovedColumn(roster) {
 function ensureFilter(sh) {
   if (!sh || sh.getFilter()) return;
   sh.getRange(1, 1, sh.getMaxRows(), Math.max(sh.getLastColumn(), 1)).createFilter();
+}
+
+/**
+ * 学年と 組から ゲームの クラス名(「3」「1」→「3-1」)。学年が ないとき・組に もう 学年が 付いているとき
+ * (前の版の 名簿の「1-2」)は 組の 値の まま
+ */
+function fullClass(grade, kumiValue) {
+  // 学年が ないときは 書いたまま(前の版の クラス名を 変えると、その生徒の セーブの 行が 別に なってしまう)
+  if (!grade) return cellText(kumiValue);
+  var k = kumiText(kumiValue);
+  if (!k || splitClass(k).grade) return k;
+  return grade + '-' + k;
+}
+
+/** 「3-1」→ { grade: 3, kumi: '1' }。学年が 読めなければ { grade: 0, kumi: そのまま } */
+function splitClass(cls) {
+  var c = String(cls == null ? '' : cls).trim();
+  var m = /^([1-3])-(.+)$/.exec(c);
+  return m ? { grade: Number(m[1]), kumi: m[2] } : { grade: 0, kumi: c };
+}
+
+/** 組の 値(「1」「1組」→「1」)。シートが 日付に 変えた「1-2」も 戻す */
+function kumiText(v) {
+  return cellText(v).replace(/組$/, '').trim();
 }
 
 /** 名簿の 学年の 値(「1」「1年」など)。1〜3 以外・空は 書いていない ものとする */

@@ -327,6 +327,10 @@ small {
 .field.row {
   flex-direction: row;
 }
+/* 学年と 組の 2 つの 欄を 横に ならべる */
+.field-pair > .field {
+  flex: 1;
+}
 input[type='text'],
 input[type='number'],
 select {

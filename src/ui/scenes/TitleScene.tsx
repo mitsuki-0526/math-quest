@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { Sprite } from '@/ui/components/Sprite';
 import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button, Panel } from '@/ui/components/Ui';
-import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, updateSave, type SaveData } from '@/engine/save';
+import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, updateSave, splitClass, type SaveData } from '@/engine/save';
 import { pushScene, resetScenes } from '@/engine/scenes';
 import { api, hasServer, describeError, isNetworkError, ApiFailure, type AccountInfo, type Identity } from '@/engine/api';
 import { bootstrap, getIdentity, login, ownerKey, resumeOffline, scheduleSync, stampSchool } from '@/engine/sync';
@@ -24,6 +24,72 @@ import type { PlayerLook } from '@/engine/save';
 const TEACHER_CLASS = 'teacher';
 
 type Stage = 'loading' | 'google' | 'login' | 'offline' | 'name' | 'local';
+
+/**
+ * クラスを えらぶ 欄。クラス名が どれも「学年-組」(「3-1」)なら、学年と 組の 2 つの 欄に 分ける
+ * (先生の希望 2026-10-16)。そうでない 書き方が まざるときは 1 つの 欄
+ */
+function ClassPicker({ classes, value, onChange }: { classes: string[]; value: string; onChange: (cls: string) => void }) {
+  if (classes.length === 0) {
+    return (
+      <label class="field">
+        <span>クラス</span>
+        <input type="text" value={value} placeholder="例: 1-1" onInput={(e) => onChange((e.target as HTMLInputElement).value)} />
+      </label>
+    );
+  }
+  const parts = classes.map((c) => ({ cls: c, ...splitClass(c) }));
+  if (parts.some((p) => !p.grade)) {
+    return (
+      <label class="field">
+        <span>クラス</span>
+        <select value={value} onChange={(e) => onChange((e.target as HTMLSelectElement).value)}>
+          {classes.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  const grades = [...new Set(parts.map((p) => p.grade!))].sort();
+  const now = splitClass(value);
+  const grade = now.grade && grades.includes(now.grade) ? now.grade : grades[0];
+  const kumis = parts.filter((p) => p.grade === grade);
+  return (
+    <div class="row field-pair">
+      <label class="field">
+        <span>学年</span>
+        <select
+          value={String(grade)}
+          onChange={(e) => {
+            const g = Number((e.target as HTMLSelectElement).value);
+            // 学年を かえたら、その学年の 同じ 組(なければ 最初の 組)に する
+            const same = parts.find((p) => p.grade === g && p.kumi === now.kumi) ?? parts.find((p) => p.grade === g);
+            if (same) onChange(same.cls);
+          }}
+        >
+          {grades.map((g) => (
+            <option key={g} value={String(g)}>
+              {g}年
+            </option>
+          ))}
+        </select>
+      </label>
+      <label class="field">
+        <span>組</span>
+        <select value={value} onChange={(e) => onChange((e.target as HTMLSelectElement).value)}>
+          {kumis.map((p) => (
+            <option key={p.cls} value={p.cls}>
+              {p.kumi}組
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
 
 export function TitleScene() {
   const remembered = getIdentity();
@@ -164,7 +230,12 @@ export function TitleScene() {
     }
   }
 
-  const who = (id: { class: string; number: string }) => (id.class === TEACHER_CLASS ? '先生' : `${id.class} ${id.number}番`);
+  // 「3-1」は「3年1組」と 読みやすく 出す
+  const who = (id: { class: string; number: string }) => {
+    if (id.class === TEACHER_CLASS) return '先生';
+    const sc = splitClass(id.class);
+    return `${sc.grade ? `${sc.grade}年${sc.kumi}組` : id.class} ${id.number}番`;
+  };
 
   // タイトルの一枚絵があれば画面の背景に敷く(なければ絵文字の紋章を出す)
   const titleArt = getAsset('bg_title').path;
@@ -213,7 +284,7 @@ export function TitleScene() {
               <>
                 <p class="note">
                   <b>
-                    {account.pending.class} {account.pending.number}番
+                    {who(account.pending)}
                   </b>{' '}
                   で 申請しました。先生の 確認を 待っています
                 </p>
@@ -227,21 +298,8 @@ export function TitleScene() {
               </>
             ) : account.error === 'not_in_roster' || account.error === 'pending' ? (
               <form class="stack" onSubmit={(e) => void onApply(e)}>
-                <p class="note">はじめまして! 自分の クラスと 出席番号を えらんで、先生に 申請してください</p>
-                <label class="field">
-                  <span>クラス</span>
-                  {classes.length > 0 ? (
-                    <select value={cls} onChange={(e) => setCls((e.target as HTMLSelectElement).value)}>
-                      {classes.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input type="text" value={cls} placeholder="例: 1-1" onInput={(e) => setCls((e.target as HTMLInputElement).value)} />
-                  )}
-                </label>
+                <p class="note">はじめまして! 自分の 学年・組と 出席番号を えらんで、先生に 申請してください</p>
+                <ClassPicker classes={classes} value={cls} onChange={setCls} />
                 <label class="field">
                   <span>出席番号</span>
                   <input type="number" min={1} max={50} value={number} onInput={(e) => setNumber((e.target as HTMLInputElement).value)} />
@@ -280,20 +338,7 @@ export function TitleScene() {
           <form class="stack" onSubmit={onPassLogin}>
             {!teacherMode ? (
               <>
-                <label class="field">
-                  <span>クラス</span>
-                  {classes.length > 0 ? (
-                    <select value={cls} onChange={(e) => setCls((e.target as HTMLSelectElement).value)}>
-                      {classes.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input type="text" value={cls} placeholder="例: 1-1" onInput={(e) => setCls((e.target as HTMLInputElement).value)} />
-                  )}
-                </label>
+                <ClassPicker classes={classes} value={cls} onChange={setCls} />
                 <label class="field">
                   <span>出席番号</span>
                   <input type="number" min={1} max={50} value={number} onInput={(e) => setNumber((e.target as HTMLInputElement).value)} />

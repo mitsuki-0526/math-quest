@@ -10,7 +10,7 @@
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
  * 名簿の 学年(本物は roster シートの grade 列)は「=1-2/7/1」のように 3 つ目に 書く。
  * 名簿に ない 人の 申請(本物は 承認なしの 行)は メモリに 置き、GET ?action=__admin&op=approve で まとめて 承認する。
- * 宝の地図を売るクラスは MOCK_TREASURE_CLASSES(既定 1-2。本物は config の treasure_classes)。
+ * 宝の地図を売るクラスは MOCK_TREASURE_GRADE(学年。既定 1)・MOCK_TREASURE_CLASS(組。既定 2)。本物は config の treasure_grade / treasure_class。
  *   売るかどうかは MOCK_TREASURE_OPEN(FALSE で 止める。本物は config の treasure_open)。
  *   売る期間は MOCK_TREASURE_FROM / MOCK_TREASURE_UNTIL(例: 2026-11-01、2026-11-01 08:30。本物は config の treasure_from / treasure_until)
  *   GET ?action=__admin&op=treasure_reset で 売り切れを 戻す(本物は treasure シートの行を消す)
@@ -23,12 +23,13 @@ import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 // 本物と同じ集計にするため、Code.gs の関数を読み込む(関数と定数の定義だけなので そのまま評価できる)
-const gasSummary = new Function(`${readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8')}; return { summarizeTallies, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS, treasurePeriod, treasureSwitchOn };`)();
+const gasSummary = new Function(`${readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8')}; return { summarizeTallies, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS, treasurePeriod, treasureSwitchOn, treasureTarget };`)();
 const TOKEN = process.env.MOCK_TOKEN ?? 'dev-token';
 const UNLOCK = (process.env.MOCK_UNLOCK ?? 'g1c1').split(',');
 const ALL = ['g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'];
 const TEACHER_PASS = 'sensei';
-const CLASSES = ['1-1', '1-2', '1-3'];
+// ログイン・申請の クラス一覧(本物は config の classes)。MOCK_CLASSES=1-1,1-2,3-1 で 変えられる
+const CLASSES = (process.env.MOCK_CLASSES ?? '1-1,1-2,1-3').split(',').filter(Boolean);
 const MOCK_EMAIL = (process.env.MOCK_EMAIL ?? '').toLowerCase();
 const TEACHERS = (process.env.MOCK_TEACHERS ?? 'teacher@school.example').toLowerCase().split(',');
 /** 名簿への 申請(本物は roster シートの 承認なしの 行): アカウント → { class, number } */
@@ -54,13 +55,15 @@ const hash = (pass, salt) => createHash('sha256').update(`${salt}:${pass}`).dige
 const key = (c, n) => `${c}|${n}`;
 /** 授業の状態(本物は config の open / session_epoch) */
 const session = { open: true, epoch: '' };
-const TREASURE_CLASSES = (process.env.MOCK_TREASURE_CLASSES ?? '1-2').split(',').filter(Boolean);
+
 /** 宝の地図を 買った人(本物は treasure シート)。[クラス, 番号] */
 let treasureBuyers = [];
 
 /** gas/Code.gs の treasure() と同じ判定 */
 function treasure(cls, num, teacher, buy) {
-  if (!teacher && !TREASURE_CLASSES.includes(cls)) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
+  // 売る クラスの 判定は 本物と 同じ 関数を 使う
+  const target = gasSummary.treasureTarget(cls, process.env.MOCK_TREASURE_GRADE ?? '1', process.env.MOCK_TREASURE_CLASS ?? '2', process.env.MOCK_TREASURE_CLASSES ?? '');
+  if (!teacher && !target) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
   // 売るか・期間の 判定は 本物と 同じ 関数を 使う
   if (!teacher && !gasSummary.treasureSwitchOn(process.env.MOCK_TREASURE_OPEN ?? '')) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
   const period = teacher ? { open: true } : gasSummary.treasurePeriod(process.env.MOCK_TREASURE_FROM ?? '', process.env.MOCK_TREASURE_UNTIL ?? '', new Date());

@@ -79,6 +79,27 @@ describe('宝の地図: サーバーの 早い者勝ち', () => {
   });
 });
 
+describe('宝の地図: 売る クラスを 学年と 組で 決める', () => {
+  function target(cls: string, grade: unknown, kumi: unknown, old: unknown = '') {
+    const code = readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8');
+    const f = new Function(`${code}\nreturn treasureTarget;`)() as (c: string, g: unknown, k: unknown, o: unknown) => boolean;
+    return f(cls, grade, kumi, old);
+  }
+  it('学年と 組を 書くと その クラスだけ。組が 空なら その学年の 全部の組', () => {
+    expect(target('3-1', 3, 1)).toBe(true);
+    expect(target('3-2', 3, 1)).toBe(false);
+    expect(target('1-1', 3, 1)).toBe(false);
+    expect(target('3-2', '3', '1,2')).toBe(true);
+    expect(target('3-4', '3年', '')).toBe(true);
+    expect(target('2-1', '1,3', '')).toBe(false);
+    expect(target('3-1', '', '1')).toBe(false);
+  });
+  it('前の版の treasure_classes(「1-2」)も 読む', () => {
+    expect(target('1-2', '', '', '1-2,2-3')).toBe(true);
+    expect(target('1-3', '', '', '1-2,2-3')).toBe(false);
+  });
+});
+
 describe('宝の地図: 売る期間(先生が スプレッドシートで 決める)', () => {
   const at = (v: string) => new Date(v);
   it('始まる前は 売らず、発売日を 返す。時刻も 書ける', () => {

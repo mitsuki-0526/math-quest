@@ -38,6 +38,15 @@ export function gradeOfClass(cls: string): number | undefined {
 }
 
 /** grade = 先生が 名簿に 書いた 学年(あれば こちらが 正。なければ クラス名から 読む) */
+/**
+ * クラス名を 学年と 組に 分ける(「3-1」→ { grade: 3, kumi: '1' })。学年が 読めなければ grade なし。
+ * ゲームの 中の クラス名は「学年-組」。入力の 欄は 学年と 組を 分けて 出す(先生の希望 2026-10-16)
+ */
+export function splitClass(cls: string): { grade?: number; kumi: string } {
+  const m = /^([1-3])-(.+)$/.exec(cls.trim());
+  return m ? { grade: Number(m[1]), kumi: m[2] } : { kumi: cls.trim() };
+}
+
 export function schoolInfo(cls: string, number: string, rosterGrade?: number): SchoolInfo {
   const grade = rosterGrade ?? gradeOfClass(cls);
   return grade ? { grade, class: cls, number } : { class: cls, number };
