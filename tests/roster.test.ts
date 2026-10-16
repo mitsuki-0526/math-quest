@@ -20,7 +20,18 @@ function fakeSheet(grid: Cell[][]) {
         while (grid.length < r) grid.push([]);
         grid[r - 1][c - 1] = v;
       },
+      getColumn: () => c,
     }),
+    // 本物と 同じく 行ごとに 列を 差し込む・移す(destination = 移す前の 何列目の 前に 置くか)
+    insertColumnBefore: (c: number) => grid.forEach((row) => row.splice(c - 1, 0, '')),
+    moveColumns: (range: { getColumn: () => number }, destination: number) => {
+      const from = range.getColumn() - 1;
+      for (const row of grid) {
+        while (row.length < Math.max(from + 1, destination - 1)) row.push('');
+        const [v] = row.splice(from, 1);
+        row.splice(destination - 1 > from ? destination - 2 : destination - 1, 0, v);
+      }
+    },
   };
 }
 
@@ -64,20 +75,43 @@ describe('名簿の 学年', () => {
     expect(rosterEntry('a@s.jp')).toEqual({ class: '1-2', number: '7' });
   });
 
-  it('setup は 古い 名簿に grade の 見出しを 足す(説明の 文字が あれば そこに。貼った 列は 動かさない)', () => {
-    const withNote = gas([['email', 'class', 'number', 'memo', '← 生徒の…'], ['a@s.jp', '1-2', '7', '']]);
-    withNote.ensureRosterGradeColumn(withNote.sh);
-    expect(withNote.sh.grid[0]).toEqual(['email', 'class', 'number', 'memo', 'grade']);
-    expect(withNote.sh.grid[1].slice(0, 3)).toEqual(['a@s.jp', '1-2', '7']);
+  it('setup は 学年の 列を class の すぐ 左に 差し込む(貼った 中身は そのまま 読める)', () => {
+    const old = gas([
+      ['email', 'class', 'number', 'memo'],
+      ['a@s.jp', '1-2', '7', 'メモ'],
+    ]);
+    old.ensureRosterGradeColumn(old.sh);
+    expect(old.sh.grid).toEqual([
+      ['email', 'grade', 'class', 'number', 'memo'],
+      ['a@s.jp', '', '1-2', '7', 'メモ'],
+    ]);
+    expect(old.rosterEntry('a@s.jp')).toEqual({ class: '1-2', number: '7' });
+  });
 
-    const plain = gas([['email', 'class', 'number', 'memo']]);
-    plain.ensureRosterGradeColumn(plain.sh);
-    expect(plain.sh.grid[0][4]).toBe('grade');
+  it('memo の 右に ある 学年の 列は、中身ごと class の 左に 移す', () => {
+    const right = gas([
+      ['email', 'class', 'number', 'memo', 'grade'],
+      ['a@s.jp', '1-2', '7', 'メモ', '2'],
+      ['b@s.jp', '1-2', '8', '', '1'],
+    ]);
+    right.ensureRosterGradeColumn(right.sh);
+    expect(right.sh.grid).toEqual([
+      ['email', 'grade', 'class', 'number', 'memo'],
+      ['a@s.jp', '2', '1-2', '7', 'メモ'],
+      ['b@s.jp', '1', '1-2', '8', ''],
+    ]);
+    expect(right.rosterEntry('a@s.jp')).toEqual({ class: '1-2', number: '7', grade: 2 });
+    // もう class の 左に ある ときは 何もしない
+    right.ensureRosterGradeColumn(right.sh);
+    expect(right.sh.grid[0]).toEqual(['email', 'grade', 'class', 'number', 'memo']);
+  });
 
-    // もう ある ときは 何もしない
-    const done = gas([['email', 'class', 'number', 'memo', 'grade']]);
-    done.ensureRosterGradeColumn(done.sh);
-    expect(done.sh.grid[0]).toEqual(['email', 'class', 'number', 'memo', 'grade']);
+  it('class・number も 見出しで 探す(先生が 並べ替えても 読める)', () => {
+    const { rosterEntry } = gas([
+      ['email', 'grade', 'class', 'number', 'memo'],
+      ['a@s.jp', '3', '3-1', '07', ''],
+    ]);
+    expect(rosterEntry('a@s.jp')).toEqual({ class: '3-1', number: '7', grade: 3 });
   });
 });
 

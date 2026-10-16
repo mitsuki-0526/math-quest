@@ -22,8 +22,8 @@
  *
  * シート:
  *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at | reset_at
- *   roster   : email | class | number | memo | grade (先生が貼る名簿。memo は自由記入でプログラムは読まない。
- *              grade(学年)は 見出しで 列を 探すので どの列でもよい。空なら クラス名の 先頭の 数字から 決まる)
+ *   roster   : email | grade | class | number | memo (先生が貼る名簿。memo は自由記入でプログラムは読まない。
+ *              列は 見出しで 探すので 並べ替えてもよい。grade(学年)が 空なら クラス名の 先頭の 数字から 決まる)
  *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
  *   config   : key | value
  *   log      : time | action | class | number | note (エラーと主要イベントだけ)
@@ -53,7 +53,7 @@
 var SHEETS = {
   // reset_at: 先生がセーブを消した日時。これより前に始めたセーブ(端末に残ったもの)は受け取らない
   students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at', 'reset_at'],
-  roster: ['email', 'class', 'number', 'memo', 'grade'],
+  roster: ['email', 'grade', 'class', 'number', 'memo'],
   feedback: ['time', 'class', 'number', 'fun', 'difficulty', 'comment', 'level', 'chapter', 'answered', 'correct'],
   review: ['time', 'node', 'template', 'star', 'rating', 'comment', 'flagged'],
   unlock: ['class', 'g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'],
@@ -96,10 +96,12 @@ function setup() {
   ensureConfig('treasure_until', ''); // 売るのをやめる日(この日の終わりまで売る。時刻も書ける)。空ならずっと
   var roster = ss.getSheetByName('roster');
   // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
-  roster.getRange('B:C').setNumberFormat('@');
+  ensureRosterGradeColumn(roster);
+  var cols = rosterColumns(roster.getRange(1, 1, 1, Math.max(roster.getLastColumn(), 1)).getValues()[0]);
+  roster.getRange(1, cols['class'], roster.getMaxRows(), 1).setNumberFormat('@');
+  roster.getRange(1, cols.number, roster.getMaxRows(), 1).setNumberFormat('@');
   ss.getSheetByName('unlock').getRange('A:A').setNumberFormat('@');
   checkboxConfig('treasure_open');
-  ensureRosterGradeColumn(roster);
   if (roster.getLastRow() === 1) roster.getRange(1, roster.getLastColumn() + 1).setValue('← 生徒の学校アカウント・クラス・出席番号(・学年)を 1 人 1 行で貼る(memo は自由。氏名は書かなくてよい)');
   var un = ss.getSheetByName('unlock');
   if (un.getLastRow() === 1) {
@@ -803,21 +805,21 @@ function rosterEntry(email) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('roster');
   if (!sh || sh.getLastRow() < 2) return { error: 'not_in_roster' };
   var width = Math.max(sh.getLastColumn(), 3);
-  var gradeCol = rosterGradeColumn(sh.getRange(1, 1, 1, width).getValues()[0]);
+  var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
   var values = sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues();
   var mine = [];
   var byKey = {};
   for (var i = 0; i < values.length; i++) {
-    var e = cellText(values[i][0]).toLowerCase();
-    var c = cellText(values[i][1]);
-    var n = cellText(values[i][2]);
+    var e = cellText(values[i][cols.email - 1]).toLowerCase();
+    var c = cellText(values[i][cols['class'] - 1]);
+    var n = cellText(values[i][cols.number - 1]);
     if (!e || !c || !n) continue;
     if (/^\d+$/.test(n)) n = String(Number(n)); // "07" → "7"
     var k = key(c, n);
     byKey[k] = (byKey[k] || 0) + 1;
     if (e === email) {
       var entry = { class: c, number: n };
-      var g = gradeCol ? rosterGrade(values[i][gradeCol - 1]) : 0;
+      var g = cols.grade ? rosterGrade(values[i][cols.grade - 1]) : 0;
       if (g) entry.grade = g;
       mine.push(entry);
     }
@@ -830,32 +832,38 @@ function rosterEntry(email) {
   return mine[0];
 }
 
-/** 名簿の 見出しの 行で「grade」(または「学年」)の 列を 探す。0 = ない */
-function rosterGradeColumn(header) {
+/**
+ * 名簿の 列を 見出しで 探す(1 始まり。grade は ないと 0)。先生が 列を 並べ替えても 読めるように。
+ * email・class・number の 見出しが 見つからないときは、最初の 版の 並び(A・B・C 列)とみなす
+ */
+function rosterColumns(header) {
+  var cols = { email: 0, class: 0, number: 0, grade: 0 };
+  var names = { email: 'email', class: 'class', number: 'number', grade: 'grade', 学年: 'grade', クラス: 'class', 番号: 'number' };
   for (var j = 0; j < header.length; j++) {
-    var h = cellText(header[j]).toLowerCase();
-    if (h === 'grade' || h === '学年') return j + 1;
+    var k = names[cellText(header[j]).toLowerCase()];
+    if (k && !cols[k]) cols[k] = j + 1;
   }
-  return 0;
+  if (!cols.email) cols.email = 1;
+  if (!cols['class']) cols['class'] = 2;
+  if (!cols.number) cols.number = 3;
+  return cols;
 }
 
 /**
- * 古い版で 作った 名簿には 学年の 列が ないので 足す(すでに 貼った 名簿の 列は 動かさない)。
- * 見出しの 右の 説明(「← 生徒の…」)が あれば そこに 書く
+ * 名簿の 学年の 列を class の すぐ 左に 置く(なければ 列ごと 差し込み、別の 場所に あれば 中身ごと 移す)。
+ * すでに 貼った email・class・number の 中身は そのまま(列が 1 つ 右に ずれるだけで、見出しで 探すので 読める)。
+ * 前の版が 見出しの 右の 説明(「← 生徒の…」)の 位置に 足した grade も、ここで class の 左に 移る
  */
 function ensureRosterGradeColumn(roster) {
   var width = Math.max(roster.getLastColumn(), 1);
-  var header = roster.getRange(1, 1, 1, width).getValues()[0];
-  if (rosterGradeColumn(header)) return;
-  var col = width + 1;
-  for (var j = 0; j < header.length; j++) {
-    var h = cellText(header[j]);
-    if (!h || h.charAt(0) === '←') {
-      col = j + 1;
-      break;
-    }
+  var cols = rosterColumns(roster.getRange(1, 1, 1, width).getValues()[0]);
+  if (!cols.grade) {
+    roster.insertColumnBefore(cols['class']);
+    roster.getRange(1, cols['class']).setValue('grade');
+    return;
   }
-  roster.getRange(1, col).setValue('grade');
+  if (cols.grade === cols['class'] - 1) return;
+  roster.moveColumns(roster.getRange(1, cols.grade), cols['class']);
 }
 
 /** 名簿の 学年の 値(「1」「1年」など)。1〜3 以外・空は 書いていない ものとする */
