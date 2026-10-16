@@ -4,7 +4,7 @@ import { getAsset, assetUrl } from '@/assets/manifest';
 import { Button, Panel } from '@/ui/components/Ui';
 import { loadLocalSave, continueGame, startNewGame, saveStore, writeLocalSave, updateSave, type SaveData } from '@/engine/save';
 import { pushScene, resetScenes } from '@/engine/scenes';
-import { hasServer, describeError, isNetworkError, ApiFailure, type AccountInfo, type Identity } from '@/engine/api';
+import { api, hasServer, describeError, isNetworkError, ApiFailure, type AccountInfo, type Identity } from '@/engine/api';
 import { bootstrap, getIdentity, login, ownerKey, resumeOffline, scheduleSync, stampSchool } from '@/engine/sync';
 import { markEntered, sessionStore } from '@/engine/session';
 import { useStore } from '@/engine/store';
@@ -15,6 +15,7 @@ import type { PlayerLook } from '@/engine/save';
  * タイトル / ログイン(要件 F1 F6)。
  * - 学校アカウント方式(本番の標準): GAS が開いた人のアカウントを確かめ、先生の名簿でクラス・番号が決まる。
  *   生徒は番号を選ばない(まちがい・なりすまし登録を起こさないため)。「○○ として 入ります」→「ぼうけんへ」だけ。
+ *   名簿に ない 生徒は クラス・番号を 申請し、先生が 名簿の 承認に チェックを 入れると 入れる(先生が メールを 打たなくて よいように)。
  *   ログインしたままの他人の Chromebook で気づけるよう、主人公の名前とレベルも出す
  * - 合言葉方式(予備): アカウントが取れない環境。クラス・出席番号・合言葉。
  *   合言葉は初回に自分で決める。忘れたら先生がシートで空にする → 次回入力したものが新しい合言葉になる
@@ -42,6 +43,8 @@ export function TitleScene() {
   const [name, setName] = useState(DEFAULT_PLAYER_NAME);
   const [look, setLook] = useState<PlayerLook>('neutral');
   const [pendingIdentity, setPendingIdentity] = useState<Identity | null>(null);
+  /** 申請の 欄を 開いているか(申請中に 直すとき) */
+  const [applying, setApplying] = useState(false);
   // サーバーなしのときは持ち主なしの端末セーブだけを見る
   const localSave = hasServer() ? null : loadLocalSave(null);
   // 回線がないときに続けられる、前回この端末で入った人の記録
@@ -61,6 +64,9 @@ export function TitleScene() {
     }
     if (r.account.mode === 'google') {
       setAccount(r.account);
+      // 先生が Classroom から 取り込んだ 行なら、クラスは もう 決まっている
+      if (r.account.pending?.class) setCls(r.account.pending.class);
+      if (r.account.pending?.number) setNumber(r.account.pending.number);
       setStage('google');
     } else setStage('login');
   }
@@ -138,6 +144,26 @@ export function TitleScene() {
     void doLogin({ class: c, number: n, pass: '' }, 'google');
   }
 
+  /** 名簿に ない・番号が まだの 生徒が クラス・番号を 申請する(先生が 承認すると 入れる) */
+  async function onApply(e: Event) {
+    e.preventDefault();
+    if (!cls.trim() || !number.trim()) {
+      setError('クラスと 出席番号を 入れてください');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.apply(cls.trim(), number.trim());
+      setAccount((a) => (a ? { ...a, error: 'pending', pending: r.pending } : a));
+      setApplying(false);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const who = (id: { class: string; number: string }) => (id.class === TEACHER_CLASS ? '先生' : `${id.class} ${id.number}番`);
 
   // タイトルの一枚絵があれば画面の背景に敷く(なければ絵文字の紋章を出す)
@@ -183,6 +209,49 @@ export function TitleScene() {
                   </Button>
                 )}
               </>
+            ) : account.error === 'pending' && account.pending?.number && !applying ? (
+              <>
+                <p class="note">
+                  <b>
+                    {account.pending.class} {account.pending.number}番
+                  </b>{' '}
+                  で 申請しました。先生の 確認を 待っています
+                </p>
+                <p class="muted">確認が すんだら「もう一度 つなぐ」を 押してください</p>
+                <Button primary onClick={() => void connect()}>
+                  もう一度 つなぐ
+                </Button>
+                <button type="button" class="linklike" onClick={() => setApplying(true)}>
+                  クラス・番号を まちがえたので 直す
+                </button>
+              </>
+            ) : account.error === 'not_in_roster' || account.error === 'pending' ? (
+              <form class="stack" onSubmit={(e) => void onApply(e)}>
+                <p class="note">はじめまして! 自分の クラスと 出席番号を えらんで、先生に 申請してください</p>
+                <label class="field">
+                  <span>クラス</span>
+                  {classes.length > 0 ? (
+                    <select value={cls} onChange={(e) => setCls((e.target as HTMLSelectElement).value)}>
+                      {classes.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input type="text" value={cls} placeholder="例: 1-1" onInput={(e) => setCls((e.target as HTMLInputElement).value)} />
+                  )}
+                </label>
+                <label class="field">
+                  <span>出席番号</span>
+                  <input type="number" min={1} max={50} value={number} onInput={(e) => setNumber((e.target as HTMLInputElement).value)} />
+                </label>
+                {error && <p class="warn">{error}</p>}
+                <Button primary type="submit" disabled={busy}>
+                  {busy ? 'おくっています…' : '先生に 申請する'}
+                </Button>
+                <p class="muted">先生が 確かめてから 遊べるように なります</p>
+              </form>
             ) : (
               <>
                 <p class="warn">{describeError(new ApiFailure(account.error ?? 'not_in_roster'))}</p>

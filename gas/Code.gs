@@ -22,8 +22,10 @@
  *
  * シート:
  *   students : key | class | number | pass_hash | salt | player_name | save_json | updated_at | last_seen | created_at | reset_at
- *   roster   : email | grade | class | number | memo (先生が貼る名簿。memo は自由記入でプログラムは読まない。
- *              列は 見出しで 探すので 並べ替えてもよい。grade(学年)が 空なら クラス名の 先頭の 数字から 決まる)
+ *   roster   : 承認 | email | name | grade | class | number | memo (先生の名簿。memo は自由記入でプログラムは読まない。
+ *              列は 見出しで 探すので 並べ替えてもよい。grade(学年)が 空なら クラス名の 先頭の 数字から 決まる。
+ *              承認 = チェックの 入った 行だけが 有効。名簿に ない 生徒は ゲームから クラス・番号を 申請でき、承認なしの 行が 足される。
+ *              name は Classroom から 取り込んだ 氏名(先生が 番号を 確かめるため。プログラムは 読まない))
  *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
  *   config   : key | value
  *   log      : time | action | class | number | note (エラーと主要イベントだけ)
@@ -43,6 +45,7 @@
  *   { action:'load',  class, number, pass }        → { ok, save }
  *   { action:'feedback', class, number, pass, feedback:{ fun, difficulty, comment, level, chapter, answered, correct } } → { ok }
  *   { action:'review', class, number, pass, marks:[{ node, template, star, rating, comment, flagged }] } → { ok, count }(先生だけ。問題の見本帳の印)
+ *   { action:'apply', class, number }              → { ok, pending:{ class, number } }(学校アカウント方式で 名簿に ない 生徒が クラス・番号を 申請する)
  *        感想(体験版の試遊)。feedback シートに 1 行足す
  *   { action:'treasure', class, number, pass, buy } → { ok, treasure:{ onSale, soldOut, mine, opensAt? } }
  *        宝の地図(クラスに 1 枚だけ)。config の treasure_classes に書いたクラスでだけ売る。buy=true なら早い者勝ちで買う
@@ -53,7 +56,7 @@
 var SHEETS = {
   // reset_at: 先生がセーブを消した日時。これより前に始めたセーブ(端末に残ったもの)は受け取らない
   students: ['key', 'class', 'number', 'pass_hash', 'salt', 'player_name', 'save_json', 'updated_at', 'last_seen', 'created_at', 'reset_at'],
-  roster: ['email', 'grade', 'class', 'number', 'memo'],
+  roster: ['承認', 'email', 'name', 'grade', 'class', 'number', 'memo'],
   feedback: ['time', 'class', 'number', 'fun', 'difficulty', 'comment', 'level', 'chapter', 'answered', 'correct'],
   review: ['time', 'node', 'template', 'star', 'rating', 'comment', 'flagged'],
   unlock: ['class', 'g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'],
@@ -95,14 +98,18 @@ function setup() {
   ensureConfig('treasure_from', ''); // 宝の地図を売り始める日時(例: 2026-11-01 または 2026-11-01 08:30)。空ならすぐ
   ensureConfig('treasure_until', ''); // 売るのをやめる日(この日の終わりまで売る。時刻も書ける)。空ならずっと
   var roster = ss.getSheetByName('roster');
-  // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
+  ensureRosterApprovedColumn(roster);
   ensureRosterGradeColumn(roster);
+  // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
   var cols = rosterColumns(roster.getRange(1, 1, 1, Math.max(roster.getLastColumn(), 1)).getValues()[0]);
   roster.getRange(1, cols['class'], roster.getMaxRows(), 1).setNumberFormat('@');
   roster.getRange(1, cols.number, roster.getMaxRows(), 1).setNumberFormat('@');
   ss.getSheetByName('unlock').getRange('A:A').setNumberFormat('@');
+  // 学年・クラスで 絞り込めるように(見出しの ▼ から 選ぶ)
+  ensureFilter(roster);
+  ensureFilter(ss.getSheetByName('students'));
   checkboxConfig('treasure_open');
-  if (roster.getLastRow() === 1) roster.getRange(1, roster.getLastColumn() + 1).setValue('← 生徒の学校アカウント・クラス・出席番号(・学年)を 1 人 1 行で貼る(memo は自由。氏名は書かなくてよい)');
+  if (roster.getLastRow() === 1) roster.getRange(1, roster.getLastColumn() + 1).setValue('← メニューの「Classroom から 名簿を 取り込む」か、生徒の 申請(承認に チェック)で 埋まる。手で 貼っても よい');
   var un = ss.getSheetByName('unlock');
   if (un.getLastRow() === 1) {
     un.appendRow(['*', true, false, false, false, false, false, false]);
@@ -123,6 +130,9 @@ function onOpen() {
     .addItem('受付を再開する', 'menuOpen')
     .addSeparator()
     .addItem('集計を更新する(summary シート)', 'menuSummary')
+    .addSeparator()
+    .addItem('Classroom から 名簿を 取り込む', 'menuImportClassroom')
+    .addItem('名簿の 申請を すべて 承認する(承認待ちの 行)', 'menuApproveAll')
     .addSeparator()
     .addItem('選んだ生徒のセーブを消す(students シートで行を選ぶ)', 'menuWipeSelected')
     .addItem('全員のセーブを消す', 'menuWipeAll')
@@ -808,13 +818,21 @@ function rosterEntry(email) {
   var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
   var values = sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues();
   var mine = [];
+  var pending = null;
   var byKey = {};
   for (var i = 0; i < values.length; i++) {
     var e = cellText(values[i][cols.email - 1]).toLowerCase();
     var c = cellText(values[i][cols['class'] - 1]);
     var n = cellText(values[i][cols.number - 1]);
-    if (!e || !c || !n) continue;
+    if (!e) continue;
     if (/^\d+$/.test(n)) n = String(Number(n)); // "07" → "7"
+    // 承認の 列が あれば、チェックの 入った 行だけが 有効(生徒の 申請は 先生が 確かめてから)
+    var approved = !cols.approved || isChecked(values[i][cols.approved - 1]);
+    if (!approved || !c || !n) {
+      // 承認待ち・番号が まだの 行(Classroom から 取り込んだ 直後など)。本人には 申請の 状態として 知らせる
+      if (e === email && !pending) pending = { class: c, number: n };
+      continue;
+    }
     var k = key(c, n);
     byKey[k] = (byKey[k] || 0) + 1;
     if (e === email) {
@@ -824,7 +842,7 @@ function rosterEntry(email) {
       mine.push(entry);
     }
   }
-  if (mine.length === 0) return { error: 'not_in_roster' };
+  if (mine.length === 0) return pending ? { error: 'pending', pending: pending } : { error: 'not_in_roster' };
   if (mine.length > 1 || byKey[key(mine[0]['class'], mine[0].number)] > 1) {
     logRow('roster_conflict', mine[0]['class'], mine[0].number, '名簿に重複があります');
     return { error: 'roster_conflict' };
@@ -832,13 +850,232 @@ function rosterEntry(email) {
   return mine[0];
 }
 
+/** チェックボックス・TRUE と 書いた セル */
+function isChecked(v) {
+  return v === true || String(v == null ? '' : v).trim().toUpperCase() === 'TRUE';
+}
+
+/**
+ * 名簿に ない 生徒の 申請(学校アカウント方式)。メールアドレスは 本人の アカウントなので、先生は 打たなくてよい。
+ * 承認なしの 行を 足し(すでに 自分の 行が あれば その行の クラス・番号を 書きかえ)、先生が 承認に チェックを 入れると 入れる。
+ * 呼び出し側が ロックを 持っている
+ */
+function applyRoster(email, clsIn, numIn) {
+  var cls = String(clsIn || '').trim();
+  var num = String(numIn || '').trim();
+  if (/^\d+$/.test(num)) num = String(Number(num));
+  if (!cls || cls.length > 20 || !/^\d{1,2}$/.test(num) || Number(num) < 1) return { ok: false, error: 'bad_identity' };
+  var classes = String(readConfig().classes || '')
+    .split(',')
+    .map(function (x) {
+      return x.trim();
+    })
+    .filter(Boolean);
+  if (classes.length && classes.indexOf(cls) < 0) return { ok: false, error: 'bad_identity' };
+  var sh = sheet('roster');
+  var width = Math.max(sh.getLastColumn(), 3);
+  var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
+  var values = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues() : [];
+  var own = 0;
+  for (var i = 0; i < values.length; i++) {
+    var e = cellText(values[i][cols.email - 1]).toLowerCase();
+    var c = cellText(values[i][cols['class'] - 1]);
+    var n = cellText(values[i][cols.number - 1]);
+    if (/^\d+$/.test(n)) n = String(Number(n));
+    var approved = !cols.approved || isChecked(values[i][cols.approved - 1]);
+    if (e === email) {
+      if (approved && c && n) return { ok: false, error: 'already_registered' };
+      if (!own) own = i + 2;
+    } else if (e && approved && c === cls && n === num) {
+      // ほかの 生徒の 番号を 選んだ(打ちまちがい)。先生が 気づく 前に 本人に 直してもらう
+      return { ok: false, error: 'number_taken' };
+    }
+  }
+  var row = own || sh.getLastRow() + 1;
+  var grade = rosterGrade(cls);
+  sh.getRange(row, cols.email).setValue(asText(email));
+  sh.getRange(row, cols['class']).setValue(literal(cls));
+  sh.getRange(row, cols.number).setValue(literal(num));
+  // Classroom から 取り込んだ 行に 先生が 書いた 学年は 残す
+  var hasGrade = own && cols.grade && rosterGrade(values[own - 2][cols.grade - 1]);
+  if (cols.grade && grade && !hasGrade) sh.getRange(row, cols.grade).setValue(grade);
+  if (cols.approved) {
+    sh.getRange(row, cols.approved).insertCheckboxes();
+    sh.getRange(row, cols.approved).setValue(false);
+  }
+  logRow('apply', cls, num, '名簿に 申請(承認待ち)');
+  return { ok: true, pending: { class: cls, number: num } };
+}
+
+/**
+ * Classroom の 生徒を 名簿に 足す(メニューから)。番号は 空(先生が 書くか、生徒が 申請する)。
+ * すでに 名簿に ある アカウントは 足さない。先生が 選んだ クラスなので 承認ずみに する
+ * list: [{ email, name }]。戻り値: { added, skipped, noEmail }
+ */
+function importRoster(cls, list) {
+  var sh = sheet('roster');
+  ensureRosterNameColumn(sh);
+  var width = Math.max(sh.getLastColumn(), 3);
+  var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
+  var existing = {};
+  if (sh.getLastRow() > 1) {
+    sh.getRange(2, cols.email, sh.getLastRow() - 1, 1)
+      .getValues()
+      .forEach(function (r) {
+        existing[cellText(r[0]).toLowerCase()] = true;
+      });
+  }
+  var grade = rosterGrade(cls);
+  var rows = [];
+  var skipped = 0;
+  var noEmail = 0;
+  list.forEach(function (st) {
+    var email = String(st.email || '').trim().toLowerCase();
+    if (!email) {
+      noEmail++;
+      return;
+    }
+    if (existing[email]) {
+      skipped++;
+      return;
+    }
+    existing[email] = true;
+    var row = [];
+    for (var j = 0; j < width; j++) row.push('');
+    if (cols.approved) row[cols.approved - 1] = true;
+    row[cols.email - 1] = asText(email);
+    if (cols.name) row[cols.name - 1] = asText(String(st.name || '').slice(0, 40));
+    if (cols.grade && grade) row[cols.grade - 1] = grade;
+    row[cols['class'] - 1] = literal(cls);
+    rows.push(row);
+  });
+  if (rows.length) {
+    var first = sh.getLastRow() + 1;
+    sh.getRange(first, 1, rows.length, width).setValues(rows);
+    if (cols.approved) sh.getRange(first, cols.approved, rows.length, 1).insertCheckboxes();
+  }
+  logRow('import_roster', cls, '', rows.length + ' 人');
+  return { added: rows.length, skipped: skipped, noEmail: noEmail };
+}
+
+/** 名簿に 氏名の 列が なければ email の すぐ 右に 足す */
+function ensureRosterNameColumn(sh) {
+  var width = Math.max(sh.getLastColumn(), 1);
+  var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
+  if (cols.name) return;
+  sh.insertColumnAfter(cols.email);
+  sh.getRange(1, cols.email + 1).setValue('name');
+}
+
+/** メニュー: Classroom から 名簿を 取り込む。Apps Script の「サービス」に Google Classroom API を 足してあること */
+function menuImportClassroom() {
+  var ui = SpreadsheetApp.getUi();
+  if (typeof Classroom === 'undefined') {
+    ui.alert('Classroom API が 使えません。Apps Script の エディタで 左の「サービス」の ＋ → 「Google Classroom API」を 追加してから、もう一度 押してください');
+    return;
+  }
+  var courses = [];
+  var token;
+  do {
+    var res = Classroom.Courses.list({ teacherId: 'me', courseStates: ['ACTIVE'], pageToken: token });
+    courses = courses.concat(res.courses || []);
+    token = res.nextPageToken;
+  } while (token);
+  if (!courses.length) {
+    ui.alert('先生として 担当している Classroom の クラスが 見つかりません');
+    return;
+  }
+  var menu = courses
+    .map(function (c, i) {
+      return i + 1 + '. ' + c.name + (c.section ? '(' + c.section + ')' : '');
+    })
+    .join('\n');
+  var pick = ui.prompt('Classroom から 名簿を 取り込む', menu + '\n\n取り込む クラスの 番号(左の 数字)を 入れてください', ui.ButtonSet.OK_CANCEL);
+  if (pick.getSelectedButton() !== ui.Button.OK) return;
+  var course = courses[Number(pick.getResponseText().trim()) - 1];
+  if (!course) {
+    ui.alert('番号が ちがいます');
+    return;
+  }
+  var ask = ui.prompt('ゲームの クラス名', '「' + course.name + '」の 生徒を、ゲームの どの クラスとして 登録しますか?\n(config の classes と 同じ 書き方。例: 1-2)', ui.ButtonSet.OK_CANCEL);
+  if (ask.getSelectedButton() !== ui.Button.OK) return;
+  var cls = ask.getResponseText().trim();
+  if (!cls || cls.length > 20) {
+    ui.alert('クラス名を 入れてください');
+    return;
+  }
+  var list = [];
+  var t;
+  do {
+    var r = Classroom.Courses.Students.list(course.id, { pageToken: t });
+    (r.students || []).forEach(function (st) {
+      var p = st.profile || {};
+      list.push({ email: p.emailAddress || '', name: (p.name && p.name.fullName) || '' });
+    });
+    t = r.nextPageToken;
+  } while (t);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  var result;
+  try {
+    result = importRoster(cls, list);
+  } finally {
+    lock.releaseLock();
+  }
+  ui.alert(
+    cls + ' に ' + result.added + ' 人を 追加しました。' +
+      (result.skipped ? '\n(' + result.skipped + ' 人は すでに 名簿に いたので 足していません)' : '') +
+      (result.noEmail ? '\n(' + result.noEmail + ' 人は メールアドレスが 取れませんでした。その生徒は ゲームから 申請してもらってください)' : '') +
+      '\n\n出席番号(number)は 空です。先生が 書くか、生徒が ゲームを 開いて 番号を 申請し、先生が 承認に チェックを 入れます'
+  );
+}
+
+/** メニュー: 承認待ちの 行(email・クラス・番号が そろっている もの)を まとめて 承認する */
+function menuApproveAll() {
+  var ui = SpreadsheetApp.getUi();
+  var sh = sheet('roster');
+  var width = Math.max(sh.getLastColumn(), 3);
+  var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
+  if (!cols.approved || sh.getLastRow() < 2) {
+    ui.alert('承認待ちの 行は ありません');
+    return;
+  }
+  var values = sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues();
+  var rows = [];
+  values.forEach(function (v, i) {
+    if (!isChecked(v[cols.approved - 1]) && cellText(v[cols.email - 1]) && cellText(v[cols['class'] - 1]) && cellText(v[cols.number - 1])) rows.push(i + 2);
+  });
+  if (!rows.length) {
+    ui.alert('承認待ちの 行は ありません');
+    return;
+  }
+  var ans = ui.alert('申請を 承認する', rows.length + ' 人の 申請を 承認します。クラス・番号に まちがいが ないか 確かめましたか?(1 人ずつなら、承認の 列に チェックを 入れるだけで よい)', ui.ButtonSet.YES_NO);
+  if (ans !== ui.Button.YES) return;
+  rows.forEach(function (r) {
+    sh.getRange(r, cols.approved).setValue(true);
+  });
+  ui.alert(rows.length + ' 人を 承認しました。生徒は「もう一度 つなぐ」で 入れます');
+}
+
 /**
  * 名簿の 列を 見出しで 探す(1 始まり。grade は ないと 0)。先生が 列を 並べ替えても 読めるように。
  * email・class・number の 見出しが 見つからないときは、最初の 版の 並び(A・B・C 列)とみなす
  */
 function rosterColumns(header) {
-  var cols = { email: 0, class: 0, number: 0, grade: 0 };
-  var names = { email: 'email', class: 'class', number: 'number', grade: 'grade', 学年: 'grade', クラス: 'class', 番号: 'number' };
+  var cols = { email: 0, class: 0, number: 0, grade: 0, approved: 0, name: 0 };
+  var names = {
+    email: 'email',
+    class: 'class',
+    number: 'number',
+    grade: 'grade',
+    学年: 'grade',
+    クラス: 'class',
+    番号: 'number',
+    承認: 'approved',
+    approved: 'approved',
+    name: 'name',
+    氏名: 'name',
+  };
   for (var j = 0; j < header.length; j++) {
     var k = names[cellText(header[j]).toLowerCase()];
     if (k && !cols[k]) cols[k] = j + 1;
@@ -866,6 +1103,32 @@ function ensureRosterGradeColumn(roster) {
   roster.moveColumns(roster.getRange(1, cols.grade), cols['class']);
 }
 
+/**
+ * 名簿に 承認の 列が なければ 先頭に 足す。これまで 先生が 書いた 行は 承認ずみに する(入れなくならないように)
+ */
+function ensureRosterApprovedColumn(roster) {
+  var width = Math.max(roster.getLastColumn(), 1);
+  var cols = rosterColumns(roster.getRange(1, 1, 1, width).getValues()[0]);
+  if (cols.approved) return;
+  roster.insertColumnBefore(1);
+  roster.getRange(1, 1).setValue('承認');
+  var last = roster.getLastRow();
+  if (last < 2) return;
+  var emails = roster.getRange(2, cols.email + 1, last - 1, 1).getValues();
+  var marks = emails.map(function (r) {
+    return [cellText(r[0]) !== ''];
+  });
+  var range = roster.getRange(2, 1, last - 1, 1);
+  range.insertCheckboxes();
+  range.setValues(marks);
+}
+
+/** 見出しの ▼ で 絞り込めるように する(先生が 付けた 絞り込みが あれば そのまま) */
+function ensureFilter(sh) {
+  if (!sh || sh.getFilter()) return;
+  sh.getRange(1, 1, sh.getMaxRows(), Math.max(sh.getLastColumn(), 1)).createFilter();
+}
+
 /** 名簿の 学年の 値(「1」「1年」など)。1〜3 以外・空は 書いていない ものとする */
 function rosterGrade(v) {
   var m = /^\s*([1-3])(?!\d)/.exec(cellText(v));
@@ -883,7 +1146,7 @@ function accountInfo() {
   if (!email) return { mode: 'pass' };
   var teacher = isTeacherEmail(email);
   var entry = teacher ? teacherEntry(email) : rosterEntry(email);
-  if (entry.error) return { mode: 'google', teacher: false, registered: null, player: null, error: entry.error };
+  if (entry.error) return { mode: 'google', teacher: false, registered: null, player: null, error: entry.error, pending: entry.pending };
   var row = findStudent(entry['class'], entry.number);
   var save = row ? parseSave(row) : null;
   return {
@@ -898,6 +1161,17 @@ function accountInfo() {
 function handleAccount(email, body) {
   var teacher = isTeacherEmail(email);
   var entry = teacher ? teacherEntry(email) : rosterEntry(email);
+  if (body.action === 'apply') {
+    if (teacher || !entry.error) return { ok: false, error: 'already_registered' };
+    if (entry.error !== 'not_in_roster' && entry.error !== 'pending') return { ok: false, error: entry.error };
+    var applyLock = LockService.getScriptLock();
+    applyLock.waitLock(10000);
+    try {
+      return applyRoster(email, body['class'], body.number);
+    } finally {
+      applyLock.releaseLock();
+    }
+  }
   if (entry.error) return { ok: false, error: entry.error };
   var cls = entry['class'];
   var num = entry.number;

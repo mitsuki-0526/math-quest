@@ -8,7 +8,11 @@ import { schoolInfo } from '@/engine/save';
  */
 type Cell = unknown;
 
+/** 本物の シートは 先頭の ' を 文字列の しるしとして 外して 見せる */
+const cell = (v: Cell) => (typeof v === 'string' && v.startsWith("'") ? v.slice(1) : v);
+
 function fakeSheet(grid: Cell[][]) {
+  let filter = false;
   const width = () => Math.max(...grid.map((r) => r.length));
   return {
     grid,
@@ -18,10 +22,20 @@ function fakeSheet(grid: Cell[][]) {
       getValues: () => grid.slice(r - 1, r - 1 + n).map((row) => Array.from({ length: w }, (_, j) => row[c - 1 + j] ?? '')),
       setValue: (v: Cell) => {
         while (grid.length < r) grid.push([]);
-        grid[r - 1][c - 1] = v;
+        grid[r - 1][c - 1] = cell(v);
       },
+      setValues: (vs: Cell[][]) =>
+        vs.forEach((row, i) => {
+          while (grid.length < r + i) grid.push([]);
+          row.forEach((v, j) => (grid[r - 1 + i][c - 1 + j] = cell(v)));
+        }),
+      insertCheckboxes: () => {},
+      createFilter: () => (filter = true),
       getColumn: () => c,
     }),
+    getMaxRows: () => 1000,
+    getFilter: () => (filter ? {} : null),
+    insertColumnAfter: (c: number) => grid.forEach((row) => row.splice(c, 0, '')),
     // 本物と 同じく 行ごとに 列を 差し込む・移す(destination = 移す前の 何列目の 前に 置くか)
     insertColumnBefore: (c: number) => grid.forEach((row) => row.splice(c - 1, 0, '')),
     moveColumns: (range: { getColumn: () => number }, destination: number) => {
@@ -35,16 +49,114 @@ function fakeSheet(grid: Cell[][]) {
   };
 }
 
-function gas(grid: Cell[][]) {
+type Entry = { class?: string; number?: string; grade?: number; error?: string; pending?: { class: string; number: string } };
+
+function gas(grid: Cell[][], classes = '1-1,1-2') {
   const sh = fakeSheet(grid);
   const app = { getActiveSpreadsheet: () => ({ getSheetByName: () => sh }) };
   const code = readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8');
-  const mod = new Function('SpreadsheetApp', `${code}\nfunction logRow() {}\nreturn { rosterEntry: rosterEntry, ensureRosterGradeColumn: ensureRosterGradeColumn };`)(app) as {
-    rosterEntry: (email: string) => { class?: string; number?: string; grade?: number; error?: string };
+  const stub = `function logRow() {}
+function readConfig() { return { classes: __classes }; }
+return { rosterEntry: rosterEntry, ensureRosterGradeColumn: ensureRosterGradeColumn, ensureRosterApprovedColumn: ensureRosterApprovedColumn, ensureFilter: ensureFilter, applyRoster: applyRoster, importRoster: importRoster };`;
+  const mod = new Function('SpreadsheetApp', '__classes', `${code}\n${stub}`)(app, classes) as {
+    rosterEntry: (email: string) => Entry;
     ensureRosterGradeColumn: (sheet: unknown) => void;
+    ensureRosterApprovedColumn: (sheet: unknown) => void;
+    ensureFilter: (sheet: unknown) => void;
+    applyRoster: (email: string, cls: string, num: string) => { ok: boolean; error?: string; pending?: { class: string; number: string } };
+    importRoster: (cls: string, list: { email: string; name: string }[]) => { added: number; skipped: number; noEmail: number };
   };
   return { sh, ...mod };
 }
+
+/** シートに 書かれた 値から 先頭の ' を はずす(本物の シートは 文字列として 見せる) */
+const plain = (grid: Cell[][]) => grid.map((r) => r.map((v) => (typeof v === 'string' && v.startsWith("'") ? v.slice(1) : v)));
+
+const HEADER = ['承認', 'email', 'name', 'grade', 'class', 'number', 'memo'];
+
+describe('名簿の 申請と 承認(先生が メールを 打たなくて よいように)', () => {
+  it('名簿に ない 生徒が 申請すると 承認なしの 行が 足され、承認に チェックが 入るまで 入れない', () => {
+    const g = gas([HEADER]);
+    expect(g.rosterEntry('new@s.jp')).toEqual({ error: 'not_in_roster' });
+    expect(g.applyRoster('new@s.jp', '1-2', '07')).toEqual({ ok: true, pending: { class: '1-2', number: '7' } });
+    expect(plain(g.sh.grid)[1]).toEqual([false, 'new@s.jp', undefined, 1, '1-2', '7']);
+    expect(g.rosterEntry('new@s.jp')).toEqual({ error: 'pending', pending: { class: '1-2', number: '7' } });
+    // 先生が 承認に チェック
+    g.sh.grid[1][0] = true;
+    g.sh.grid[1][4] = '1-2';
+    g.sh.grid[1][5] = '7';
+    expect(g.rosterEntry('new@s.jp')).toEqual({ class: '1-2', number: '7', grade: 1 });
+    expect(g.applyRoster('new@s.jp', '1-2', '8')).toEqual({ ok: false, error: 'already_registered' });
+  });
+
+  it('申請し直すと 同じ 行を 書きかえる(行は 増えない)', () => {
+    const g = gas([HEADER]);
+    g.applyRoster('a@s.jp', '1-2', '7');
+    g.applyRoster('a@s.jp', '1-1', '3');
+    expect(g.sh.grid).toHaveLength(2);
+    expect(g.rosterEntry('a@s.jp').pending).toEqual({ class: '1-1', number: '3' });
+  });
+
+  it('ほかの 人が 使っている 番号・一覧に ない クラス・おかしな 番号は 断る', () => {
+    const g = gas([HEADER, [true, 'b@s.jp', '', 1, '1-2', '7', '']]);
+    expect(g.applyRoster('a@s.jp', '1-2', '7')).toEqual({ ok: false, error: 'number_taken' });
+    expect(g.applyRoster('a@s.jp', '3-9', '1')).toEqual({ ok: false, error: 'bad_identity' });
+    expect(g.applyRoster('a@s.jp', '1-2', '0')).toEqual({ ok: false, error: 'bad_identity' });
+    expect(g.applyRoster('a@s.jp', '1-2', '=1+1')).toEqual({ ok: false, error: 'bad_identity' });
+    expect(g.sh.grid).toHaveLength(2);
+  });
+
+  it('承認なしの 行は、ほかの 人の 番号と かぶっても 重複に 数えない', () => {
+    const g = gas([HEADER, [true, 'b@s.jp', '', 1, '1-2', '7', ''], [false, 'c@s.jp', '', 1, '1-2', '7', '']]);
+    expect(g.rosterEntry('b@s.jp')).toEqual({ class: '1-2', number: '7', grade: 1 });
+  });
+
+  it('setup は 承認の 列を 先頭に 足し、今までの 行は 承認ずみに する(入れなくならない)', () => {
+    const g = gas([
+      ['email', 'grade', 'class', 'number', 'memo'],
+      ['a@s.jp', '1', '1-2', '7', ''],
+    ]);
+    g.ensureRosterApprovedColumn(g.sh);
+    expect(g.sh.grid).toEqual([
+      ['承認', 'email', 'grade', 'class', 'number', 'memo'],
+      [true, 'a@s.jp', '1', '1-2', '7', ''],
+    ]);
+    expect(g.rosterEntry('a@s.jp')).toEqual({ class: '1-2', number: '7', grade: 1 });
+  });
+
+  it('setup は 絞り込みを 付ける(先生が 付けた ものは そのまま)', () => {
+    const g = gas([HEADER]);
+    expect(g.sh.getFilter()).toBeNull();
+    g.ensureFilter(g.sh);
+    expect(g.sh.getFilter()).not.toBeNull();
+  });
+});
+
+describe('Classroom からの 取り込み', () => {
+  it('メール・氏名・学年・クラスを 承認ずみで 足す。番号は 空で、生徒が 申請すると その行に 入る', () => {
+    const g = gas([HEADER, [true, 'old@s.jp', '', 1, '1-2', '1', '']]);
+    const r = g.importRoster('1-2', [
+      { email: 'Old@s.jp', name: '前から いる' },
+      { email: 'a@s.jp', name: '山田 花子' },
+      { email: '', name: 'メールなし' },
+    ]);
+    expect(r).toEqual({ added: 1, skipped: 1, noEmail: 1 });
+    expect(plain(g.sh.grid)[2]).toEqual([true, 'a@s.jp', '山田 花子', 1, '1-2', '', '']);
+    // 番号が まだなので 入れない(申請の 欄に クラスが 入った 状態で 出る)
+    expect(g.rosterEntry('a@s.jp')).toEqual({ error: 'pending', pending: { class: '1-2', number: '' } });
+    // 生徒が 番号を 申請 → 同じ 行に 入り、先生の 承認待ちに なる
+    expect(g.applyRoster('a@s.jp', '1-2', '9').ok).toBe(true);
+    expect(g.sh.grid).toHaveLength(3);
+    expect(plain(g.sh.grid)[2].slice(0, 6)).toEqual([false, 'a@s.jp', '山田 花子', 1, '1-2', '9']);
+  });
+
+  it('氏名の 列が ない 名簿には email の 右に 足す', () => {
+    const g = gas([['承認', 'email', 'grade', 'class', 'number', 'memo']]);
+    g.importRoster('1-1', [{ email: 'a@s.jp', name: '山田 花子' }]);
+    expect(g.sh.grid[0]).toEqual(['承認', 'email', 'name', 'grade', 'class', 'number', 'memo']);
+    expect(plain(g.sh.grid)[1].slice(0, 5)).toEqual([true, 'a@s.jp', '山田 花子', 1, '1-1']);
+  });
+});
 
 describe('名簿の 学年', () => {
   it('grade 列に 書いた 学年を 返す(「2」「2年」どちらも)。空なら 返さない', () => {

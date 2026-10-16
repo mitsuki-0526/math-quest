@@ -55,6 +55,8 @@ export type AccountInfo =
       registered: { class: string; number: string } | null;
       player: { name: string; level: number } | null;
       error?: string;
+      /** 名簿に 申請中(error = 'pending')。number が 空なら 番号が まだ(Classroom から 取り込んだ 直後など) */
+      pending?: { class: string; number: string };
     }
   | { mode: 'pass' };
 
@@ -257,6 +259,8 @@ export const api = {
   load: (id: Identity) => post<LoadResult>({ action: 'load', class: id.class, number: id.number, pass: id.pass }),
   feedback: (id: Identity, feedback: FeedbackInput) =>
     post<{ ok: true }>({ action: 'feedback', class: id.class, number: id.number, pass: id.pass, feedback }),
+  /** 名簿に ない 生徒が クラス・番号を 申請する(学校アカウント方式だけ。先生が 承認すると 入れる) */
+  apply: (cls: string, number: string) => post<{ ok: true; pending: { class: string; number: string } }>({ action: 'apply', class: cls, number }),
   /** 宝の地図の 売れ具合を 聞く(buy=true なら 買う。売り切れなら 買えずに 状態だけ 返る) */
   treasure: (id: Identity, buy: boolean) =>
     post<TreasureResult>({ action: 'treasure', class: id.class, number: id.number, pass: id.pass, buy }),
@@ -288,6 +292,12 @@ export function describeError(e: unknown): string {
       return 'この アカウントは 名簿に ありません。先生に 知らせてください';
     case 'roster_conflict':
       return '名簿に まちがいが あるため 入れません。先生に 知らせてください';
+    case 'pending':
+      return '先生の 確認を 待っています。確認が すんだら「もう一度 つなぐ」を 押してください';
+    case 'number_taken':
+      return 'その クラス・番号は もう ほかの 人が 使っています。番号を 確かめてください';
+    case 'already_registered':
+      return 'もう 名簿に 入っています。「もう一度 つなぐ」を 押してください';
     case 'not_registered':
       return 'まだ 登録が すんでいません。タイトルに もどって 入り直してください';
     case 'locked':

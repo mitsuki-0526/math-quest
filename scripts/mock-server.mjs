@@ -9,6 +9,7 @@
  * (リクエストに __email を付けると、その回だけ別の人になる。テスト用)。
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
  * 名簿の 学年(本物は roster シートの grade 列)は「=1-2/7/1」のように 3 つ目に 書く。
+ * 名簿に ない 人の 申請(本物は 承認なしの 行)は メモリに 置き、GET ?action=__admin&op=approve で まとめて 承認する。
  * 宝の地図を売るクラスは MOCK_TREASURE_CLASSES(既定 1-2。本物は config の treasure_classes)。
  *   売るかどうかは MOCK_TREASURE_OPEN(FALSE で 止める。本物は config の treasure_open)。
  *   売る期間は MOCK_TREASURE_FROM / MOCK_TREASURE_UNTIL(例: 2026-11-01、2026-11-01 08:30。本物は config の treasure_from / treasure_until)
@@ -30,6 +31,8 @@ const TEACHER_PASS = 'sensei';
 const CLASSES = ['1-1', '1-2', '1-3'];
 const MOCK_EMAIL = (process.env.MOCK_EMAIL ?? '').toLowerCase();
 const TEACHERS = (process.env.MOCK_TEACHERS ?? 'teacher@school.example').toLowerCase().split(',');
+/** 名簿への 申請(本物は roster シートの 承認なしの 行): アカウント → { class, number } */
+const PENDING = new Map();
 /** 名簿の 学年: 「クラス|番号」→ 学年 */
 const ROSTER_GRADE = new Map();
 /** 名簿: アカウント → 「クラス|番号」(本物は roster シート) */
@@ -82,6 +85,11 @@ function handle(action, p) {
     if (p.op === 'close') session.open = false;
     if (p.op === 'open') session.open = true;
     if (p.op === 'treasure_reset') treasureBuyers = [];
+    // メニュー「名簿の 申請を すべて 承認する」
+    if (p.op === 'approve') {
+      for (const [mail, a] of PENDING) ROSTER.set(mail, `${a.class}|${Number(a.number)}`);
+      PENDING.clear();
+    }
     // 本物のメニュー「選んだ生徒のセーブを消す / 全員のセーブを消す」(key を省くと全員)
     if (p.op === 'wipe') {
       const now = new Date().toISOString();
@@ -102,7 +110,9 @@ function handle(action, p) {
       const row = k ? students.get(k) : null;
       account = k
         ? { mode: 'google', teacher: TEACHERS.includes(email), registered: { class: k.split('|')[0], number: k.split('|')[1] }, player: row?.save ? { name: row.save.player.name, level: row.save.player.level } : null }
-        : { mode: 'google', teacher: false, registered: null, player: null, error: 'not_in_roster' };
+        : PENDING.has(email)
+          ? { mode: 'google', teacher: false, registered: null, player: null, error: 'pending', pending: PENDING.get(email) }
+          : { mode: 'google', teacher: false, registered: null, player: null, error: 'not_in_roster' };
     }
     return { ok: true, unlock: UNLOCK, classes: CLASSES, config: { 'battle.hintsPerNode': 3 }, serverTime: new Date().toISOString(), account };
   }
@@ -153,7 +163,8 @@ function entryKey(email) {
 /** 学校アカウント方式(gas/Code.gs の handleAccount と同じ流れ。送られたクラス・番号は見ない) */
 function handleAccount(action, p, email) {
   const k = entryKey(email);
-  if (!k) return { ok: false, error: 'not_in_roster' };
+  if (action === 'apply') return k ? { ok: false, error: 'already_registered' } : applyRoster(email, p);
+  if (!k) return { ok: false, error: PENDING.has(email) ? 'pending' : 'not_in_roster' };
   const teacher = TEACHERS.includes(email);
   const [cls, num] = k.split('|');
   if (action === 'login') {
@@ -170,6 +181,16 @@ function handleAccount(action, p, email) {
   if (action === 'review') return teacher ? storeReview(p.marks) : { ok: false, error: 'not_teacher' };
   if (action === 'treasure') return treasure(cls, num, teacher, p.buy === true);
   return { ok: false, error: 'unknown_action' };
+}
+
+/** gas/Code.gs の applyRoster と 同じ 判定(クラスは 一覧の 中、番号は 1〜99、ほかの 人の 番号は 選べない) */
+function applyRoster(email, p) {
+  const cls = String(p.class ?? '').trim();
+  const num = String(Number(String(p.number ?? '').trim()) || '');
+  if (!CLASSES.includes(cls) || !/^\d{1,2}$/.test(num)) return { ok: false, error: 'bad_identity' };
+  if ([...ROSTER.values()].includes(`${cls}|${num}`)) return { ok: false, error: 'number_taken' };
+  PENDING.set(email, { class: cls, number: num });
+  return { ok: true, pending: { class: cls, number: num } };
 }
 
 /** 見本帳の印(本物は review シート。先生だけ)。開発中はコンソールに出す */
