@@ -37,8 +37,9 @@ export function gradeOfClass(cls: string): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
-export function schoolInfo(cls: string, number: string): SchoolInfo {
-  const grade = gradeOfClass(cls);
+/** grade = 先生が 名簿に 書いた 学年(あれば こちらが 正。なければ クラス名から 読む) */
+export function schoolInfo(cls: string, number: string, rosterGrade?: number): SchoolInfo {
+  const grade = rosterGrade ?? gradeOfClass(cls);
   return grade ? { grade, class: cls, number } : { class: cls, number };
 }
 

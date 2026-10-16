@@ -8,6 +8,7 @@
  * 学校アカウント方式の再現: MOCK_EMAIL=s1@school.example で起動すると、その人が開いている扱いになる
  * (リクエストに __email を付けると、その回だけ別の人になる。テスト用)。
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
+ * 名簿の 学年(本物は roster シートの grade 列)は「=1-2/7/1」のように 3 つ目に 書く。
  * 宝の地図を売るクラスは MOCK_TREASURE_CLASSES(既定 1-2。本物は config の treasure_classes)。
  *   売るかどうかは MOCK_TREASURE_OPEN(FALSE で 止める。本物は config の treasure_open)。
  *   売る期間は MOCK_TREASURE_FROM / MOCK_TREASURE_UNTIL(例: 2026-11-01、2026-11-01 08:30。本物は config の treasure_from / treasure_until)
@@ -29,6 +30,8 @@ const TEACHER_PASS = 'sensei';
 const CLASSES = ['1-1', '1-2', '1-3'];
 const MOCK_EMAIL = (process.env.MOCK_EMAIL ?? '').toLowerCase();
 const TEACHERS = (process.env.MOCK_TEACHERS ?? 'teacher@school.example').toLowerCase().split(',');
+/** 名簿の 学年: 「クラス|番号」→ 学年 */
+const ROSTER_GRADE = new Map();
 /** 名簿: アカウント → 「クラス|番号」(本物は roster シート) */
 const ROSTER = new Map(
   (process.env.MOCK_ROSTER ?? 's1@school.example=1-2/7,s2@school.example=1-1/3')
@@ -36,7 +39,8 @@ const ROSTER = new Map(
     .filter(Boolean)
     .map((e) => {
       const [mail, cn] = e.split('=');
-      const [c, n] = cn.split('/');
+      const [c, n, g] = cn.split('/');
+      if (g) ROSTER_GRADE.set(`${c}|${Number(n)}`, Number(g));
       return [mail.toLowerCase(), `${c}|${Number(n)}`];
     }),
 );
@@ -155,7 +159,8 @@ function handleAccount(action, p, email) {
   if (action === 'login') {
     if (!students.has(k)) students.set(k, { passHash: '', salt: '', save: null, updatedAt: '' });
     const row = students.get(k);
-    return { ok: true, isNew: !row.save, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher, account: { class: cls, number: num }, resetAt: row.resetAt ?? '' };
+    const account = ROSTER_GRADE.has(k) ? { class: cls, number: num, grade: ROSTER_GRADE.get(k) } : { class: cls, number: num };
+    return { ok: true, isNew: !row.save, save: row.save, unlock: teacher ? ALL : UNLOCK, teacher, account, resetAt: row.resetAt ?? '' };
   }
   const row = students.get(k);
   if (!row) return { ok: false, error: 'not_registered' };

@@ -31,6 +31,8 @@ const UNLOCK_CACHE_KEY = 'mathquest.unlock';
 const FATAL_CODES = new Set(['bad_pass', 'locked', 'not_found', 'bad_token', 'bad_save', 'save_too_large', 'bad_identity', 'not_registered', 'not_in_roster', 'roster_conflict', 'closed', 'save_reset']);
 
 let identity: Identity | null = loadIdentity();
+/** 名簿に 書かれた 学年(ログインの 応答で 届く)。undefined = 名簿に ない、null = 分からない(オフラインで 入った) */
+let rosterGrade: number | undefined | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inflight = false;
 let dirty = false;
@@ -72,7 +74,9 @@ function loadIdentity(): Identity | null {
 export function stampSchool(d: SaveData): void {
   // 先生は 学年・クラスを 持たない(試しの 行が 生徒の 記録に まざらないように)
   if (!hasServer() || !identity || syncStore.get().teacher) return;
-  d.school = schoolInfo(identity.class, identity.number);
+  // オフラインで 入ったときは 名簿の 学年が 届かないので、同じ クラスなら 前に 書いた 学年を 残す
+  const grade = rosterGrade === null ? (d.school?.class === identity.class ? d.school.grade : undefined) : rosterGrade;
+  d.school = schoolInfo(identity.class, identity.number, grade);
 }
 
 /** 解放状態を反映し、オフライン時のためにキャッシュする */
@@ -130,6 +134,7 @@ export async function login(id: Identity, local: SaveData | null): Promise<{ sav
   dirty = false;
   // 学校アカウント方式では、クラス・番号は名簿で決まったものを使う(合言葉は持たない)
   const who: Identity = r.account ? { class: r.account.class, number: r.account.number, pass: '' } : id;
+  rosterGrade = r.account?.grade;
   if (r.account && ownerKey(who) !== ownerKey(id)) local = null; // 別の番号の端末セーブは候補にしない
   setIdentity(who);
   applyUnlock(r.unlock);
@@ -154,6 +159,7 @@ export async function login(id: Identity, local: SaveData | null): Promise<{ sav
  */
 export function resumeOffline(): void {
   generation++;
+  rosterGrade = null;
   clearTimer();
   // 合言葉を持たない = 学校アカウント方式で入った人
   setStatus({ status: 'offline', lastError: undefined, googleAccount: identity?.pass === '' });
@@ -173,6 +179,7 @@ export async function logout(): Promise<void> {
   clearTimer();
   dirty = false;
   setIdentity(null);
+  rosterGrade = null;
   saveStore.set(null);
   setStatus({ status: hasServer() ? 'pending' : 'local', teacher: false, lastError: undefined, googleAccount: false });
   if (!hasServer() || !id || !save || !needSend) return;
