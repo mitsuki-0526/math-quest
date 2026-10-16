@@ -1427,6 +1427,26 @@ img.sprite {
   height: 100%;
   transition: width 0.2s linear;
 }
+/* 座標の 答え: ( [x] , [y] )。「,」を 打たずに 2 つの 欄に 入れる(先生の指摘 2026-10-16) */
+.point-input {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.4em;
+}
+.point-input .point-field {
+  flex: 1;
+  min-width: 0;
+  max-width: 7em;
+  text-align: center;
+  font-size: 0.95em;
+}
+.point-paren,
+.point-comma {
+  font-family: var(--font-body);
+  color: var(--parchment);
+}
 .question-figure {
   margin: 4px auto 0;
   max-width: 560px;
@@ -1440,26 +1460,32 @@ img.sprite {
 .figure-table-wrap {
   overflow-x: auto;
 }
+/* 表と 座標平面は 教科書と 同じ 白い 紙に 黒い 線・文字(先生の指摘 2026-10-16: 暗い 背景では 見にくい) */
+.figure-paper {
+  color: #111;
+}
 .figure-table {
   margin: 0 auto;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
+  background: #fff;
+  color: #111;
 }
 .figure-table th,
 .figure-table td {
   padding: 4px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid #111;
   text-align: center;
   white-space: nowrap;
 }
 .figure-table thead th,
 .figure-table tbody th {
-  color: var(--sub);
+  color: #111;
   font-weight: normal;
   font-size: 0.9em;
 }
 .figure-table td.unknown {
-  color: var(--ember);
+  color: #c62828;
   font-weight: bold;
 }
 .figure-table-caption {

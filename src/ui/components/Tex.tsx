@@ -24,7 +24,8 @@ export function ProseTex({ tex, class: cls }: { tex: string; class?: string }) {
     <span class={`tex prose-tex ${cls ?? ''}`}>
       {parts.map((p, i) =>
         p.text ? (
-          <span key={i}>{p.value}</span>
+          // 文と 文の あいだの「\n」で 改行する(「y = −30。y を …」と 続くと 読みにくい。先生の指摘 2026-10-16)
+          <span key={i}>{p.value.split('\n').map((s, k) => (k ? [<br key={k} />, s] : s))}</span>
         ) : (
           <span key={i} dangerouslySetInnerHTML={{ __html: katex.renderToString(big(p.value), { throwOnError: false, strict: 'ignore' }) }} />
         ),

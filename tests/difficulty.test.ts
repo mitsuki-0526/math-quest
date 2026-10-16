@@ -646,13 +646,13 @@ describe('第4章 比例と反比例', () => {
     }
   });
 
-  it('教科書の 順: 2 段の 問題・分数の 比例定数(−½)は 基本の問題なので ★2 から。★3 は 分数の 比例定数・y から x・利用', () => {
+  it('教科書の 順: 2 段の 問題・分数の 比例定数(−½)は 基本の問題なので ★2 から。★3 は 分数の 比例定数・y から x(利用の 文章題は 難しすぎるので 出さない。先生の判定 2026-10-16)', () => {
     expect(tagsOf('g1.func.prop', 1)).toEqual(['prop_constant', 'prop_model', 'prop_value']);
     expect(tagsOf('g1.func.prop', 2)).toEqual(['domain_words', 'prop_constant', 'prop_domain', 'prop_find_a', 'prop_find_a_frac', 'prop_table', 'prop_two_step', 'prop_value']);
     expect(tagsOf('g1.func.prop', 3)).toEqual(['prop_domain', 'prop_find_a_frac', 'prop_find_x', 'prop_fraction', 'prop_two_step']);
     expect(tagsOf('g1.func.invprop', 1)).toEqual(['invprop_constant', 'invprop_model', 'invprop_value']);
     expect(tagsOf('g1.func.invprop', 2)).toEqual(['invprop_find_a', 'invprop_table', 'invprop_two_step', 'invprop_value']);
-    expect(tagsOf('g1.func.invprop', 3)).toEqual(['invprop_find_x', 'invprop_two_step', 'invprop_use']);
+    expect(tagsOf('g1.func.invprop', 3)).toEqual(['invprop_find_x', 'invprop_two_step']);
     expect(tagsOf('g1.func.graph', 1)).toEqual(['graph_pick', 'graph_prop']);
     expect(tagsOf('g1.func.graph', 2)).toEqual(['graph_invprop', 'graph_prop', 'graph_prop_frac', 'graph_trend']);
     expect(tagsOf('g1.func.graph', 3)).toEqual(['graph_invprop', 'graph_prop_frac']);
@@ -702,7 +702,6 @@ describe('第4章 比例と反比例', () => {
           expect(x, p.promptText).toBeLessThanOrEqual(5);
           expect(x * y, p.promptText).toBeLessThanOrEqual(30);
         }
-        if (p.tags.includes('invprop_use')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
       });
   });
 

@@ -6,7 +6,7 @@ import { paren, plainMinus, text } from '@/math/format';
 /**
  * 第4章「比例と反比例」のテンプレート(台本 04_waterwheel_lake.md の敵に対応)。
  *   g1.func.prop     比例のヌシ        比例の式(場面・表・1 組の x, y から)・値・比例定数・変域
- *   g1.func.invprop  反比例のアメンボ  反比例の式・値・比例定数・利用(歯車)
+ *   g1.func.invprop  反比例のアメンボ  反比例の式・値・比例定数(利用の 文章題は 難しすぎるので 出さない)
  *   g1.func.coord    座標クラゲ        点の座標を読む・座標から点を選ぶ・対称な点・移動した点
  *   g1.func.graph    グラフウナギ      グラフから式(比例・反比例。★3 は 比例定数が 分数)
  * ★ は 教科書の 節の 順(関数と変域 → 比例の式 → 座標 → 比例のグラフ → 反比例の式 → 反比例のグラフ → 利用)と
@@ -117,7 +117,7 @@ function genDomain(rng: Rng, d: Difficulty): Problem {
     return {
       templateId: 'g1.func.prop',
       difficulty: d,
-      prompt: text(`${story}。${until}の ${v} の 変域は?`),
+      prompt: text(`${story}。\n${until}の ${v} の 変域は?`),
       promptText: `${story}。${until}の ${v} の 変域は?`,
       layout: 'prose',
       answer,
@@ -228,7 +228,7 @@ function genPropScene(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.prop',
     difficulty: d,
-    prompt: text(`${story}。y を x の 式で 表せ`),
+    prompt: text(`${story}。\ny を x の 式で 表せ`),
     promptText: `${story}。y を x の 式で 表せ`,
     layout: 'prose',
     answer: { kind: 'expression', expected: `${a}x` },
@@ -321,7 +321,7 @@ function genPropFindA(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.prop',
     difficulty: d,
-    prompt: `${text('y は x に比例し、')} x = ${x} ${text(' のとき ')} y = ${y} ${text('。y を x の式で表せ')}`,
+    prompt: `${text('y は x に比例し、')} x = ${x} ${text(' のとき ')} y = ${y} ${text('。\ny を x の式で表せ')}`,
     promptText: `y は x に比例し、x = ${pm(x)} のとき y = ${pm(y)}。y を x の式で表せ`,
     layout: 'prose',
     answer: { kind: 'expression', expected: propInput(p, q) },
@@ -350,7 +350,7 @@ function genPropTable(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.prop',
     difficulty: d,
-    prompt: `${text('表は、y が x に 比例する ようすを 表している。y を x の 式で 表せ')}`,
+    prompt: `${text('表は、y が x に 比例する ようすを 表している。\ny を x の 式で 表せ')}`,
     promptText: '表は、y が x に 比例する ようすを 表している。y を x の 式で 表せ',
     layout: 'prose',
     answer: { kind: 'expression', expected: propInput(a) },
@@ -380,7 +380,7 @@ function genPropTwoStep(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.prop',
     difficulty: d,
-    prompt: `${text('y は x に比例し、')} x = ${x1} ${text(' のとき ')} y = ${y1} ${text('。')} x = ${x2} ${text(' のときの y の 値は?')}`,
+    prompt: `${text('y は x に比例し、')} x = ${x1} ${text(' のとき ')} y = ${y1} ${text('。\n')} x = ${x2} ${text(' のときの y の 値は?')}`,
     promptText: `y は x に比例し、x = ${pm(x1)} のとき y = ${pm(y1)}。x = ${pm(x2)} のときの y の値は?`,
     layout: 'prose',
     answer: { kind: 'number', value: rat(y2) },
@@ -493,7 +493,7 @@ function genInvScene(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.invprop',
     difficulty: d,
-    prompt: text(`${story}。y を x の 式で 表すと?`),
+    prompt: text(`${story}。\ny を x の 式で 表すと?`),
     promptText: `${story}。y を x の 式で 表すと?`,
     layout: 'prose',
     answer,
@@ -583,7 +583,7 @@ function genInvFindA(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.invprop',
     difficulty: d,
-    prompt: `${text('y は x に反比例し、')} x = ${x} ${text(' のとき ')} y = ${y} ${text('。y を x の式で表すと?')}`,
+    prompt: `${text('y は x に反比例し、')} x = ${x} ${text(' のとき ')} y = ${y} ${text('。\ny を x の式で表すと?')}`,
     promptText: `y は x に反比例し、x = ${pm(x)} のとき y = ${pm(y)}。y を x の式で表すと?`,
     layout: 'prose',
     answer,
@@ -606,7 +606,7 @@ function genInvTable(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.invprop',
     difficulty: d,
-    prompt: `${text('表は、y が x に 反比例する ようすを 表している。y を x の 式で 表すと?')}`,
+    prompt: `${text('表は、y が x に 反比例する ようすを 表している。\ny を x の 式で 表すと?')}`,
     promptText: '表は、y が x に 反比例する ようすを 表している。y を x の 式で 表すと?',
     layout: 'prose',
     answer,
@@ -647,7 +647,7 @@ function genInvTwoStep(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.invprop',
     difficulty: d,
-    prompt: `${text('y は x に反比例し、')} x = ${x1} ${text(' のとき ')} y = ${y1} ${text('。')} x = ${x2} ${text(' のときの y の 値は?')}`,
+    prompt: `${text('y は x に反比例し、')} x = ${x1} ${text(' のとき ')} y = ${y1} ${text('。\n')} x = ${x2} ${text(' のときの y の 値は?')}`,
     promptText: `y は x に反比例し、x = ${pm(x1)} のとき y = ${pm(y1)}。x = ${pm(x2)} のときの y の値は?`,
     layout: 'prose',
     answer: { kind: 'number', value: rat(y2) },
@@ -681,59 +681,6 @@ function genInvFindX(rng: Rng, d: Difficulty): Problem {
   };
 }
 
-/**
- * 反比例の 利用(★3。教科書 4 節)。
- *   スライドショー: (曲の 長さ)=(1 枚の 秒数)×(枚数)。50 枚 × 4 秒の 曲で 1 枚 5 秒なら 40 枚
- *   電子レンジ: 出力 × 時間 が 同じ。1500 W で 30 秒 → 600 W で 75 秒
- */
-function genInvUse(rng: Rng, d: Difficulty): Problem {
-  if (rng.bool()) {
-    const n = rng.pick([30, 40, 50, 60]);
-    const s1 = rng.pick([3, 4, 5, 6]);
-    const total = n * s1;
-    const s2 = rng.pick([2, 3, 4, 5, 6, 8, 10].filter((v) => v !== s1 && total % v === 0));
-    const n2 = total / s2;
-    const story = `曲に 合わせて、写真 ${n} 枚を 1 枚 ${s1} 秒ずつ 映す。同じ 曲で、1 枚を ${s2} 秒ずつ 映すと、写真は 何枚 映せる?`;
-    return {
-      templateId: 'g1.func.invprop',
-      difficulty: d,
-      prompt: text(story),
-      promptText: story,
-      layout: 'prose',
-      answer: { kind: 'number', value: rat(n2) },
-      hint: '曲の 長さは (1 枚の 秒数)×(枚数)。曲の 長さが 同じなら、秒数と 枚数は 反比例',
-      explanation: [
-        `${text('曲の 長さ')} \\; ${s1} \\times ${n} = ${total} \\; ${text('(秒)')}`,
-        `${text('1 枚の 秒数を x、枚数を y と すると')} \\; xy = ${total}`,
-        `y = ${total} \\div ${s2} = ${n2}`,
-        `${text('答え: ')} ${n2} \\; ${text('枚')}`,
-      ],
-      mistakes: [mistakeNum(ratOf(n * s2, s1), '1 枚を 長く 映すほど、映せる 枚数は 少なく なる(反比例)。比例で 考えて いないかな')],
-      tags: ['invprop_use'],
-      key: `invu:s:${n}:${s1}:${s2}`,
-      verify: `${n}*${s1}/${s2}`,
-    };
-  }
-  const k = rng.pick([30000, 45000, 60000, 90000]);
-  const [p1, p2] = rng.shuffle([500, 600, 1000, 1500]).slice(0, 2);
-  const [t1, t2] = [k / p1, k / p2];
-  const story = `電子レンジで 温める 時間は 出力に 反比例する。${p1} W で ${t1} 秒 温める 弁当を ${p2} W で 温めると 何秒?`;
-  return {
-    templateId: 'g1.func.invprop',
-    difficulty: d,
-    prompt: text(story),
-    promptText: story,
-    layout: 'prose',
-    answer: { kind: 'number', value: rat(t2) },
-    hint: '反比例なので (出力)×(時間) が いつも 同じ',
-    explanation: [`${p1} \\times ${t1} = ${k}`, `${text('出力を x W、時間を y 秒と すると')} \\; y = \\frac{${k}}{x}`, `y = ${k} \\div ${p2} = ${t2}`, `${text('答え: ')} ${t2} \\; ${text('秒')}`],
-    mistakes: [mistakeNum(ratOf(t1 * p2, p1), '出力が 大きいほど 時間は 短く なる(反比例)。比例で 考えて いないかな')],
-    tags: ['invprop_use'],
-    key: `invu:m:${k}:${p1}:${p2}`,
-    verify: `${p1}*${t1}/${p2}`,
-  };
-}
-
 function genInvProp(rng: Rng, d: Difficulty): Problem {
   if (d === 1) {
     const kind = weighted(rng, [['scene', 3], ['value', 5], ['constant', 2]]);
@@ -743,8 +690,8 @@ function genInvProp(rng: Rng, d: Difficulty): Problem {
     const kind = weighted(rng, [['find', 3], ['two', 2], ['table', 2], ['value', 3]]);
     return kind === 'find' ? genInvFindA(rng, d) : kind === 'two' ? genInvTwoStep(rng, d) : kind === 'table' ? genInvTable(rng, d) : genInvValue(rng, d);
   }
-  const kind = weighted(rng, [['two', 3], ['findX', 3], ['use', 3]]);
-  return kind === 'two' ? genInvTwoStep(rng, d) : kind === 'findX' ? genInvFindX(rng, d) : genInvUse(rng, d);
+  // 利用(スライドショー・電子レンジ)の 文章題は 出さない: 文が 分かりにくく 難しすぎる(先生の判定 2026-10-16)
+  return rng.bool() ? genInvTwoStep(rng, d) : genInvFindX(rng, d);
 }
 
 // ---------------------------------------------------------------- 座標
@@ -775,8 +722,8 @@ function genCoordRead(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.coord',
     difficulty: d,
-    prompt: `${text('点 A の座標を 答えよ(x座標, y座標 の順に「,」で区切る)')}`,
-    promptText: '点 A の座標を答えよ(x座標, y座標 の順に「,」で区切る)',
+    prompt: `${text('点 A の 座標を 答えよ')}`,
+    promptText: '点 A の座標を答えよ',
     answer: { kind: 'numbers', values: [rat(x), rat(y)], ordered: true },
     hint: '横(x)が 先、縦(y)が 後。左と 下は マイナス',
     explanation: [walk(x, y), `${text('x 座標が')} \\; ${x}${text('、y 座標が')} \\; ${y}`, `${text('答え: ')} ${pt(x, y)}`],
@@ -829,14 +776,18 @@ function genCoordSymmetry(rng: Rng, d: Difficulty): Problem {
     const kind = rng.pick(['x', 'y', 'o'] as const);
     const label = { x: 'x 軸', y: 'y 軸', o: '原点' }[kind];
     const ans: [number, number] = kind === 'x' ? [x, -y] : kind === 'y' ? [-x, y] : [-x, -y];
-    const show = ([a, b]: number[]) => `(${a < 0 ? `−${-a}` : a},\\ ${b < 0 ? `−${-b}` : b})`;
-    const wrongs: { opt: string; say?: string }[] = [
-      { opt: show([x, -y]), say: 'x 軸で 折り返すと y の 符号だけが 変わる。何に ついて 対称か 確かめよう' },
-      { opt: show([-x, y]), say: 'y 軸で 折り返すと x の 符号だけが 変わる。何に ついて 対称か 確かめよう' },
-      { opt: show([-x, -y]), say: '原点に ついて 対称なら x も y も 符号が 変わる。何に ついて 対称か 確かめよう' },
-      { opt: show([y, x]), say: 'x と y を 入れかえるのでは なく、符号を 変えるよ' },
-    ].filter((w) => w.opt !== show(ans));
-    const { answer, mistakes } = choose(rng, show(ans), wrongs);
+    // 座標は 選ばせずに ( , ) の 欄で 答える(先生の指摘 2026-10-16)。取りちがえは よくある まちがいで 拾う
+    const same = (a: number[], b: number[]) => a[0] === b[0] && a[1] === b[1];
+    const mistakes: Mistake[] = [
+      { pt: [x, -y], say: 'x 軸で 折り返すと y の 符号だけが 変わる。何に ついて 対称か 確かめよう' },
+      { pt: [-x, y], say: 'y 軸で 折り返すと x の 符号だけが 変わる。何に ついて 対称か 確かめよう' },
+      { pt: [-x, -y], say: '原点に ついて 対称なら x も y も 符号が 変わる。何に ついて 対称か 確かめよう' },
+      { pt: [y, x], say: 'x と y を 入れかえるのでは なく、符号を 変えるよ' },
+      { pt: [x, y], say: '点 A の まま。折り返した 先の 点を 答えよう' },
+    ]
+      .filter((m) => !same(m.pt, ans))
+      .map((m) => mistakePoint(m.pt[0], m.pt[1], m.say));
+    const answer: Problem['answer'] = { kind: 'numbers', values: [rat(ans[0]), rat(ans[1])], ordered: true };
     return {
       templateId: 'g1.func.coord',
       difficulty: d,
@@ -852,7 +803,7 @@ function genCoordSymmetry(rng: Rng, d: Difficulty): Problem {
       tags: ['coord_symmetry'],
       key: `coord3:${x}:${y}:${kind}`,
       figure: { kind: 'plane', range: RANGE, points: [{ x, y, label: 'A' }] },
-      verify: String(answer.kind === 'choice' ? answer.correct : -1),
+      verify: `[${ans[0]},${ans[1]}]`,
     };
   }
 }
@@ -870,8 +821,8 @@ function genCoordMove(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.coord',
     difficulty: d,
-    prompt: `${text('点 A')} \\; ${pt(x, y)} \\; ${text(`を ${move} だけ 移動した 点の 座標を 答えよ(「,」で区切る)`)}`,
-    promptText: `点 A ${ptPlain(x, y)} を ${move} だけ移動した点の座標を答えよ(「,」で区切る)`,
+    prompt: `${text('点 A')} \\; ${pt(x, y)} \\; ${text(`を ${move} だけ 移動した 点の 座標を 答えよ`)}`,
+    promptText: `点 A ${ptPlain(x, y)} を ${move} だけ移動した点の座標を答えよ`,
     layout: 'prose',
     answer: { kind: 'numbers', values: [rat(nx), rat(ny)], ordered: true },
     hint: '右は x に たす、左は x から ひく。上は y に たす、下は y から ひく',
@@ -918,7 +869,7 @@ function genGraphProp(rng: Rng, d: Difficulty): Problem {
     explanation: [`${text('原点を 通る 直線 → 比例')} \\; y = ax`, `${text('点')} \\; ${pt(px, a * px)} \\; ${text('を 通る')}`, `${a * px} = a \\times ${px} \\; ${text('より')} \\; a = ${a}`, `${text('答え: ')} y = ${propTex(a)}`],
     tags: ['graph_prop'],
     key: `graph:p:${a}:${px}`,
-    figure: { kind: 'plane', range: RANGE, graphs: [{ type: 'prop', a }], points: [{ x: px, y: a * px, label: '' }] },
+    figure: { kind: 'plane', range: RANGE, graphs: [{ type: 'prop', a }] },
     verify: String(answer.kind === 'choice' ? answer.correct : -1),
   };
 }
@@ -946,7 +897,7 @@ function genGraphInv(rng: Rng, d: Difficulty): Problem {
     explanation: [`${text('双曲線 → 反比例')} \\; y = \\frac{a}{x}`, `${text('点')} \\; ${pt(px, py)} \\; ${text('を 通る')}`, `a = ${px} \\times ${paren(py)} = ${a}`, `${text('答え: ')} y = ${invTex(a)}`],
     tags: ['graph_invprop'],
     key: `graph:i:${a}:${px}`,
-    figure: { kind: 'plane', range: RANGE, graphs: [{ type: 'invprop', a }], points: [{ x: px, y: py, label: '' }] },
+    figure: { kind: 'plane', range: RANGE, graphs: [{ type: 'invprop', a }] },
     verify: String(answer.kind === 'choice' ? answer.correct : -1),
   };
 }
@@ -963,7 +914,7 @@ function genGraphPropFrac(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.func.graph',
     difficulty: d,
-    prompt: `${text('この グラフは 比例の グラフ。y を x の 式で 表せ')}`,
+    prompt: `${text('この グラフは 比例の グラフ。\ny を x の 式で 表せ')}`,
     promptText: 'このグラフは比例のグラフ。y を x の式で表せ',
     answer: { kind: 'expression', expected: propInput(p, q) },
     answerLabel: `y = ${propTex(p, q)}`,
@@ -972,7 +923,7 @@ function genGraphPropFrac(rng: Rng, d: Difficulty): Problem {
     mistakes: [mistakeExpr(propInput(q, p), `a は y ÷ x = ${pm(py)} ÷ ${px}。x ÷ y では ないよ`), mistakeExpr(propInput(-p, q), a0(p))],
     tags: ['graph_prop_frac'],
     key: `graph:f:${p}/${q}`,
-    figure: { kind: 'plane', range: RANGE, graphs: [{ type: 'prop', a: p / q }], points: [{ x: px, y: py, label: '' }] },
+    figure: { kind: 'plane', range: RANGE, graphs: [{ type: 'prop', a: p / q }] },
     verify: `${p}/${q}*x`,
   };
 }

@@ -180,8 +180,10 @@ function Plane({ spec }: { spec: PlaneSpec }) {
   const tickLabel = (v: number) => (v < 0 ? `−${-v}` : String(v));
 
   return (
-    <svg class="figure figure-square" viewBox={`0 0 ${S} ${S}`} role="img" aria-label="座標平面">
+    // 教科書と 同じ 白い 紙に 黒い 線・文字(先生の指摘 2026-10-16: 暗い 背景では 読みにくい)
+    <svg class="figure figure-square figure-paper" viewBox={`0 0 ${S} ${S}`} role="img" aria-label="座標平面">
       <defs>{ARROW}</defs>
+      <rect x="0" y="0" width={S} height={S} rx="6" fill="#fff" />
       {/* 格子 */}
       {ticks.map((v) => (
         <g key={`g${v}`} opacity="0.25">
@@ -201,9 +203,9 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       <text x={oPos[0]} y={oPos[1] + 4} text-anchor="middle" font-size="12" fill="currentColor">
         O
       </text>
-      {/* 目盛りの数字(5 の倍数と ±1 だけ、混み合わないように) */}
+      {/* 目盛りの数字は 5 の倍数だけ(±1・±6 まで 書くと 中途半端。先生の指摘 2026-10-16。間は 格子で 数える) */}
       {ticks
-        .filter((v) => Math.abs(v) % 5 === 0 || Math.abs(v) === 1 || Math.abs(v) === R)
+        .filter((v) => Math.abs(v) % 5 === 0)
         .map((v) => {
           // 目盛りの 数は ふつう 軸の 下・左。グラフが 通るなら 上・右へ、どちらも だめなら 書かない(格子で 読める)
           const w = tickLabel(v).length * 6.5;
@@ -226,12 +228,12 @@ function Plane({ spec }: { spec: PlaneSpec }) {
           return (
             <g key={`t${v}`}>
               {xp && (
-                <text x={xp[0]} y={xp[1] + 4} text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">
+                <text x={xp[0]} y={xp[1] + 4} text-anchor="middle" font-size="12" fill="currentColor">
                   {tickLabel(v)}
                 </text>
               )}
               {yp && (
-                <text x={yp[0]} y={yp[1] + 4} text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">
+                <text x={yp[0]} y={yp[1] + 4} text-anchor="middle" font-size="12" fill="currentColor">
                   {tickLabel(v)}
                 </text>
               )}
@@ -240,7 +242,7 @@ function Plane({ spec }: { spec: PlaneSpec }) {
         })}
       {/* グラフ */}
       {spec.graphs?.map((g, i) =>
-        path(g.type, g.a).map((d, k) => <path key={`p${i}-${k}`} d={d} fill="none" stroke="var(--gold-2)" stroke-width="2.4" />),
+        path(g.type, g.a).map((d, k) => <path key={`p${i}-${k}`} d={d} fill="none" stroke="currentColor" stroke-width="2.2" />),
       )}
       {/* グラフの 名前(ア・イ・ウ)。比例の 直線は 右の はし(図の 枠に かかる 手前)に 置く */}
       {spec.graphs?.map((g, i) => {
@@ -262,7 +264,7 @@ function Plane({ spec }: { spec: PlaneSpec }) {
             16,
           ) ?? [lx + 14, ly];
         return (
-          <text key={`l${i}`} x={pos[0]} y={pos[1] + 6} text-anchor="middle" font-size="16" font-weight="bold" fill="var(--gold-2)">
+          <text key={`l${i}`} x={pos[0]} y={pos[1] + 6} text-anchor="middle" font-size="16" font-weight="bold" fill="currentColor">
             {g.label}
           </text>
         );
@@ -270,15 +272,15 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       {/* 補助線 */}
       {spec.guides?.map((p, i) => (
         <g key={`gd${i}`} opacity="0.7">
-          <line x1={px(p.x)} y1={c} x2={px(p.x)} y2={py(p.y)} stroke="var(--sky)" stroke-width="1.2" stroke-dasharray="4 3" />
-          <line x1={c} y1={py(p.y)} x2={px(p.x)} y2={py(p.y)} stroke="var(--sky)" stroke-width="1.2" stroke-dasharray="4 3" />
+          <line x1={px(p.x)} y1={c} x2={px(p.x)} y2={py(p.y)} stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" />
+          <line x1={c} y1={py(p.y)} x2={px(p.x)} y2={py(p.y)} stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" />
         </g>
       ))}
       {/* 点 */}
       {spec.points?.map((p) => (
         <g key={p.label}>
-          <circle cx={px(p.x)} cy={py(p.y)} r="5" fill="var(--ember)" stroke="#fff" stroke-width="1.4" />
-          <text x={px(p.x) + 8} y={py(p.y) - 8} font-size="15" font-weight="bold" fill="var(--ember)">
+          <circle cx={px(p.x)} cy={py(p.y)} r="5" fill="currentColor" stroke="#fff" stroke-width="1.4" />
+          <text x={px(p.x) + 8} y={py(p.y) - 8} font-size="15" font-weight="bold" fill="currentColor">
             {p.label}
           </text>
         </g>

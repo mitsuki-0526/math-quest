@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { AnswerKind, AnswerSpec } from '@/math/template';
 import { parseRational, parseRationalList, toTex, normalizeInput } from '@/math/rational';
 import { parseFactorization } from '@/math/factorization';
@@ -19,7 +19,12 @@ export const keyFlag = (k: string): string => `key:${k}`;
  * 手に入れたときに見せる 力の名前。記号のままだと 読めないもの(^ は 授業で 習わない記号)は 名前で 見せる(先生の要望 2026-09-28)。
  * ここにない記号は そのまま見せる
  */
-const STORY_KEY_NAMES: Record<string, string> = { '^': '累乗', '(': 'かっこ', ')': 'かっこ', '√': 'ルート' };
+const STORY_KEY_NAMES: Record<string, string> = {
+  '^': '累乗',
+  '(': 'かっこ',
+  ')': 'かっこ',
+  '√': 'ルート',
+};
 /** 手に入れた力の 見せ方(「(」「)」は まとめて「かっこ」1 つ) */
 export function storyKeyNames(keys: readonly string[]): string[] {
   return [...new Set(keys.map((k) => STORY_KEY_NAMES[k] ?? k))];
@@ -97,6 +102,20 @@ const KEYS: Key[][] = [
   ],
 ];
 
+/**
+ * 座標(順番の 決まった 2 つの 数)の 答えか。( [ x ] , [ y ] ) の 2 つの 欄で 入れる
+ * (「,」を 打たせるのは 難しい。先生の指摘 2026-10-16)。値は「x,y」の 1 つの 文字列で 持つ(判定は 今までどおり)
+ */
+export function isPointAnswer(a: AnswerSpec): boolean {
+  return a.kind === 'numbers' && !!a.ordered && a.values.length === 2;
+}
+
+/** 「x,y」を 2 つの 欄の 値に 分ける */
+function splitPoint(value: string): [string, string] {
+  const i = value.indexOf(',');
+  return i < 0 ? [value, ''] : [value.slice(0, i), value.slice(i + 1)];
+}
+
 /** マウスや トラックパッドが なく、タッチだけで 使っている(hover が できない) */
 function touchOnly(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
@@ -108,16 +127,37 @@ function letterKeys(answer: AnswerSpec): Key[] {
   const p = parseExpression(answer.expected);
   if (!p) return [];
   const vars = [...new Set(p.terms.flatMap((t) => Object.keys(t.vars)))].sort();
-  return vars.slice(0, 3).map((v) => ({ label: v, caption: v === 'π' ? '円周率 π' : `文字 ${v}`, kinds: ['expression' as AnswerKind] }));
+  return vars
+    .slice(0, 3)
+    .map((v) => ({
+      label: v,
+      caption: v === 'π' ? '円周率 π' : `文字 ${v}`,
+      kinds: ['expression' as AnswerKind],
+    }));
 }
 
-export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submitLabel = 'こうげき (Enter)', fraction }: Props) {
+export function AnswerInput({
+  answer,
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  submitLabel = 'こうげき (Enter)',
+  fraction,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const yRef = useRef<HTMLInputElement>(null);
   const save = useStore(saveStore);
   const flags = save?.flags ?? {};
+  const point = isPointAnswer(answer);
+  /** 座標の 欄で いま 入れている ほう(キーパッドの 数字は ここに 入る) */
+  const [side, setSide] = useState<'x' | 'y'>('x');
+  const [vx, vy] = splitPoint(value);
+  const pointReady = vx.trim() !== '' && vy.trim() !== '';
 
   // 出題が変わったら入力欄にフォーカスを戻す(キーボード操作を止めない)
   useEffect(() => {
+    setSide('x');
     if (!disabled) inputRef.current?.focus();
   }, [answer, disabled]);
 
@@ -140,7 +180,12 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
     return (
       <div class="choice-grid" role="group" aria-label="選択肢">
         {answer.options.map((opt, i) => (
-          <Button key={i} class="choice-btn" disabled={disabled} onClick={() => onSubmit(String(i))}>
+          <Button
+            key={i}
+            class="choice-btn"
+            disabled={disabled}
+            onClick={() => onSubmit(String(i))}
+          >
             <span class="choice-num">{i + 1}</span> <Tex tex={opt} />
           </Button>
         ))}
@@ -149,11 +194,30 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
   }
 
   function press(k: Key) {
+    if (point) {
+      // 座標は いま 入れている 欄に 足す。「,」は y の 欄へ 移る
+      if (k.label === ',') return focusSide('y');
+      const cur = side === 'x' ? vx : vy;
+      const next = k.action === 'backspace' ? cur.slice(0, -1) : cur + (k.insert ?? k.label);
+      onChange(side === 'x' ? `${next},${vy}` : `${vx},${next}`);
+      (side === 'x' ? inputRef : yRef).current?.focus();
+      return;
+    }
     if (k.action === 'backspace') onChange(value.slice(0, -1));
     else onChange(value + (k.insert ?? k.label));
     inputRef.current?.focus();
   }
-  const usable = (k: Key) => (k.kinds ? k.kinds.includes(answer.kind) : TEXT_KINDS.includes(answer.kind));
+  function focusSide(s: 'x' | 'y') {
+    setSide(s);
+    (s === 'x' ? inputRef : yRef).current?.focus();
+  }
+  /** 送れるか(座標は 2 つの 欄が うまってから) */
+  const ready = point ? pointReady : !!value.trim();
+  function submitIfReady() {
+    if (!disabled && ready) onSubmit(value);
+  }
+  const usable = (k: Key) =>
+    k.kinds ? k.kinds.includes(answer.kind) : TEXT_KINDS.includes(answer.kind);
   const locked = (k: Key) => !isKeyUnlocked(flags, k.label);
   const preview = previewTex(answer, value);
   const help = helpFor(answer, isKeyUnlocked(flags, '^'));
@@ -163,36 +227,100 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
       class="answer-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!disabled && value.trim()) onSubmit(value);
+        submitIfReady();
       }}
     >
-      <div class="row">
-        <input
-          ref={inputRef}
-          class="answer-input"
-          value={value}
-          disabled={disabled}
-          autoComplete="off"
-          // タッチだけの 端末(タブレットの形の Chromebook)では 画面の キーボードを 出さない: 問題を 隠してしまうので、
-          // 下の キーパッドで 入れる(キーパッドだけで どの答えも 入れられる)。先輩の先生の意見 2026-09-29
-          inputMode={touchOnly() ? 'none' : answer.kind === 'factorization' ? 'text' : 'decimal'}
-          placeholder={placeholderFor(answer)}
-          aria-label="答え"
-          onInput={(e) => onChange((e.target as HTMLInputElement).value)}
-          onKeyDown={(e) => {
-            // フォームの暗黙送信に頼らず、Enter を明示的に処理する(IME 確定の Enter は isComposing で除外)
-            if (e.key === 'Enter' && !e.isComposing) {
-              e.preventDefault();
-              if (!disabled && value.trim()) onSubmit(value);
-            }
-          }}
-        />
-        <Button primary type="submit" disabled={disabled || !value.trim()}>
-          {submitLabel}
-        </Button>
-      </div>
+      {point ? (
+        <div class="row">
+          <span class="point-input" aria-label="座標">
+            <span class="point-paren">(</span>
+            <input
+              ref={inputRef}
+              class="answer-input point-field"
+              value={vx}
+              disabled={disabled}
+              autoComplete="off"
+              inputMode={touchOnly() ? 'none' : 'decimal'}
+              placeholder="x"
+              aria-label="x 座標"
+              onFocus={() => setSide('x')}
+              onInput={(e) =>
+                onChange(`${(e.target as HTMLInputElement).value.replace(/,/g, '')},${vy}`)
+              }
+              onKeyDown={(e) => {
+                // x の 欄で Enter・「,」→ y の 欄へ(キーボードだけで 入れられるように)
+                if ((e.key === 'Enter' || e.key === ',') && !e.isComposing) {
+                  e.preventDefault();
+                  if (e.key === 'Enter' && pointReady) submitIfReady();
+                  else focusSide('y');
+                }
+              }}
+            />
+            <span class="point-comma">,</span>
+            <input
+              ref={yRef}
+              class="answer-input point-field"
+              value={vy}
+              disabled={disabled}
+              autoComplete="off"
+              inputMode={touchOnly() ? 'none' : 'decimal'}
+              placeholder="y"
+              aria-label="y 座標"
+              onFocus={() => setSide('y')}
+              onInput={(e) =>
+                onChange(`${vx},${(e.target as HTMLInputElement).value.replace(/,/g, '')}`)
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.isComposing) {
+                  e.preventDefault();
+                  if (pointReady) submitIfReady();
+                  else focusSide('x');
+                } else if (e.key === 'Backspace' && vy === '') {
+                  // 空の y で ⌫ → x の 欄へ 戻る
+                  e.preventDefault();
+                  focusSide('x');
+                }
+              }}
+            />
+            <span class="point-paren">)</span>
+          </span>
+          <Button primary type="submit" disabled={disabled || !ready}>
+            {submitLabel}
+          </Button>
+        </div>
+      ) : (
+        <div class="row">
+          <input
+            ref={inputRef}
+            class="answer-input"
+            value={value}
+            disabled={disabled}
+            autoComplete="off"
+            // タッチだけの 端末(タブレットの形の Chromebook)では 画面の キーボードを 出さない: 問題を 隠してしまうので、
+            // 下の キーパッドで 入れる(キーパッドだけで どの答えも 入れられる)。先輩の先生の意見 2026-09-29
+            inputMode={touchOnly() ? 'none' : answer.kind === 'factorization' ? 'text' : 'decimal'}
+            placeholder={placeholderFor(answer)}
+            aria-label="答え"
+            onInput={(e) => onChange((e.target as HTMLInputElement).value)}
+            onKeyDown={(e) => {
+              // フォームの暗黙送信に頼らず、Enter を明示的に処理する(IME 確定の Enter は isComposing で除外)
+              if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault();
+                if (!disabled && value.trim()) onSubmit(value);
+              }
+            }}
+          />
+          <Button primary type="submit" disabled={disabled || !value.trim()}>
+            {submitLabel}
+          </Button>
+        </div>
+      )}
       <div class="answer-preview" aria-live="polite">
-        {preview ? (
+        {point ? (
+          <span class="answer-help">
+            左の 欄に x 座標、右の 欄に y 座標を 入れます(Enter で 右の 欄へ)
+          </span>
+        ) : preview ? (
           <>
             こう読みます: <Tex tex={preview} />
           </>
@@ -224,12 +352,28 @@ export function AnswerInput({ answer, value, onChange, onSubmit, disabled, submi
             class={`key ${locked(k) ? 'locked' : ''}${fraction && k.label === '/' ? ' key-spot' : ''}`}
             disabled={disabled || !usable(k) || locked(k)}
             tabIndex={-1}
-            title={locked(k) ? 'まだ 手に入れていない 力' : k.caption}
+            title={
+              locked(k)
+                ? 'まだ 手に入れていない 力'
+                : point && k.label === ','
+                  ? 'y の 欄へ'
+                  : k.caption
+            }
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => press(k)}
           >
-            <span class={!locked(k) && /^[a-z]$/.test(k.label) ? 'key-var' : undefined}>{locked(k) ? '🔒' : k.label}</span>
-            {k.caption && <span class="key-cap">{locked(k) ? '???' : <MathText text={k.caption} />}</span>}
+            <span class={!locked(k) && /^[a-z]$/.test(k.label) ? 'key-var' : undefined}>
+              {locked(k) ? '🔒' : k.label}
+            </span>
+            {k.caption && (
+              <span class="key-cap">
+                {locked(k) ? (
+                  '???'
+                ) : (
+                  <MathText text={point && k.label === ',' ? 'y の 欄へ' : k.caption} />
+                )}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -296,7 +440,9 @@ function helpFor(a: AnswerSpec, hasPower: boolean): string {
     case 'expression':
       return '文字の式で 答えます。× は 省いて 3x、同じ文字の かけ算は x^2 と 書きます';
     case 'factorization':
-      return hasPower ? '同じ数は × で くり返して OK(2×2×3)。累乗なら 2^2×3(「^」の後ろに 何乗かを 書く)' : '同じ数は × で くり返して 書きます(例: 2×2×3)';
+      return hasPower
+        ? '同じ数は × で くり返して OK(2×2×3)。累乗なら 2^2×3(「^」の後ろに 何乗かを 書く)'
+        : '同じ数は × で くり返して 書きます(例: 2×2×3)';
     default:
       return '';
   }
