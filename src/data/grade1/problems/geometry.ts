@@ -711,7 +711,9 @@ function scaleneTriangle(rng: Rng): Pt[] {
     const d2 = (a: Pt, b: Pt) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
     const s = [d2(pts[0], pts[1]), d2(pts[1], pts[2]), d2(pts[2], pts[0])];
     const area2 = Math.abs((pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) - (pts[2][0] - pts[0][0]) * (pts[1][1] - pts[0][1]));
-    if (area2 > 0 && new Set(s).size === 3) return pts;
+    // 内接円の 半径(面積 × 2 ÷ 周)が 0.55 ます 以上。細い 三角形だと 中に 書く ㋐ が 辺に かかる
+    const per = s.reduce((a, v) => a + Math.sqrt(v), 0);
+    if (area2 > 0 && new Set(s).size === 3 && area2 / per >= 0.55) return pts;
   }
   return [
     [0, 0],
@@ -782,6 +784,10 @@ function makeMove(rng: Rng, kind: MoveKind): MoveFig {
     const [a0, a1, b0, b1] = box(fig.from);
     const [c0, c1, d0, d1] = box(fig.to);
     if (a1 > c0 && c1 > a0 && b1 > d0 && d1 > b0) continue;
+    // 頂点どうし・回転の 中心と 頂点は 2 ます 以上 はなす(B と B′、頂点と O の 名前が 重ならないように)
+    const far = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]) >= 2;
+    if (!fig.from.every((p) => fig.to.every((q) => far(p, q)))) continue;
+    if (fig.center && ![...fig.from, ...fig.to].every((p) => far(p, fig.center!))) continue;
     return fig;
   }
   return makeMove(rng, 'translate');

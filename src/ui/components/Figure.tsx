@@ -122,6 +122,63 @@ function Plane({ spec }: { spec: PlaneSpec }) {
     return [make(1), make(-1)].filter(Boolean);
   }
 
+  // 文字が グラフ・補助線に かからない 場所を えらぶ(先生の指摘 2026-10-16「線と 文字が 被る」)
+  const lines: [number, number][][] = [];
+  for (const g of spec.graphs ?? []) {
+    if (g.type === 'prop') lines.push([[px(-R), py(g.a * -R)], [px(R), py(g.a * R)]]);
+    else
+      for (const sign of [1, -1]) {
+        const pts: [number, number][] = [];
+        for (let i = 0; i <= 120; i++) {
+          const x = sign * (0.18 + (i / 120) * (R - 0.18));
+          if (Math.abs(g.a / x) <= R + 0.5) pts.push([px(x), py(g.a / x)]);
+        }
+        lines.push(pts);
+      }
+  }
+  for (const q of spec.guides ?? [])
+    lines.push(
+      [
+        [px(q.x), c],
+        [px(q.x), py(q.y)],
+      ],
+      [
+        [c, py(q.y)],
+        [px(q.x), py(q.y)],
+      ],
+    );
+  const hit = (cx: number, cy: number, w: number, h: number) =>
+    lines.some((pl) =>
+      pl.some((p0, k) => {
+        if (k + 1 >= pl.length) return false;
+        const p1 = pl[k + 1];
+        // 2 px ごとに 調べる(長い 直線を 50 等分では 文字を 素通りした)
+        const steps = Math.max(1, Math.ceil(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 2));
+        for (let j = 0; j <= steps; j++) {
+          const x = p0[0] + ((p1[0] - p0[0]) * j) / steps;
+          const y = p0[1] + ((p1[1] - p0[1]) * j) / steps;
+          if (Math.abs(x - cx) < w / 2 + 2 && Math.abs(y - cy) < h / 2 + 2) return true;
+        }
+        return false;
+      }),
+    );
+  const firstFree = (cands: [number, number][], w: number, h: number): [number, number] | null => cands.find(([x, y]) => !hit(x, y, w, h)) ?? null;
+  // 原点の O は、軸と 原点を 通る グラフの あいだの いちばん 広い すきまに 置く(3 本の 直線が 4 つの 象限を ふさぐ ことが ある)
+  const oPos = (() => {
+    const dirs = [0, 90, 180, 270];
+    for (const g of spec.graphs ?? []) if (g.type === 'prop') dirs.push(...[0, 180].map((d) => (((Math.atan(g.a) * 180) / Math.PI + d) % 360 + 360) % 360));
+    dirs.sort((p, q) => p - q);
+    let best = 0;
+    let mid = 225;
+    dirs.forEach((d, k) => {
+      const next = k + 1 < dirs.length ? dirs[k + 1] : dirs[0] + 360;
+      if (next - d > best) [best, mid] = [next - d, (d + next) / 2];
+    });
+    const r = Math.max(12, 12 / Math.sin(((Math.min(best, 180) / 2) * Math.PI) / 180));
+    return [c + r * Math.cos((mid * Math.PI) / 180), c - r * Math.sin((mid * Math.PI) / 180)] as [number, number];
+  })();
+  const tickLabel = (v: number) => (v < 0 ? `−${-v}` : String(v));
+
   return (
     <svg class="figure figure-square" viewBox={`0 0 ${S} ${S}`} role="img" aria-label="座標平面">
       <defs>{ARROW}</defs>
@@ -141,22 +198,46 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       <text x={c + 8} y={py(R) - 6} font-size="13" fill="currentColor">
         y
       </text>
-      <text x={c - 10} y={c + 14} font-size="12" fill="currentColor">
+      <text x={oPos[0]} y={oPos[1] + 4} text-anchor="middle" font-size="12" fill="currentColor">
         O
       </text>
       {/* 目盛りの数字(5 の倍数と ±1 だけ、混み合わないように) */}
       {ticks
         .filter((v) => Math.abs(v) % 5 === 0 || Math.abs(v) === 1 || Math.abs(v) === R)
-        .map((v) => (
-          <g key={`t${v}`}>
-            <text x={px(v)} y={c + 15} text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">
-              {v < 0 ? `−${-v}` : v}
-            </text>
-            <text x={c - 6} y={py(v) + 4} text-anchor="end" font-size="11" fill="currentColor" opacity="0.8">
-              {v < 0 ? `−${-v}` : v}
-            </text>
-          </g>
-        ))}
+        .map((v) => {
+          // 目盛りの 数は ふつう 軸の 下・左。グラフが 通るなら 上・右へ、どちらも だめなら 書かない(格子で 読める)
+          const w = tickLabel(v).length * 6.5;
+          const xp = firstFree(
+            [
+              [px(v), c + 11],
+              [px(v), c - 11],
+            ],
+            w,
+            11,
+          );
+          const yp = firstFree(
+            [
+              [c - 6 - w / 2, py(v)],
+              [c + 6 + w / 2, py(v)],
+            ],
+            w,
+            11,
+          );
+          return (
+            <g key={`t${v}`}>
+              {xp && (
+                <text x={xp[0]} y={xp[1] + 4} text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">
+                  {tickLabel(v)}
+                </text>
+              )}
+              {yp && (
+                <text x={yp[0]} y={yp[1] + 4} text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">
+                  {tickLabel(v)}
+                </text>
+              )}
+            </g>
+          );
+        })}
       {/* グラフ */}
       {spec.graphs?.map((g, i) =>
         path(g.type, g.a).map((d, k) => <path key={`p${i}-${k}`} d={d} fill="none" stroke="var(--gold-2)" stroke-width="2.4" />),
@@ -165,8 +246,23 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       {spec.graphs?.map((g, i) => {
         if (!g.label || g.type !== 'prop') return null;
         const x = Math.min(R, (R - 0.4) / Math.abs(g.a)) * 0.92;
+        const [lx, ly] = [px(x), py(g.a * x)];
+        const pos =
+          firstFree(
+            [
+              [lx + 14, ly + (g.a > 0 ? 6 : -6)],
+              [lx - 14, ly + (g.a > 0 ? -8 : 8)],
+              [lx + 14, ly - (g.a > 0 ? 10 : -10)],
+              [lx - 16, ly],
+              [lx + 16, ly],
+              [lx, ly + 16],
+              [lx, ly - 16],
+            ],
+            14,
+            16,
+          ) ?? [lx + 14, ly];
         return (
-          <text key={`l${i}`} x={px(x) + 6} y={py(g.a * x) + (g.a > 0 ? 4 : 14)} font-size="16" font-weight="bold" fill="var(--gold-2)">
+          <text key={`l${i}`} x={pos[0]} y={pos[1] + 6} text-anchor="middle" font-size="16" font-weight="bold" fill="var(--gold-2)">
             {g.label}
           </text>
         );
@@ -198,6 +294,20 @@ function Angles({ spec }: { spec: AnglesSpec }) {
   const c = S / 2;
   const L = 120;
   const pt = (deg: number, r = L) => [c + r * Math.cos((-deg * Math.PI) / 180), c + r * Math.sin((-deg * Math.PI) / 180)] as const;
+  // 図に ある 線の 向き(直線なら 反対向きも)。文字を 置く すきまを さがすのに 使う
+  const allRays = [...spec.rays, ...(spec.throughLines ? spec.rays.map((d) => d + 180) : [])].map((d) => ((d % 360) + 360) % 360).sort((a, b) => a - b);
+  /** 中心の 名前(O)は、線と 線の いちばん 広い すきまに 置く */
+  const centerDir = (() => {
+    let best = 0;
+    let dir = 270;
+    allRays.forEach((d, k) => {
+      const next = k + 1 < allRays.length ? allRays[k + 1] : allRays[0] + 360;
+      if (next - d > best) [best, dir] = [next - d, (d + next) / 2];
+    });
+    // すきまが せまいほど 中心から はなす(文字の 四すみが 両側の 線に かからないように)
+    const r = Math.max(17, 14 / Math.sin(Math.min(best / 2, 90) * (Math.PI / 180)));
+    return { dir, r };
+  })();
 
   return (
     <svg class="figure figure-square" viewBox={`0 0 ${S} ${S}`} role="img" aria-label="角の図">
@@ -219,12 +329,36 @@ function Angles({ spec }: { spec: AnglesSpec }) {
         const a1 = Math.min(spec.rays[m.from], spec.rays[m.to]);
         const a2 = Math.max(spec.rays[m.from], spec.rays[m.to]);
         // 角の 印が 重ならないように、2 つめ以降は 外へ 大きく ずらす(小さい 角の 二等分線で 40° と x が 重なった)
-        const r = 34 + i * 24;
+        const r = 30 + i * 30;
         const [sx, sy] = pt(a1, r);
         const [ex, ey] = pt(a2, r);
         const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
-        const mid = (a1 + a2) / 2;
-        const [lx, ly] = pt(mid, r + 18);
+        // 文字は、角の 中を 通る 半直線(二等分線など)を よけて、いちばん 広い すきまの 真ん中に 置く。
+        // すきまが せまいほど 外へ 出し、文字の 四すみが 両側の 半直線に かからないように する(先生の指摘 2026-10-16「線と 文字が 被る」)
+        const inner = allRays.filter((d) => d > a1 + 0.01 && d < a2 - 0.01);
+        const cuts = [a1, ...inner, a2];
+        let g1 = a1;
+        let g2 = a2;
+        // ほかの 印の 弧が ない すきまを 先に えらぶ(二等分線の 図で、x の 弧の 上に 40° が 乗った)
+        const others = spec.marks.filter((_, j) => j !== i).map((o) => [Math.min(spec.rays[o.from], spec.rays[o.to]), Math.max(spec.rays[o.from], spec.rays[o.to])]);
+        const covered = (deg: number) => others.some(([lo, hi]) => deg > lo && deg < hi);
+        let best = -1;
+        for (let k = 0; k + 1 < cuts.length; k++) {
+          const score = cuts[k + 1] - cuts[k] - (covered((cuts[k] + cuts[k + 1]) / 2) ? 1000 : 0);
+          if (score > best) [best, g1, g2] = [score, cuts[k], cuts[k + 1]];
+        }
+        const half = Math.min(((g2 - g1) / 2) * (Math.PI / 180), Math.PI / 2);
+        const reach = Math.hypot((m.label.length * 9.5) / 2, 9) + 5;
+        let lr = Math.min(108, Math.max(r + 18, reach / Math.sin(half)));
+        // それでも ほかの 弧の 上に くるときは、弧より 外へ ずらす
+        const la = (g1 + g2) / 2;
+        spec.marks.forEach((o, j) => {
+          const lo = Math.min(spec.rays[o.from], spec.rays[o.to]);
+          const hi = Math.max(spec.rays[o.from], spec.rays[o.to]);
+          const rj = 30 + j * 30;
+          if (j !== i && la > lo && la < hi && Math.abs(lr - rj) < 14) lr = rj + 15;
+        });
+        const [lx, ly] = pt(la, lr);
         return (
           <g key={i}>
             <path d={`M${sx},${sy} A${r},${r} 0 ${large} 0 ${ex},${ey}`} fill="none" stroke="var(--gold-2)" stroke-width="2" />
@@ -244,7 +378,7 @@ function Angles({ spec }: { spec: AnglesSpec }) {
         );
       })}
       {spec.center && (
-        <text x={c - 8} y={c + 22} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
+        <text x={pt(centerDir.dir, centerDir.r)[0]} y={pt(centerDir.dir, centerDir.r)[1] + 6} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
           {spec.center}
         </text>
       )}
@@ -264,6 +398,46 @@ function Grid({ spec }: { spec: GridSpec }) {
   const py = (y: number) => pad + (spec.h - y) * cell;
   const fill = { from: 'rgba(230,194,92,0.45)', to: 'rgba(120,180,230,0.40)', other: 'rgba(200,200,200,0.18)' } as const;
   const stroke = { from: 'var(--gold-2)', to: 'var(--sky)', other: 'currentColor' } as const;
+  // 文字を 置く 場所を、三角形の 辺に かからない 所から えらぶ(先生の指摘 2026-10-16「線と 文字が 被る」)
+  const segs = spec.shapes.flatMap((sh) => sh.points.map((q, k) => [px(q[0]), py(q[1]), px(sh.points[(k + 1) % sh.points.length][0]), py(sh.points[(k + 1) % sh.points.length][1])]));
+  const hits = (cx: number, cy: number, w: number, h: number) =>
+    segs.some(([x1, y1, x2, y2]) => {
+      const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 2));
+      for (let j = 0; j <= steps; j++) {
+        const x = x1 + ((x2 - x1) * j) / steps;
+        const y = y1 + ((y2 - y1) * j) / steps;
+        if (Math.abs(x - cx) < w / 2 + 2 && Math.abs(y - cy) < h / 2 + 2) return true;
+      }
+      return false;
+    });
+  // 置いた 文字の 箱(文字どうしも 重ねない。B と B′、頂点と O が 近い ことが ある)
+  const placed: [number, number, number, number][] = [];
+  const overlapsPlaced = (cx: number, cy: number, w: number, h: number) => placed.some(([x, y, pw, ph]) => Math.abs(x - cx) < (w + pw) / 2 + 1 && Math.abs(y - cy) < (h + ph) / 2 + 1);
+  /** (x0, y0) から 好きな 向き(dx, dy)に 近い 順に ためして、辺にも ほかの 文字にも かからない 文字の 中心を 返す */
+  const place = (x0: number, y0: number, dx: number, dy: number, R: number, w: number, h: number): [number, number] => {
+    const base = Math.atan2(dy, dx);
+    for (const r of [R, R + 6, R + 12, R + 18])
+      for (const off of [0, 30, -30, 60, -60, 90, -90, 135, -135, 180]) {
+        const a = base + (off * Math.PI) / 180;
+        const cx = x0 + Math.cos(a) * r;
+        const cy = y0 + Math.sin(a) * r;
+        if (!hits(cx, cy, w, h) && !overlapsPlaced(cx, cy, w, h)) {
+          placed.push([cx, cy, w, h]);
+          return [cx, cy];
+        }
+      }
+    placed.push([x0 + dx * R, y0 + dy * R, w, h]);
+    return [x0 + dx * R, y0 + dy * R];
+  };
+  // 三角形の 名前(㋐・㋑)は 内心に 固定。先に 箱を 登録して おく
+  for (const sh of spec.shapes) {
+    const m = sh.points.length;
+    const sd = (k: number) => Math.hypot(sh.points[(k + 1) % m][0] - sh.points[(k + 2) % m][0], sh.points[(k + 1) % m][1] - sh.points[(k + 2) % m][1]);
+    const pr = sh.points.reduce((a, _, k) => a + sd(k), 0);
+    const ix = m === 3 ? sh.points.reduce((a, [x], k) => a + x * sd(k), 0) / pr : sh.points.reduce((a, [x]) => a + x, 0) / m;
+    const iy = m === 3 ? sh.points.reduce((a, [, y], k) => a + y * sd(k), 0) / pr : sh.points.reduce((a, [, y]) => a + y, 0) / m;
+    placed.push([px(ix), py(iy), 18, 18]);
+  }
   return (
     <svg class="figure" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="方眼の図">
       <defs>{ARROW}</defs>
@@ -275,8 +449,12 @@ function Grid({ spec }: { spec: GridSpec }) {
       ))}
       {spec.shapes.map((sh, i) => {
         const d = sh.points.map(([x, y], k) => `${k === 0 ? 'M' : 'L'}${px(x)},${py(y)}`).join(' ') + ' Z';
-        const cx = sh.points.reduce((a, [x]) => a + x, 0) / sh.points.length;
-        const cy = sh.points.reduce((a, [, y]) => a + y, 0) / sh.points.length;
+        // 名前(㋐)は 内心(3 辺から いちばん 遠い 点)に 置く。重心だと 細い 三角形で 辺に かかった
+        const n = sh.points.length;
+        const side = (k: number) => Math.hypot(sh.points[(k + 1) % n][0] - sh.points[(k + 2) % n][0], sh.points[(k + 1) % n][1] - sh.points[(k + 2) % n][1]);
+        const per = sh.points.reduce((a, _, k) => a + side(k), 0);
+        const cx = n === 3 ? sh.points.reduce((a, [x], k) => a + x * side(k), 0) / per : sh.points.reduce((a, [x]) => a + x, 0) / n;
+        const cy = n === 3 ? sh.points.reduce((a, [, y], k) => a + y * side(k), 0) / per : sh.points.reduce((a, [, y]) => a + y, 0) / n;
         return (
           <g key={`s${i}`}>
             <path d={d} fill={fill[sh.tone]} stroke={stroke[sh.tone]} stroke-width="2.2" stroke-linejoin="round" />
@@ -285,12 +463,23 @@ function Grid({ spec }: { spec: GridSpec }) {
             </text>
             {sh.vertexLabels?.map((t, k) => {
               const [x, y] = sh.points[k];
-              // 頂点の 名前は 図形の 外側(重心から 離れる 向き)に 置く
-              const dx = x - cx;
-              const dy = y - cy;
-              const len = Math.hypot(dx, dy) || 1;
+              // 頂点の 名前は、その 頂点の 2 辺の 外角の 二等分線の 向きに 置く(辺に かからない)
+              const unit = ([ax, ay]: [number, number]) => {
+                const l = Math.hypot(ax - x, ay - y) || 1;
+                return [(ax - x) / l, (ay - y) / l];
+              };
+              const [ux, uy] = unit(sh.points[(k + 1) % n]);
+              const [vx, vy] = unit(sh.points[(k + n - 1) % n]);
+              let dx = -(ux + vx);
+              let dy = -(uy + vy);
+              const len = Math.hypot(dx, dy);
+              if (len < 1e-6) [dx, dy] = [-uy, ux];
+              else [dx, dy] = [dx / len, dy / len];
+              // 文字の 幅(A′ は 広い)の ぶん 横に 長く はなす
+              const R = 12 + Math.abs(dx) * (t.length > 1 ? 6 : 2);
+              const [tx, ty] = place(px(x), py(y), dx, -dy, R, t.length > 1 ? 15 : 10, 13);
               return (
-                <text key={k} x={px(x) + (dx / len) * 13} y={py(y) - (dy / len) * 13 + 5} text-anchor="middle" font-size="14" font-style="italic" fill="currentColor">
+                <text key={k} x={tx} y={ty + 5} text-anchor="middle" font-size="14" font-style="italic" fill="currentColor">
                   {t}
                 </text>
               );
@@ -317,14 +506,27 @@ function Grid({ spec }: { spec: GridSpec }) {
           )}
         </g>
       ))}
-      {spec.points?.map((p) => (
-        <g key={p.label}>
-          <circle cx={px(p.x)} cy={py(p.y)} r="4.5" fill="var(--ember)" stroke="#fff" stroke-width="1.2" />
-          <text x={px(p.x) + 8} y={py(p.y) - 7} font-size="16" font-style="italic" font-weight="bold" fill="var(--ember)">
-            {p.label}
-          </text>
-        </g>
-      ))}
+      {spec.points?.map((p) => {
+        // 点の 名前(O)は、まわりの 三角形から いちばん 離れる 向きに 置く
+        const dirs = [
+          [1, 1],
+          [-1, 1],
+          [1, -1],
+          [-1, -1],
+        ];
+        const near = (ax: number, ay: number) =>
+          Math.min(...spec.shapes.flatMap((s) => s.points.map(([x, y]) => Math.hypot(x - ax, y - ay))), ...spec.shapes.map((s) => Math.hypot(s.points.reduce((a, q) => a + q[0], 0) / s.points.length - ax, s.points.reduce((a, q) => a + q[1], 0) / s.points.length - ay)));
+        const [dx, dy] = dirs.reduce((b, d) => (near(p.x + d[0] * 0.6, p.y + d[1] * 0.6) > near(p.x + b[0] * 0.6, p.y + b[1] * 0.6) ? d : b), dirs[0]);
+        const [tx, ty] = place(px(p.x), py(p.y), dx, -dy, 18, 12, 15);
+        return (
+          <g key={p.label}>
+            <circle cx={px(p.x)} cy={py(p.y)} r="4.5" fill="var(--ember)" stroke="#fff" stroke-width="1.2" />
+            <text x={tx} y={ty + 6} text-anchor="middle" font-size="16" font-style="italic" font-weight="bold" fill="var(--ember)">
+              {p.label}
+            </text>
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -341,6 +543,8 @@ function Sector({ spec }: { spec: SectorSpec }) {
   const y2 = c + r * Math.sin(rad(angle));
   const large = angle > 180 ? 1 : 0;
   const mid = angle / 2;
+  const angleText = spec.angleLabel ?? (spec.angle === null ? 'x°' : `${spec.angle}°`);
+  const angleR = Math.min(95, Math.max(54, (Math.hypot((angleText.length * 9) / 2, 8) + 5) / Math.sin(Math.min(mid, 90) * (Math.PI / 180))));
 
   return (
     <svg class="figure figure-square" viewBox={`0 0 ${S} ${S}`} role="img" aria-label="おうぎ形">
@@ -356,8 +560,16 @@ function Sector({ spec }: { spec: SectorSpec }) {
         stroke="var(--ember)"
         stroke-width="2"
       />
-      <text x={c + 54 * Math.cos(rad(mid))} y={c + 54 * Math.sin(rad(mid)) + 5} text-anchor="middle" font-size="15" font-weight="bold" fill="var(--ember)">
-        {spec.angleLabel ?? (spec.angle === null ? 'x°' : `${spec.angle}°`)}
+      {/* 中心角の 文字: 小さい 角(20°)では 半径に かからないよう 外へ */}
+      <text
+        x={c + angleR * Math.cos(rad(mid))}
+        y={c + angleR * Math.sin(rad(mid)) + 5}
+        text-anchor="middle"
+        font-size="15"
+        font-weight="bold"
+        fill="var(--ember)"
+      >
+        {angleText}
       </text>
       <circle cx={c} cy={c} r="3" fill="currentColor" />
       {spec.note && (
@@ -390,30 +602,31 @@ function Solid({ spec }: { spec: SolidSpec }) {
       {t}
     </text>
   );
+  // 文字は 辺から はなして 置く(先生の指摘 2026-10-16「線と 文字が 被る」)。三つの 面が 集まる 頂点(直方体の C)は 面の 中に 置く
   const vertexNames = () => {
     if (!spec.vertices) return null;
     if (spec.shape === 'prism4')
       return (
         <>
-          {vname(104, 52, 'A')}
-          {vname(60, 86, 'B')}
-          {vname(198, 84, 'C')}
-          {vname(240, 56, 'D')}
-          {vname(122, 166, 'E')}
-          {vname(60, 214, 'F')}
-          {vname(198, 216, 'G')}
-          {vname(242, 176, 'H')}
+          {vname(110, 50, 'A')}
+          {vname(58, 95, 'B')}
+          {vname(178, 109, 'C')}
+          {vname(241, 55, 'D')}
+          {vname(122, 163, 'E')}
+          {vname(58, 213, 'F')}
+          {vname(198, 219, 'G')}
+          {vname(243, 175, 'H')}
         </>
       );
     if (spec.shape === 'prism3')
       return (
         <>
-          {vname(136, 72, 'A')}
-          {vname(70, 210, 'B')}
-          {vname(200, 216, 'C')}
-          {vname(190, 100, 'D')}
-          {vname(112, 240, 'E')}
-          {vname(252, 238, 'F')}
+          {vname(90, 96, 'A')}
+          {vname(50, 220, 'B')}
+          {vname(174, 229, 'C')}
+          {vname(196, 52, 'D')}
+          {vname(169, 190, 'E')}
+          {vname(271, 176, 'F')}
         </>
       );
     return null;
@@ -429,45 +642,45 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M190,90 L230,60 L230,170 L190,200" {...stroke} />
             <path d="M70,200 L110,170 L230,170" {...dash} />
             <path d="M110,170 L110,60" {...dash} />
-            {label(130, 218, l.base)}
-            {label(215, 200, l.base2)}
-            {label(56, 150, l.height)}
+            {label(130, 222, l.base)}
+            {label(227, 205, l.base2)}
+            {label(52, 150, l.height)}
           </>
         );
-      case 'prism3': // 三角柱
+      case 'prism3': // 三角柱(手前の 面 ABC、奥の 面 DEF)
         return (
           <>
-            <path d="M80,200 L140,80 L200,200 Z" {...stroke} />
-            <path d="M80,200 L120,225 L240,225 L200,200" {...stroke} />
-            <path d="M140,80 L180,105 L240,225" {...stroke} />
-            <path d="M180,105 L120,225" {...dash} />
-            {label(140, 218, l.base)}
-            {label(255, 175, l.height)}
+            <path d="M60,210 L100,100 L170,210 Z" {...stroke} />
+            <path d="M100,100 L190,60 L260,170 L170,210" {...stroke} />
+            <path d="M60,210 L150,170 L260,170" {...dash} />
+            <path d="M150,170 L190,60" {...dash} />
+            {label(115, 232, l.base)}
+            {label(228, 209, l.height)}
           </>
         );
       case 'cylinder':
         return (
           <>
-            <ellipse cx="150" cy="70" rx="80" ry="24" {...stroke} />
+            <ellipse cx="150" cy="70" rx="80" ry="28" {...stroke} />
             <path d="M70,70 L70,190" {...stroke} fill="none" />
             <path d="M230,70 L230,190" {...stroke} fill="none" />
-            <path d="M70,190 A80,24 0 0 0 230,190" {...stroke} fill="none" />
-            <path d="M70,190 A80,24 0 0 1 230,190" {...dash} />
+            <path d="M70,190 A80,28 0 0 0 230,190" {...stroke} fill="none" />
+            <path d="M70,190 A80,28 0 0 1 230,190" {...dash} />
             <line x1="150" y1="70" x2="230" y2="70" stroke="var(--gold-2)" stroke-width="1.6" />
-            {label(190, 62, l.radius)}
+            {label(190, 65, l.radius)}
             {label(252, 135, l.height)}
           </>
         );
       case 'pyramid4':
         return (
           <>
-            <path d="M150,50 L70,180 L190,180 Z" {...stroke} />
-            <path d="M150,50 L230,150 L190,180" {...stroke} />
-            <path d="M70,180 L110,205 L230,150" {...dash} />
-            <path d="M150,50 L110,205" {...dash} />
-            <line x1="150" y1="50" x2="150" y2="180" stroke="var(--gold-2)" stroke-width="1.6" stroke-dasharray="4 3" />
-            {label(140, 205, l.base)}
-            {label(166, 120, l.height)}
+            <path d="M150,40 L60,190 L180,190 Z" {...stroke} />
+            <path d="M150,40 L240,150 L180,190" {...stroke} />
+            <path d="M60,190 L120,150 L240,150" {...dash} />
+            <path d="M150,40 L120,150" {...dash} />
+            <line x1="150" y1="40" x2="150" y2="170" stroke="var(--gold-2)" stroke-width="1.6" stroke-dasharray="4 3" />
+            {label(120, 212, l.base)}
+            {label(139, 134, l.height)}
           </>
         );
       case 'cone':
@@ -477,18 +690,18 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M70,175 A80,24 0 0 1 230,175" {...dash} />
             <line x1="150" y1="45" x2="150" y2="175" stroke="var(--gold-2)" stroke-width="1.6" stroke-dasharray="4 3" />
             <line x1="150" y1="175" x2="230" y2="175" stroke="var(--gold-2)" stroke-width="1.6" />
-            {label(190, 196, l.radius)}
+            {label(190, 170, l.radius)}
             {label(166, 115, l.height)}
-            {l.slant && label(100, 110, l.slant)}
+            {l.slant && label(95, 104, l.slant)}
           </>
         );
       case 'sphere':
         return (
           <>
             <circle cx="150" cy="130" r="85" {...stroke} />
-            <ellipse cx="150" cy="130" rx="85" ry="26" {...dash} />
+            <ellipse cx="150" cy="130" rx="85" ry="32" {...dash} />
             <line x1="150" y1="130" x2="235" y2="130" stroke="var(--gold-2)" stroke-width="1.8" />
-            {label(192, 122, l.radius)}
+            {label(192, 124, l.radius)}
             <circle cx="150" cy="130" r="3" fill="currentColor" />
           </>
         );
@@ -544,7 +757,8 @@ function Chart({ spec }: { spec: ChartSpec }) {
   const H = 260;
   const padL = 46;
   const padB = 52;
-  const padT = 16;
+  // 上に 縦の 見出し(度数(人))を 置く すきまを とる(目盛りの 線と 重なった)
+  const padT = 32;
   const max = Math.max(...spec.values, 1);
   const n = spec.values.length;
   const bw = (W - padL - 20) / n;
@@ -595,7 +809,7 @@ function Chart({ spec }: { spec: ChartSpec }) {
         </text>
       )}
       {spec.yTitle && (
-        <text x={14} y={padT + 6} font-size="12" fill="currentColor" opacity="0.85">
+        <text x={padL - 30} y={16} font-size="12" fill="currentColor" opacity="0.85">
           {spec.yTitle}
         </text>
       )}
