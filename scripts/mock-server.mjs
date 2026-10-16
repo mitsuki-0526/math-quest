@@ -9,6 +9,7 @@
  * (リクエストに __email を付けると、その回だけ別の人になる。テスト用)。
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
  * 宝の地図を売るクラスは MOCK_TREASURE_CLASSES(既定 1-2。本物は config の treasure_classes)。
+ *   売るかどうかは MOCK_TREASURE_OPEN(FALSE で 止める。本物は config の treasure_open)。
  *   売る期間は MOCK_TREASURE_FROM / MOCK_TREASURE_UNTIL(例: 2026-11-01、2026-11-01 08:30。本物は config の treasure_from / treasure_until)
  *   GET ?action=__admin&op=treasure_reset で 売り切れを 戻す(本物は treasure シートの行を消す)
  * 授業の管理(先生のメニューの代わり): GET ?action=__admin&op=reset|close|open|summary&token=dev-token
@@ -20,7 +21,7 @@ import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 // 本物と同じ集計にするため、Code.gs の関数を読み込む(関数と定数の定義だけなので そのまま評価できる)
-const gasSummary = new Function(`${readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8')}; return { summarizeTallies, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS, treasurePeriod };`)();
+const gasSummary = new Function(`${readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8')}; return { summarizeTallies, SUMMARY_TARGETS, SUMMARY_MIN_ANSWERS, treasurePeriod, treasureSwitchOn };`)();
 const TOKEN = process.env.MOCK_TOKEN ?? 'dev-token';
 const UNLOCK = (process.env.MOCK_UNLOCK ?? 'g1c1').split(',');
 const ALL = ['g1c1', 'g1c2', 'g1c3', 'g1c4', 'g1c5', 'g1c6', 'g1c7'];
@@ -53,7 +54,8 @@ let treasureBuyers = [];
 /** gas/Code.gs の treasure() と同じ判定 */
 function treasure(cls, num, teacher, buy) {
   if (!teacher && !TREASURE_CLASSES.includes(cls)) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
-  // 期間の 判定は 本物と 同じ 関数を 使う
+  // 売るか・期間の 判定は 本物と 同じ 関数を 使う
+  if (!teacher && !gasSummary.treasureSwitchOn(process.env.MOCK_TREASURE_OPEN ?? '')) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
   const period = teacher ? { open: true } : gasSummary.treasurePeriod(process.env.MOCK_TREASURE_FROM ?? '', process.env.MOCK_TREASURE_UNTIL ?? '', new Date());
   if (!period.open) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false, opensAt: period.opensAt } };
   const rows = treasureBuyers.filter(([c]) => c === cls);

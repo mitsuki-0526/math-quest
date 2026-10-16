@@ -21,12 +21,12 @@ function solveAll(d: SaveData, chapters: string[], correct: number): void {
 type Status = { onSale: boolean; soldOut: boolean; mine: boolean; opensAt?: string };
 type Row = unknown[];
 
-function gas(classes: unknown, from: unknown = '', until: unknown = '') {
+function gas(classes: unknown, from: unknown = '', until: unknown = '', open: unknown = true) {
   const code = readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8');
   const rows: Row[] = [];
   // 後に 書いた 関数宣言が 勝つので、シートや 設定を 読む 関数だけ 差し替える
   const stub = `
-    function readConfig() { return { treasure_classes: __classes, treasure_from: __from, treasure_until: __until }; }
+    function readConfig() { return { treasure_classes: __classes, treasure_from: __from, treasure_until: __until, treasure_open: __open }; }
     function parseSave(row) { return row.save; }
     function logRow() {}
     function treasureSheet() {
@@ -37,7 +37,7 @@ function gas(classes: unknown, from: unknown = '', until: unknown = '') {
       };
     }
     return { treasure: treasure, treasurePeriod: treasurePeriod };`;
-  const mod = new Function('__classes', '__rows', '__from', '__until', `${code}\n${stub}`)(classes, rows, from, until) as {
+  const mod = new Function('__classes', '__rows', '__from', '__until', '__open', `${code}\n${stub}`)(classes, rows, from, until, open) as {
     treasure: (row: unknown, cls: string, num: string, teacher: boolean, buy: boolean) => { treasure: Status };
     treasurePeriod: (from: unknown, until: unknown, now: Date) => { open: boolean; opensAt?: string };
   };
@@ -101,6 +101,17 @@ describe('宝の地図: 売る期間(先生が スプレッドシートで 決�
     expect(period(new Date(2026, 10, 1), '', at('2026-10-20T12:00:00')).opensAt).toBe('11/1');
     expect(period('来月', 'そのうち', at('2026-10-20T12:00:00')).open).toBe(true);
     expect(period('', '', at('2026-10-20T12:00:00')).open).toBe(true);
+  });
+
+  it('treasure_open が FALSE なら 期間に かかわらず 売らない(先生は 試せる)', () => {
+    for (const off of [false, 'FALSE', ' false ']) {
+      const g = gas('1-2', '', '', off);
+      expect(g.call('1-2', '7', true)).toEqual({ onSale: false, soldOut: false, mine: false });
+      expect(g.rows).toHaveLength(0);
+      expect(g.call('teacher', 't1', true, true).mine).toBe(true);
+    }
+    // TRUE・行が ない 古い シート(undefined)では 売る
+    for (const on of [true, 'TRUE', undefined]) expect(gas('1-2', '', '', on).call('1-2', '7', false).onSale).toBe(true);
   });
 
   it('期間の 外では 買えない(先生は 試せる)', () => {

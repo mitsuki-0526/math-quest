@@ -46,6 +46,7 @@
  *   { action:'treasure', class, number, pass, buy } → { ok, treasure:{ onSale, soldOut, mine, opensAt? } }
  *        宝の地図(クラスに 1 枚だけ)。config の treasure_classes に書いたクラスでだけ売る。buy=true なら早い者勝ちで買う
  *        売る期間は config の treasure_from / treasure_until(空なら いつでも)。始まる前は opensAt(「11/1」など)を返す
+ *        config の treasure_open(チェックボックス)を FALSE にすると、期間に かかわらず 売らない
  */
 
 var SHEETS = {
@@ -89,12 +90,14 @@ function setup() {
   ensureConfig('open_hours', ''); // 受付する時間(例: 08:30-12:30,13:20-15:40)。空なら一日中
   ensureConfig('session_epoch', ''); // メニューの「全員をタイトルに戻す」で書き換わる
   ensureConfig('treasure_classes', ''); // 宝の地図を売るクラス(例: 1-2,2-3)。空ならどこでも売らない
+  ensureConfig('treasure_open', false); // 宝の地図を売るか(TRUE / FALSE)。始めは止めておき、先生が TRUE にしたら売る
   ensureConfig('treasure_from', ''); // 宝の地図を売り始める日時(例: 2026-11-01 または 2026-11-01 08:30)。空ならすぐ
   ensureConfig('treasure_until', ''); // 売るのをやめる日(この日の終わりまで売る。時刻も書ける)。空ならずっと
   var roster = ss.getSheetByName('roster');
   // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
   roster.getRange('B:C').setNumberFormat('@');
   ss.getSheetByName('unlock').getRange('A:A').setNumberFormat('@');
+  checkboxConfig('treasure_open');
   if (roster.getLastRow() === 1) roster.getRange(1, 5).setValue('← 生徒の学校アカウント・クラス・出席番号を 1 人 1 行で貼る(memo は自由。氏名は書かなくてよい)');
   var un = ss.getSheetByName('unlock');
   if (un.getLastRow() === 1) {
@@ -682,7 +685,8 @@ function treasureClasses() {
 function treasure(row, cls, num, teacher, buy) {
   var onSale = teacher || treasureClasses().indexOf(cls) >= 0;
   if (!onSale) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
-  // 先生は 期間の 外でも 試せる
+  // 先生は 売るのを 止めているときも、期間の 外でも 試せる
+  if (!teacher && !treasureSwitchOn(readConfig().treasure_open)) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false } };
   var period = teacher ? { open: true } : treasurePeriod(readConfig().treasure_from, readConfig().treasure_until, new Date());
   if (!period.open) return { ok: true, treasure: { onSale: false, soldOut: false, mine: false, opensAt: period.opensAt } };
   var sh = treasureSheet();
@@ -706,6 +710,14 @@ function treasure(row, cls, num, teacher, buy) {
     soldOut = !teacher;
   }
   return { ok: true, treasure: { onSale: true, soldOut: soldOut && !mine, mine: mine } };
+}
+
+/**
+ * treasure_open が 売る 状態か。止めるのは はっきり FALSE のときだけ
+ * (行が ない 古い シートでは、売るクラスと 期間だけで 決まる。open と 同じ 読み方)
+ */
+function treasureSwitchOn(v) {
+  return !(v === false || String(v == null ? '' : v).trim().toUpperCase() === 'FALSE');
 }
 
 /**
@@ -946,6 +958,21 @@ function setConfig(k, v) {
     }
   }
   sh.appendRow([k, v]);
+}
+
+/** 設定の 値の セルを チェックボックスに する(TRUE / FALSE を 打ちまちがえないように) */
+function checkboxConfig(k) {
+  var sh = sheet('config');
+  var keys = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
+  for (var i = 1; i < keys.length; i++) {
+    if (String(keys[i][0]).trim() === k) {
+      var cell = sh.getRange(i + 1, 2);
+      var v = cell.getValue();
+      cell.insertCheckboxes();
+      cell.setValue(treasureSwitchOn(v) && v !== '');
+      return;
+    }
+  }
 }
 
 /** 設定のキーがなければ既定値で足す */
