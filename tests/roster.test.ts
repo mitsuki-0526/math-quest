@@ -30,6 +30,7 @@ function fakeSheet(grid: Cell[][]) {
           row.forEach((v, j) => (grid[r - 1 + i][c - 1 + j] = cell(v)));
         }),
       insertCheckboxes: () => {},
+      setNumberFormat: () => {},
       createFilter: () => (filter = true),
       getColumn: () => c,
     }),
@@ -57,7 +58,7 @@ function gas(grid: Cell[][], classes = '1-1,1-2') {
   const code = readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8');
   const stub = `function logRow() {}
 function readConfig() { return { classes: __classes }; }
-return { rosterEntry: rosterEntry, ensureRosterGradeColumn: ensureRosterGradeColumn, ensureRosterApprovedColumn: ensureRosterApprovedColumn, ensureFilter: ensureFilter, applyRoster: applyRoster, importRoster: importRoster, fullClass: fullClass };`;
+return { rosterEntry: rosterEntry, ensureRosterGradeColumn: ensureRosterGradeColumn, ensureRosterApprovedColumn: ensureRosterApprovedColumn, ensureFilter: ensureFilter, applyRoster: applyRoster, importRoster: importRoster, fullClass: fullClass, numberColumn: numberColumn, numberCell: numberCell };`;
   const mod = new Function('SpreadsheetApp', '__classes', `${code}\n${stub}`)(app, classes) as {
     rosterEntry: (email: string) => Entry;
     ensureRosterGradeColumn: (sheet: unknown) => void;
@@ -66,6 +67,8 @@ return { rosterEntry: rosterEntry, ensureRosterGradeColumn: ensureRosterGradeCol
     applyRoster: (email: string, cls: string, num: string) => { ok: boolean; error?: string; pending?: { class: string; number: string } };
     importRoster: (grade: unknown, kumi: unknown, list: { email: string; name: string }[]) => { added: number; skipped: number; noEmail: number };
     fullClass: (grade: number, kumi: unknown) => string;
+    numberColumn: (sheet: unknown, col: number) => void;
+    numberCell: (num: unknown) => unknown;
   };
   return { sh, ...mod };
 }
@@ -81,7 +84,7 @@ describe('名簿の 申請と 承認(先生が メールを 打たなくて よ�
     expect(g.rosterEntry('new@s.jp')).toEqual({ error: 'not_in_roster' });
     expect(g.applyRoster('new@s.jp', '1-2', '07')).toEqual({ ok: true, pending: { class: '1-2', number: '7' } });
     // 学年と 組に 分けて 書く(grade 1・class 2)
-    expect(plain(g.sh.grid)[1]).toEqual([false, 'new@s.jp', undefined, 1, '2', '7']);
+    expect(plain(g.sh.grid)[1]).toEqual([false, 'new@s.jp', undefined, 1, '2', 7]);
     expect(g.rosterEntry('new@s.jp')).toEqual({ error: 'pending', pending: { class: '1-2', number: '7' } });
     // 先生が 承認に チェック
     g.sh.grid[1][0] = true;
@@ -162,6 +165,22 @@ describe('学年と 組を 分けて 書く 名簿(先生の希望 2026-10-16)',
   });
 });
 
+describe('出席番号は 数(並べ替えが 1, 2, … 10 の 順に なるように。先生の指摘 2026-10-16)', () => {
+  it('setup は 文字で 書かれた 番号を 数に 直す。数字で ない 値は そのまま', () => {
+    const g = gas([HEADER, [true, 'a@s.jp', '', 1, '2', '10', ''], [true, 'b@s.jp', '', 1, '2', ' 2 ', ''], [true, 'c@s.jp', '', 1, '2', 3, ''], [true, 'd@s.jp', '', 1, '2', 't1a2b3', '']]);
+    g.numberColumn(g.sh, 6);
+    expect(g.sh.grid.slice(1).map((r) => r[5])).toEqual([10, 2, 3, 't1a2b3']);
+    // 数に しても これまでどおり 入れる
+    expect(g.rosterEntry('a@s.jp')).toEqual({ class: '1-2', number: '10', grade: 1 });
+  });
+
+  it('書く 値: 数字だけなら 数、先生用の 記号は 文字', () => {
+    const g = gas([HEADER]);
+    expect(g.numberCell('07')).toBe(7);
+    expect(g.numberCell('t1a2b3')).toBe("'t1a2b3");
+  });
+});
+
 describe('Classroom からの 取り込み', () => {
   it('メール・氏名・学年・クラスを 承認ずみで 足す。番号は 空で、生徒が 申請すると その行に 入る', () => {
     const g = gas([HEADER, [true, 'old@s.jp', '', 1, '1-2', '1', '']]);
@@ -177,7 +196,7 @@ describe('Classroom からの 取り込み', () => {
     // 生徒が 番号を 申請 → 同じ 行に 入り、先生の 承認待ちに なる
     expect(g.applyRoster('a@s.jp', '1-2', '9').ok).toBe(true);
     expect(g.sh.grid).toHaveLength(3);
-    expect(plain(g.sh.grid)[2].slice(0, 6)).toEqual([false, 'a@s.jp', '山田 花子', 1, '2', '9']);
+    expect(plain(g.sh.grid)[2].slice(0, 6)).toEqual([false, 'a@s.jp', '山田 花子', 1, '2', 9]);
   });
 
   it('氏名の 列が ない 名簿には email の 右に 足す', () => {

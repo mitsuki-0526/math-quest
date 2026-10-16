@@ -105,7 +105,11 @@ function setup() {
   // 「1-2」が日付に変わらないよう、クラス・番号の列は書式なしテキストにしておく
   var cols = rosterColumns(roster.getRange(1, 1, 1, Math.max(roster.getLastColumn(), 1)).getValues()[0]);
   roster.getRange(1, cols['class'], roster.getMaxRows(), 1).setNumberFormat('@');
-  roster.getRange(1, cols.number, roster.getMaxRows(), 1).setNumberFormat('@');
+  // 出席番号は 数に する(文字のままだと 並べ替えで 1, 10, 11, 2 … の 順に なる。先生の指摘 2026-10-16)
+  numberColumn(roster, cols.number);
+  numberColumn(ss.getSheetByName('students'), SHEETS.students.indexOf('number') + 1);
+  var tsh = ss.getSheetByName('treasure');
+  if (tsh) numberColumn(tsh, SHEETS.treasure.indexOf('number') + 1);
   ss.getSheetByName('unlock').getRange('A:A').setNumberFormat('@');
   // 学年・クラスで 絞り込めるように(見出しの ▼ から 選ぶ)
   ensureFilter(roster);
@@ -531,7 +535,7 @@ function login(cls, num, pass) {
     if (!pass) return { ok: false, error: 'missing_pass' };
     var salt = Utilities.getUuid();
     var sh = sheet('students');
-    sh.appendRow([literal(key(cls, num)), literal(cls), literal(num), hashPass(pass, salt), salt, '', '', '', now, now]);
+    sh.appendRow([literal(key(cls, num)), literal(cls), numberCell(num), hashPass(pass, salt), salt, '', '', '', now, now]);
     logRow('register', cls, num, '');
     return { ok: true, isNew: true, save: null, unlock: unlockFor(cls, teacher), teacher: teacher };
   }
@@ -658,7 +662,7 @@ function writeFeedback(cls, num, f) {
   sh.appendRow([
     new Date().toISOString(),
     literal(cls),
-    literal(num),
+    numberCell(num),
     Math.round(fun),
     label,
     asText(String(f.comment || '').slice(0, FEEDBACK_MAX)),
@@ -735,7 +739,7 @@ function treasure(row, cls, num, teacher, buy) {
   if (buy && !mine && !soldOut) {
     var save = parseSave(row);
     var player = (save && save.player) || {};
-    sh.appendRow([new Date().toISOString(), literal(cls), literal(num), asText(String(player.name || '').slice(0, 20)), Number(player.level || 0), teacher ? '先生(試し)' : '']);
+    sh.appendRow([new Date().toISOString(), literal(cls), numberCell(num), asText(String(player.name || '').slice(0, 20)), Number(player.level || 0), teacher ? '先生(試し)' : '']);
     logRow('treasure', cls, num, '宝の地図を買った');
     mine = true;
     soldOut = !teacher;
@@ -794,7 +798,7 @@ function treasureSheet() {
     sh = ss.insertSheet('treasure');
     sh.appendRow(SHEETS.treasure);
     sh.setFrozenRows(1);
-    sh.getRange('B:C').setNumberFormat('@');
+    sh.getRange('B:B').setNumberFormat('@');
   }
   return sh;
 }
@@ -916,7 +920,7 @@ function applyRoster(email, clsIn, numIn) {
   sh.getRange(row, cols.email).setValue(asText(email));
   if (split) sh.getRange(row, cols.grade).setValue(sc.grade);
   sh.getRange(row, cols['class']).setValue(literal(split ? sc.kumi : cls));
-  sh.getRange(row, cols.number).setValue(literal(num));
+  sh.getRange(row, cols.number).setValue(numberCell(num));
   if (cols.approved) {
     sh.getRange(row, cols.approved).insertCheckboxes();
     sh.getRange(row, cols.approved).setValue(false);
@@ -1240,7 +1244,7 @@ function handleAccount(email, body) {
     if (entry.grade) account.grade = entry.grade;
     if (body.action === 'login') {
       if (!row) {
-        sheet('students').appendRow([literal(key(cls, num)), literal(cls), literal(num), '', '', '', '', '', now, now]);
+        sheet('students').appendRow([literal(key(cls, num)), literal(cls), numberCell(num), '', '', '', '', '', now, now]);
         logRow('register', cls, num, '');
         return { ok: true, isNew: true, save: null, unlock: unlockFor(cls, teacher), teacher: teacher, account: account };
       }
@@ -1418,6 +1422,35 @@ function setCell(rowIndex, column, value) {
 function cellText(v) {
   if (v instanceof Date) return v.getMonth() + 1 + '-' + v.getDate();
   return String(v == null ? '' : v).trim();
+}
+
+/** 出席番号を シートに 書く 値。数字だけなら 数(並べ替えが 1, 2, … 10 の 順に なる)、先生用の「t1a2b3」などは 文字 */
+function numberCell(num) {
+  var n = String(num == null ? '' : num).trim();
+  return /^\d{1,6}$/.test(n) ? Number(n) : literal(n);
+}
+
+/**
+ * 番号の 列を 数に する。前の版が 文字(「'7」)で 書いた 番号も 数に 直す(行の 対応は 変わらない。
+ * 名簿・students の 照合は どちらも 文字に そろえてから 比べるので、数に しても 読める)
+ */
+function numberColumn(sh, col) {
+  if (!sh || col < 1) return;
+  var last = sh.getLastRow();
+  sh.getRange(2, col, Math.max(sh.getMaxRows() - 1, 1), 1).setNumberFormat('0');
+  if (last < 2) return;
+  var range = sh.getRange(2, col, last - 1, 1);
+  var values = range.getValues();
+  var changed = false;
+  var out = values.map(function (r) {
+    var v = r[0];
+    if (typeof v === 'string' && /^\s*\d{1,6}\s*$/.test(v)) {
+      changed = true;
+      return [Number(v)];
+    }
+    return [v];
+  });
+  if (changed) range.setValues(out);
 }
 
 /** クラス・番号をシートに書くときは ' を付けて文字列に固定する(「1-2」が日付に、「07」が 7 に変わらないように) */
