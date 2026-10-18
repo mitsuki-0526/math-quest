@@ -21,15 +21,13 @@ const UNIT = '平面図形';
 
 // ---------------------------------------------------------------- 角
 
-/** 角の 答え(度)。数だけ 答える */
-const ANGLE_Q = '(単位は 度、数だけ 答える)';
-
 function angleProblem(d: Difficulty, p: Pick<Problem, 'hint' | 'explanation' | 'tags' | 'key' | 'figure' | 'mistakes' | 'verify'> & { q: string; x: number }): Problem {
   return {
     templateId: 'g1.geo.angle',
     difficulty: d,
-    prompt: text(`${p.q}${ANGLE_Q}`),
-    promptText: `${p.q}${ANGLE_Q}`,
+    // 問題文は「何度?」まで(先生の指摘 2026-10-18。答えの 欄は 数だけ 入る)
+    prompt: text(p.q),
+    promptText: p.q,
     answer: { kind: 'number', value: rat(p.x) },
     layout: 'prose',
     hint: p.hint,

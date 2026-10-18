@@ -99,6 +99,12 @@ function NumberLine({ spec }: { spec: NumberLineSpec }) {
  */
 const PLANE_MARK = '#d32f2f';
 
+/** 角の 図で 求める 角(x)。座標平面と 同じ 赤(先生の指摘 2026-10-18: 求める 部分だけ 赤く) */
+const ASK_MARK = PLANE_MARK;
+
+/** 図の 中の 文字(x)の 書体。styles.css の .mt-var と 同じ */
+const MATH_FONT = "'MQ Math', KaTeX_Math, 'Times New Roman', serif";
+
 function Plane({ spec }: { spec: PlaneSpec }) {
   const R = spec.range ?? 6;
   const S = 360; // 1辺の長さ
@@ -317,65 +323,99 @@ function Angles({ spec }: { spec: AnglesSpec }) {
     return { dir, r };
   })();
 
+  // 紙は 図の ある ところだけに 切る(正方形の ままだと 半直線が 片側だけの 図で 白い 余白が 大きく、戦闘の 窓では 図が 小さく なる)
+  const used: (readonly [number, number])[] = [[c, c]];
+  const marks = spec.marks.map((m, i) => {
+    // 文字(x など)の 印が 求める 角。数(130°)は わかっている 角なので 黒
+    const ask = !m.label.includes('°');
+    const color = ask ? ASK_MARK : 'currentColor';
+    // 小さい 角度から 大きい 角度へ 描く(半直線の 順に よらず、内側の 弧に なる)
+    const a1 = Math.min(spec.rays[m.from], spec.rays[m.to]);
+    const a2 = Math.max(spec.rays[m.from], spec.rays[m.to]);
+    // 角の 印が 重ならないように、2 つめ以降は 外へ 大きく ずらす(小さい 角の 二等分線で 40° と x が 重なった)
+    const r = 30 + i * 30;
+    const [sx, sy] = pt(a1, r);
+    const [ex, ey] = pt(a2, r);
+    const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
+    // 文字は、角の 中を 通る 半直線(二等分線など)を よけて、いちばん 広い すきまの 真ん中に 置く。
+    // すきまが せまいほど 外へ 出し、文字の 四すみが 両側の 半直線に かからないように する(先生の指摘 2026-10-16「線と 文字が 被る」)
+    const inner = allRays.filter((d) => d > a1 + 0.01 && d < a2 - 0.01);
+    const cuts = [a1, ...inner, a2];
+    let g1 = a1;
+    let g2 = a2;
+    // ほかの 印の 弧が ない すきまを 先に えらぶ(二等分線の 図で、x の 弧の 上に 40° が 乗った)
+    const others = spec.marks.filter((_, j) => j !== i).map((o) => [Math.min(spec.rays[o.from], spec.rays[o.to]), Math.max(spec.rays[o.from], spec.rays[o.to])]);
+    const covered = (deg: number) => others.some(([lo, hi]) => deg > lo && deg < hi);
+    let best = -1;
+    for (let k = 0; k + 1 < cuts.length; k++) {
+      const score = cuts[k + 1] - cuts[k] - (covered((cuts[k] + cuts[k + 1]) / 2) ? 1000 : 0);
+      if (score > best) [best, g1, g2] = [score, cuts[k], cuts[k + 1]];
+    }
+    const half = Math.min(((g2 - g1) / 2) * (Math.PI / 180), Math.PI / 2);
+    const reach = Math.hypot((m.label.length * 9.5) / 2, 9) + 5;
+    let lr = Math.min(108, Math.max(r + 18, reach / Math.sin(half)));
+    // それでも ほかの 弧の 上に くるときは、弧より 外へ ずらす
+    const la = (g1 + g2) / 2;
+    spec.marks.forEach((o, j) => {
+      const lo = Math.min(spec.rays[o.from], spec.rays[o.to]);
+      const hi = Math.max(spec.rays[o.from], spec.rays[o.to]);
+      const rj = 30 + j * 30;
+      if (j !== i && la > lo && la < hi && Math.abs(lr - rj) < 14) lr = rj + 15;
+    });
+    const [lx, ly] = pt(la, lr);
+    for (let a = a1; a <= a2; a += 5) used.push(pt(a, r));
+    used.push([lx - 12, ly - 12], [lx + 12, ly + 12]);
+    return (
+      <g key={i}>
+        {/* 求める 角は 中を うすく 塗って、どこの 角かを 一目で 分かるように */}
+        {ask && <path d={`M${c},${c} L${sx},${sy} A${r},${r} 0 ${large} 0 ${ex},${ey} Z`} fill={ASK_MARK} fill-opacity="0.15" stroke="none" />}
+        <path d={`M${sx},${sy} A${r},${r} 0 ${large} 0 ${ex},${ey}`} fill="none" stroke={color} stroke-width={ask ? 2.6 : 1.6} />
+        {/* x は 教科書と 同じ 数式の 斜体(入力欄・会話の 文字式と 同じ 書体。先生の指摘 2026-10-18) */}
+        <text
+          x={lx}
+          y={ly + 5}
+          text-anchor="middle"
+          font-size={ask ? 21 : 16}
+          font-weight={ask ? 'normal' : 'bold'}
+          font-family={ask ? MATH_FONT : undefined}
+          fill={color}
+        >
+          {m.label}
+        </text>
+      </g>
+    );
+  });
+  for (const deg of spec.rays) {
+    used.push(pt(deg), pt(deg, L + 28));
+    if (spec.throughLines) used.push(pt(deg + 180), pt(deg + 180, L + 28));
+  }
+  const [cx, cy] = pt(centerDir.dir, centerDir.r);
+  if (spec.center) used.push([cx - 12, cy - 12], [cx + 12, cy + 12]);
+  const pad = 6;
+  const x0 = Math.max(0, Math.min(...used.map((q) => q[0])) - pad);
+  const y0 = Math.max(0, Math.min(...used.map((q) => q[1])) - pad);
+  const x1 = Math.min(S, Math.max(...used.map((q) => q[0])) + pad);
+  const y1 = Math.min(S, Math.max(...used.map((q) => q[1])) + pad);
+  // 切った ぶん 幅も 縮める(細い 図だけ 大きく 描かれないように。320px が 正方形の ときの 幅)
+
   return (
-    <svg class="figure figure-square" viewBox={`0 0 ${S} ${S}`} role="img" aria-label="角の図">
+    // 座標平面と 同じく 白い 紙に 黒い 線(先生の指摘 2026-10-18)
+    <svg class="figure figure-square figure-paper" viewBox={`${x0} ${y0} ${x1 - x0} ${y1 - y0}`} style={{ maxWidth: `${((x1 - x0) / S) * 320}px` }} role="img" aria-label="角の図">
+      <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} rx="6" fill="#fff" />
       {spec.rays.map((deg, i) => {
-        const [x1, y1] = pt(deg);
-        const [x2, y2] = spec.throughLines ? pt(deg + 180) : ([c, c] as const);
-        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" stroke-width="2" />;
+        const [xa, ya] = pt(deg);
+        const [xb, yb] = spec.throughLines ? pt(deg + 180) : ([c, c] as const);
+        return <line key={i} x1={xa} y1={ya} x2={xb} y2={yb} stroke="currentColor" stroke-width="2" />;
       })}
       {spec.outline && (
         <path
           d={spec.rays.map((deg, i) => `${i === 0 ? 'M' : 'L'}${pt(deg)[0]},${pt(deg)[1]}`).join(' ') + ' Z'}
-          fill="rgba(230,194,92,0.10)"
+          fill="none"
           stroke="currentColor"
           stroke-width="2"
         />
       )}
-      {spec.marks.map((m, i) => {
-        // 小さい 角度から 大きい 角度へ 描く(半直線の 順に よらず、内側の 弧に なる)
-        const a1 = Math.min(spec.rays[m.from], spec.rays[m.to]);
-        const a2 = Math.max(spec.rays[m.from], spec.rays[m.to]);
-        // 角の 印が 重ならないように、2 つめ以降は 外へ 大きく ずらす(小さい 角の 二等分線で 40° と x が 重なった)
-        const r = 30 + i * 30;
-        const [sx, sy] = pt(a1, r);
-        const [ex, ey] = pt(a2, r);
-        const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
-        // 文字は、角の 中を 通る 半直線(二等分線など)を よけて、いちばん 広い すきまの 真ん中に 置く。
-        // すきまが せまいほど 外へ 出し、文字の 四すみが 両側の 半直線に かからないように する(先生の指摘 2026-10-16「線と 文字が 被る」)
-        const inner = allRays.filter((d) => d > a1 + 0.01 && d < a2 - 0.01);
-        const cuts = [a1, ...inner, a2];
-        let g1 = a1;
-        let g2 = a2;
-        // ほかの 印の 弧が ない すきまを 先に えらぶ(二等分線の 図で、x の 弧の 上に 40° が 乗った)
-        const others = spec.marks.filter((_, j) => j !== i).map((o) => [Math.min(spec.rays[o.from], spec.rays[o.to]), Math.max(spec.rays[o.from], spec.rays[o.to])]);
-        const covered = (deg: number) => others.some(([lo, hi]) => deg > lo && deg < hi);
-        let best = -1;
-        for (let k = 0; k + 1 < cuts.length; k++) {
-          const score = cuts[k + 1] - cuts[k] - (covered((cuts[k] + cuts[k + 1]) / 2) ? 1000 : 0);
-          if (score > best) [best, g1, g2] = [score, cuts[k], cuts[k + 1]];
-        }
-        const half = Math.min(((g2 - g1) / 2) * (Math.PI / 180), Math.PI / 2);
-        const reach = Math.hypot((m.label.length * 9.5) / 2, 9) + 5;
-        let lr = Math.min(108, Math.max(r + 18, reach / Math.sin(half)));
-        // それでも ほかの 弧の 上に くるときは、弧より 外へ ずらす
-        const la = (g1 + g2) / 2;
-        spec.marks.forEach((o, j) => {
-          const lo = Math.min(spec.rays[o.from], spec.rays[o.to]);
-          const hi = Math.max(spec.rays[o.from], spec.rays[o.to]);
-          const rj = 30 + j * 30;
-          if (j !== i && la > lo && la < hi && Math.abs(lr - rj) < 14) lr = rj + 15;
-        });
-        const [lx, ly] = pt(la, lr);
-        return (
-          <g key={i}>
-            <path d={`M${sx},${sy} A${r},${r} 0 ${large} 0 ${ex},${ey}`} fill="none" stroke="var(--gold-2)" stroke-width="2" />
-            <text x={lx} y={ly + 5} text-anchor="middle" font-size="16" font-weight="bold" fill="var(--gold-2)">
-              {m.label}
-            </text>
-          </g>
-        );
-      })}
+      {marks}
       {spec.rayLabels?.map((t, i) => {
         if (!t) return null;
         const [x, y] = pt(spec.rays[i], L + 16);
@@ -386,7 +426,7 @@ function Angles({ spec }: { spec: AnglesSpec }) {
         );
       })}
       {spec.center && (
-        <text x={pt(centerDir.dir, centerDir.r)[0]} y={pt(centerDir.dir, centerDir.r)[1] + 6} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
+        <text x={cx} y={cy + 6} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
           {spec.center}
         </text>
       )}
