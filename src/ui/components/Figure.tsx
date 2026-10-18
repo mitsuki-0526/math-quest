@@ -433,13 +433,13 @@ function Angles({ spec }: { spec: AnglesSpec }) {
         if (!t) return null;
         const [x, y] = pt(spec.rays[i], L + 16);
         return (
-          <text key={`r${i}`} x={x} y={y + 6} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
+          <text key={`r${i}`} x={x} y={y + 6} text-anchor="middle" font-size="17" fill="currentColor">
             {t}
           </text>
         );
       })}
       {spec.center && (
-        <text x={cx} y={cy + 6} text-anchor="middle" font-size="17" font-style="italic" fill="currentColor">
+        <text x={cx} y={cy + 6} text-anchor="middle" font-size="17" fill="currentColor">
           {spec.center}
         </text>
       )}
@@ -542,7 +542,7 @@ function Grid({ spec }: { spec: GridSpec }) {
               const R = 12 + Math.abs(dx) * (t.length > 1 ? 6 : 2);
               const [tx, ty] = place(px(x), py(y), dx, -dy, R, t.length > 1 ? 15 : 10, 13);
               return (
-                <text key={k} x={tx} y={ty + 5} text-anchor="middle" font-size="14" font-style="italic" fill="currentColor">
+                <text key={k} x={tx} y={ty + 5} text-anchor="middle" font-size="14" fill="currentColor">
                   {t}
                 </text>
               );
@@ -563,7 +563,7 @@ function Grid({ spec }: { spec: GridSpec }) {
             marker-end={l.arrow ? 'url(#fig-arrow)' : undefined}
           />
           {l.label && (
-            <text x={px(l.x2) + 6} y={py(l.y2) + (l.y2 > l.y1 ? -4 : 14)} font-size="16" font-style="italic" fill="currentColor">
+            <text x={px(l.x2) + 6} y={py(l.y2) + (l.y2 > l.y1 ? -4 : 14)} font-size="16" fill="currentColor">
               {l.label}
             </text>
           )}
@@ -584,7 +584,7 @@ function Grid({ spec }: { spec: GridSpec }) {
         return (
           <g key={p.label}>
             <circle cx={px(p.x)} cy={py(p.y)} r="4.5" fill="currentColor" stroke="#fff" stroke-width="1.2" />
-            <text x={tx} y={ty + 6} text-anchor="middle" font-size="16" font-style="italic" font-weight="bold" fill="currentColor">
+            <text x={tx} y={ty + 6} text-anchor="middle" font-size="16" font-weight="bold" fill="currentColor">
               {p.label}
             </text>
           </g>
@@ -658,7 +658,7 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
               <g key={i}>
                 <circle cx={px(it.p[0])} cy={py(it.p[1])} r="3.5" fill={color(it.tone)} />
                 {it.label && (
-                  <text x={px(it.p[0]) + Math.cos(a) * 15} y={py(it.p[1]) - Math.sin(a) * 15 + 6} text-anchor="middle" font-size="17" font-style="italic" fill={color(it.tone)}>
+                  <text x={px(it.p[0]) + Math.cos(a) * 15} y={py(it.p[1]) - Math.sin(a) * 15 + 6} text-anchor="middle" font-size="17" fill={color(it.tone)}>
                     {it.label}
                   </text>
                 )}
