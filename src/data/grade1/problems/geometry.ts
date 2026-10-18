@@ -163,13 +163,17 @@ function angleRight(rng: Rng, d: Difficulty): Problem {
     explanation: [askBOD ? text('∠BOD = ∠COD − ∠BOC') : text('∠AOC = ∠AOB − ∠BOC'), `90^\\circ - ${b}^\\circ = ${c}^\\circ`, text('(∠AOC と ∠BOD は 等しい)'), `${text('答え: ')} ${c}`],
     tags: ['angle_right'],
     key: `ang:rt:${b}:${askBOD}`,
-    // ∠AOB・∠COD の 90° も 図に 書く(先生の指摘 2026-10-18)
+    // ∠AOB・∠COD は 直角の 記号で 示す(先生の指摘 2026-10-18)
     figure: {
       kind: 'angles',
       rays: [0, c, 90, c + 90],
       rayLabels: ['A', 'C', 'B', 'D'],
       center: 'O',
-      marks: [{ from: 1, to: 2, label: `${b}°` }, askBOD ? { from: 2, to: 3, label: 'x' } : { from: 0, to: 1, label: 'x' }, { from: 0, to: 2, label: '90°' }, { from: 1, to: 3, label: '90°' }],
+      marks: [{ from: 1, to: 2, label: `${b}°` }, askBOD ? { from: 2, to: 3, label: 'x' } : { from: 0, to: 1, label: 'x' }],
+      rights: [
+        [0, 2],
+        [1, 3],
+      ],
     },
     mistakes: [mistakeNum(b, `∠BOC = ${b}° と 同じでは ないよ。90° から ひこう`), mistakeNum(90 + b, '90° に たすのでは なく、重なりの ∠BOC を ひくよ'), mistakeNum(180 - b, '一直線では なく 90° から ひこう')],
     verify: `90-${b}`,

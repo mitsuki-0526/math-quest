@@ -45,6 +45,8 @@ export interface AnglesSpec {
    * 先生の指摘 2026-10-18「移動する 三角形が どれか 分かりやすく」)
    */
   fills?: { from: number; to: number; tone: 'ink' | 'ask' }[];
+  /** 直角の 記号(小さな 四角)を 付ける 2 本の 半直線の 番号(先生の指摘 2026-10-18「90° は 直角の 記号だけで」) */
+  rights?: [number, number][];
 }
 
 /** おうぎ形(第5章) */
@@ -64,7 +66,7 @@ export interface SolidSpec {
   kind: 'solid';
   shape: 'prism3' | 'prism4' | 'cylinder' | 'pyramid4' | 'cone' | 'sphere';
   /** 寸法のラベル(底面の辺・半径・高さなど) */
-  labels: { base?: string; base2?: string; height?: string; radius?: string; slant?: string };
+  labels: { base?: string; base2?: string; height?: string; radius?: string; slant?: string; diameter?: string };
   /** 頂点の 名前を 書く(直方体 A〜H・三角柱 A〜F)。辺や 面の 位置関係を 問う ときに 使う */
   vertices?: boolean;
 }

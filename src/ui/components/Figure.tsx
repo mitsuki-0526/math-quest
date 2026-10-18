@@ -325,9 +325,8 @@ function Angles({ spec }: { spec: AnglesSpec }) {
     return { dir, r };
   })();
 
-  // 角の 印の 弧の 半径。2 つめ以降は 外へ ずらす(小さい 角の 二等分線で 40° と x が 重なった)。
-  // 印が 4 つ(90° を 2 つ 重ねた 図)では 間を つめて 半直線の 長さに 収める
-  const arcR = (i: number) => (spec.marks.length >= 4 ? 26 + i * 21 : 30 + i * 30);
+  // 角の 印の 弧の 半径。2 つめ以降は 外へ ずらす(小さい 角の 二等分線で 40° と x が 重なった)
+  const arcR = (i: number) => 30 + i * 30;
   // 紙は 図の ある ところだけに 切る(正方形の ままだと 半直線が 片側だけの 図で 白い 余白が 大きく、戦闘の 窓では 図が 小さく なる)
   const used: (readonly [number, number])[] = [[c, c]];
   const marks = spec.marks.map((m, i) => {
@@ -420,6 +419,12 @@ function Angles({ spec }: { spec: AnglesSpec }) {
           stroke="none"
         />
       ))}
+      {spec.rights?.map(([f, t], i) => {
+        // 直角の 記号: 2 本の 半直線の 上に 12px の 四角
+        const [ax, ay] = pt(spec.rays[f], 12);
+        const [bx, by] = pt(spec.rays[t], 12);
+        return <path key={`ra${i}`} d={`M${ax},${ay} L${ax + bx - c},${ay + by - c} L${bx},${by}`} fill="none" stroke="currentColor" stroke-width="1.4" />;
+      })}
       {spec.outline && (
         <path
           d={spec.rays.map((deg, i) => `${i === 0 ? 'M' : 'L'}${pt(deg)[0]},${pt(deg)[1]}`).join(' ') + ' Z'}
@@ -613,7 +618,7 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
       {spec.items.map((it, i) => {
         switch (it.t) {
           case 'seg':
-            return <line key={i} x1={px(it.a[0])} y1={py(it.a[1])} x2={px(it.b[0])} y2={py(it.b[1])} stroke={color(it.tone)} stroke-width={width(it.tone)} stroke-dasharray={dash(it.dash)} />;
+            return <line key={i} x1={px(it.a[0])} y1={py(it.a[1])} x2={px(it.b[0])} y2={py(it.b[1])} stroke={color(it.tone)} stroke-width={width(it.tone)} stroke-dasharray={dash(it.dash)} stroke-linecap={it.dash ? undefined : 'round'} />;
           case 'line': {
             // 図の 幅と 高さの 和より 長く のばせば、はしは 図の 外で 切れる
             const dx = it.b[0] - it.a[0];
@@ -667,7 +672,19 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
           }
           case 'text':
             return (
-              <text key={i} x={px(it.p[0])} y={py(it.p[1]) + 6} text-anchor="middle" font-size="17" font-style={it.italic ? 'italic' : undefined} fill={color(it.tone)}>
+              <text
+                key={i}
+                x={px(it.p[0])}
+                y={py(it.p[1]) + 6}
+                text-anchor="middle"
+                font-size="17"
+                font-style={it.italic ? 'italic' : undefined}
+                fill={color(it.tone)}
+                stroke="#fff"
+                stroke-width="4"
+                stroke-linejoin="round"
+                paint-order="stroke"
+              >
                 {it.s}
               </text>
             );
@@ -756,8 +773,10 @@ function Solid({ spec }: { spec: SolidSpec }) {
   const W = 300;
   const H = 260;
   const l = spec.labels;
-  const stroke = { stroke: 'currentColor', 'stroke-width': 2, fill: 'rgba(0,0,0,0.05)' } as const;
-  const dash = { stroke: 'currentColor', 'stroke-width': 1.4, fill: 'none', 'stroke-dasharray': '5 4', opacity: 0.7 } as const;
+  // 角は 丸く つなぐ: とがった つなぎ目(miter)と 切り落としの 端(butt)では、辺の 集まる 頂点で 線が はみ出して ずれて 見えた
+  // (先生の 判定 2026-10-18「図の 線が 少し ずれています。手前右下と 右上奥」)
+  const stroke = { stroke: 'currentColor', 'stroke-width': 2, fill: 'rgba(0,0,0,0.05)', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' } as const;
+  const dash = { stroke: 'currentColor', 'stroke-width': 1.4, fill: 'none', 'stroke-dasharray': '5 4', opacity: 0.7, 'stroke-linecap': 'round' } as const;
   // 長さには 単位(cm)まで 書くので 文字が 長い。線に かかっても 読めるよう 白く ふちどる
   const label = (x: number, y: number, t?: string, anchor: 'start' | 'middle' | 'end' = 'middle') =>
     t ? (
@@ -870,8 +889,10 @@ function Solid({ spec }: { spec: SolidSpec }) {
           <>
             <circle cx="150" cy="130" r="85" {...stroke} />
             <ellipse cx="150" cy="130" rx="85" ry="32" {...dash} />
-            <line x1="150" y1="130" x2="235" y2="130" stroke="currentColor" stroke-width="1.8" />
+            {/* 直径で 出す 問題は 直径と 半径の 両方を 書く(先生の 判定 2026-10-18「半径も 書いてください」) */}
+            <line x1={l.diameter ? 65 : 150} y1="130" x2="235" y2="130" stroke="currentColor" stroke-width="1.8" />
             {label(192, 124, l.radius)}
+            {label(150, 156, l.diameter)}
             <circle cx="150" cy="130" r="3" fill="currentColor" />
           </>
         );
