@@ -277,11 +277,20 @@ export function parseExpression(raw: string): Poly | null {
 }
 
 /**
+ * 先頭の「y =」を 取る。「y を x の 式で 表せ」の 答えを 教科書どおり y = −5x と 入れる 生徒が 多い
+ * (歪みの使徒の 比例で「y=」から 入れて ×に された。先生の報告 2026-10-19)。答えの 式に「=」は 出てこないので、取っても 意味は 変わらない
+ */
+export function stripYEquals(input: string): string {
+  return input.replace(/^\s*[yYｙＹ]\s*[=＝]\s*/, '');
+}
+
+/**
  * 生徒の入力が期待する式と同値か。
  * 同値でも「書き方のきまり」に反する場合は note を返す(判定は正解のまま、解説で書き方を伝える)。
  */
 export function judgeExpression(expected: string, input: string): { correct: boolean; note?: string } {
   const want = parseExpression(expected);
+  input = stripYEquals(input);
   const got = parseExpression(input);
   if (!want) throw new Error(`期待する式が解釈できない: ${expected}`);
   if (!got) return { correct: false, note: noteForBadExpr(input) };

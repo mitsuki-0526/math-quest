@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { AnswerKind, AnswerSpec } from '@/math/template';
 import { parseRational, parseRationalList, toTex, normalizeInput } from '@/math/rational';
 import { parseFactorization } from '@/math/factorization';
-import { parseExpression, polyToTex } from '@/math/expr';
+import { parseExpression, polyToTex, stripYEquals } from '@/math/expr';
 import { saveStore } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { Button } from './Ui';
@@ -398,8 +398,10 @@ function previewTex(answer: AnswerSpec, value: string): string | null {
       return list ? list.map(toTex).join(',\\ ') : null;
     }
     case 'expression': {
-      const p = parseExpression(value);
-      return p ? polyToTex(p) : null;
+      // 「y =」から 入れても 読む(判定と 同じ)。見せるときも y = を 付けたまま
+      const rhs = stripYEquals(value);
+      const p = parseExpression(rhs);
+      return p ? `${rhs !== value ? 'y = ' : ''}${polyToTex(p)}` : null;
     }
     case 'factorization': {
       const f = parseFactorization(value);

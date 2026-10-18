@@ -57,6 +57,13 @@ describe('表示', () => {
 });
 
 describe('judgeExpression', () => {
+  it('「y =」から 入れても 正解(歪みの使徒の 比例で ×に された。2026-10-19)', () => {
+    expect(judgeExpression('-5x', 'y=-5x').correct).toBe(true);
+    expect(judgeExpression('-5x', ' y = −5x').correct).toBe(true);
+    expect(judgeExpression('-5x', 'Y＝-5x').correct).toBe(true);
+    expect(judgeExpression('-5x', 'y=5x').correct).toBe(false);
+  });
+
   it('同値なら正解。書き方が違えば注意を添える', () => {
     expect(judgeExpression('2x+3', '3+2x').correct).toBe(true);
     const j = judgeExpression('3x', 'x3');
