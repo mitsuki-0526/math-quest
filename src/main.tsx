@@ -5,6 +5,7 @@ import '@fontsource/dotgothic16/400.css';
 import { App } from './app';
 import { installSyncHooks, loadCachedUnlock } from './engine/sync';
 import { installSessionWatch } from './engine/session';
+import { preloadFonts } from './ui/preloadFonts';
 
 loadCachedUnlock();
 installSyncHooks();
@@ -14,3 +15,4 @@ const root = document.getElementById('app')!;
 // GAS の入口ページは「読み込み中…」を入れて待っているので、描く前に空にする
 root.textContent = '';
 render(<App />, root);
+preloadFonts();
