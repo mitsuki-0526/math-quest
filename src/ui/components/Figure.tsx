@@ -1,4 +1,4 @@
-import type { FigureSpec, NumberLineSpec, PlaneSpec, AnglesSpec, SectorSpec, SolidSpec, ProjectionSpec, ChartSpec, TableSpec, GridSpec } from '@/math/figure';
+import type { FigureSpec, NumberLineSpec, PlaneSpec, AnglesSpec, SectorSpec, SolidSpec, ProjectionSpec, ChartSpec, TableSpec, GridSpec, DiagramSpec, DiagramTone, DiagramPt } from '@/math/figure';
 
 /**
  * 問題の図を SVG で描く(要件 F48)。
@@ -24,6 +24,8 @@ export function Figure({ spec }: { spec: FigureSpec }) {
       return <DataTable spec={spec} />;
     case 'grid':
       return <Grid spec={spec} />;
+    case 'diagram':
+      return <Diagram spec={spec} />;
   }
 }
 
@@ -323,6 +325,9 @@ function Angles({ spec }: { spec: AnglesSpec }) {
     return { dir, r };
   })();
 
+  // 角の 印の 弧の 半径。2 つめ以降は 外へ ずらす(小さい 角の 二等分線で 40° と x が 重なった)。
+  // 印が 4 つ(90° を 2 つ 重ねた 図)では 間を つめて 半直線の 長さに 収める
+  const arcR = (i: number) => (spec.marks.length >= 4 ? 26 + i * 21 : 30 + i * 30);
   // 紙は 図の ある ところだけに 切る(正方形の ままだと 半直線が 片側だけの 図で 白い 余白が 大きく、戦闘の 窓では 図が 小さく なる)
   const used: (readonly [number, number])[] = [[c, c]];
   const marks = spec.marks.map((m, i) => {
@@ -332,8 +337,7 @@ function Angles({ spec }: { spec: AnglesSpec }) {
     // 小さい 角度から 大きい 角度へ 描く(半直線の 順に よらず、内側の 弧に なる)
     const a1 = Math.min(spec.rays[m.from], spec.rays[m.to]);
     const a2 = Math.max(spec.rays[m.from], spec.rays[m.to]);
-    // 角の 印が 重ならないように、2 つめ以降は 外へ 大きく ずらす(小さい 角の 二等分線で 40° と x が 重なった)
-    const r = 30 + i * 30;
+    const r = arcR(i);
     const [sx, sy] = pt(a1, r);
     const [ex, ey] = pt(a2, r);
     const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
@@ -359,7 +363,7 @@ function Angles({ spec }: { spec: AnglesSpec }) {
     spec.marks.forEach((o, j) => {
       const lo = Math.min(spec.rays[o.from], spec.rays[o.to]);
       const hi = Math.max(spec.rays[o.from], spec.rays[o.to]);
-      const rj = 30 + j * 30;
+      const rj = arcR(j);
       if (j !== i && la > lo && la < hi && Math.abs(lr - rj) < 14) lr = rj + 15;
     });
     const [lx, ly] = pt(la, lr);
@@ -407,6 +411,15 @@ function Angles({ spec }: { spec: AnglesSpec }) {
         const [xb, yb] = spec.throughLines ? pt(deg + 180) : ([c, c] as const);
         return <line key={i} x1={xa} y1={ya} x2={xb} y2={yb} stroke="currentColor" stroke-width="2" />;
       })}
+      {spec.fills?.map((f, i) => (
+        <path
+          key={`f${i}`}
+          d={`M${c},${c} L${pt(spec.rays[f.from])[0]},${pt(spec.rays[f.from])[1]} L${pt(spec.rays[f.to])[0]},${pt(spec.rays[f.to])[1]} Z`}
+          fill={f.tone === 'ask' ? ASK_MARK : 'currentColor'}
+          fill-opacity={f.tone === 'ask' ? 0.18 : 0.2}
+          stroke="none"
+        />
+      ))}
       {spec.outline && (
         <path
           d={spec.rays.map((deg, i) => `${i === 0 ? 'M' : 'L'}${pt(deg)[0]},${pt(deg)[1]}`).join(' ') + ' Z'}
@@ -444,8 +457,9 @@ function Grid({ spec }: { spec: GridSpec }) {
   const H = spec.h * cell + pad * 2;
   const px = (x: number) => pad + x * cell;
   const py = (y: number) => pad + (spec.h - y) * cell;
-  const fill = { from: 'rgba(230,194,92,0.45)', to: 'rgba(120,180,230,0.40)', other: 'rgba(200,200,200,0.18)' } as const;
-  const stroke = { from: 'var(--gold-2)', to: 'var(--sky)', other: 'currentColor' } as const;
+  // ほかの 図と 同じ 白い 紙に 黒。移動の 前(㋐)は 灰、後(㋑)は 赤で 塗り分ける(先生の指摘 2026-10-18「図の スタイルを そろえる」)
+  const fill = { from: 'rgba(0,0,0,0.14)', to: 'rgba(211,47,47,0.16)', other: 'rgba(0,0,0,0.06)' } as const;
+  const stroke = { from: 'currentColor', to: ASK_MARK, other: 'currentColor' } as const;
   // 文字を 置く 場所を、三角形の 辺に かからない 所から えらぶ(先生の指摘 2026-10-16「線と 文字が 被る」)
   const segs = spec.shapes.flatMap((sh) => sh.points.map((q, k) => [px(q[0]), py(q[1]), px(sh.points[(k + 1) % sh.points.length][0]), py(sh.points[(k + 1) % sh.points.length][1])]));
   const hits = (cx: number, cy: number, w: number, h: number) =>
@@ -487,8 +501,9 @@ function Grid({ spec }: { spec: GridSpec }) {
     placed.push([px(ix), py(iy), 18, 18]);
   }
   return (
-    <svg class="figure" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="方眼の図">
+    <svg class="figure figure-paper" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="方眼の図">
       <defs>{ARROW}</defs>
+      <rect x="0" y="0" width={W} height={H} rx="6" fill="#fff" />
       {Array.from({ length: spec.w + 1 }, (_, i) => (
         <line key={`v${i}`} x1={px(i)} y1={py(0)} x2={px(i)} y2={py(spec.h)} stroke="currentColor" stroke-width="0.6" opacity="0.25" />
       ))}
@@ -542,13 +557,13 @@ function Grid({ spec }: { spec: GridSpec }) {
             y1={py(l.y1)}
             x2={px(l.x2)}
             y2={py(l.y2)}
-            stroke="var(--ember)"
+            stroke="currentColor"
             stroke-width="2"
             stroke-dasharray={l.arrow ? undefined : '6 4'}
             marker-end={l.arrow ? 'url(#fig-arrow)' : undefined}
           />
           {l.label && (
-            <text x={px(l.x2) + 6} y={py(l.y2) + (l.y2 > l.y1 ? -4 : 14)} font-size="16" font-style="italic" fill="var(--ember)">
+            <text x={px(l.x2) + 6} y={py(l.y2) + (l.y2 > l.y1 ? -4 : 14)} font-size="16" font-style="italic" fill="currentColor">
               {l.label}
             </text>
           )}
@@ -568,12 +583,95 @@ function Grid({ spec }: { spec: GridSpec }) {
         const [tx, ty] = place(px(p.x), py(p.y), dx, -dy, 18, 12, 15);
         return (
           <g key={p.label}>
-            <circle cx={px(p.x)} cy={py(p.y)} r="4.5" fill="var(--ember)" stroke="#fff" stroke-width="1.2" />
-            <text x={tx} y={ty + 6} text-anchor="middle" font-size="16" font-style="italic" font-weight="bold" fill="var(--ember)">
+            <circle cx={px(p.x)} cy={py(p.y)} r="4.5" fill="currentColor" stroke="#fff" stroke-width="1.2" />
+            <text x={tx} y={ty + 6} text-anchor="middle" font-size="16" font-style="italic" font-weight="bold" fill="currentColor">
               {p.label}
             </text>
           </g>
         );
+      })}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------- 点・線・円の 図(対称・作図の 状況)
+
+function Diagram({ spec }: { spec: DiagramSpec }) {
+  const [vx, vy, vw, vh] = spec.view;
+  const W = spec.width ?? 300;
+  const k = W / vw;
+  const H = vh * k;
+  const px = (x: number) => (x - vx) * k;
+  const py = (y: number) => H - (y - vy) * k;
+  const P = (q: DiagramPt) => `${px(q[0])},${py(q[1])}`;
+  const color = (t?: DiagramTone) => (t === 'ask' ? ASK_MARK : t === 'faint' ? '#888' : 'currentColor');
+  const width = (t?: DiagramTone) => (t === 'ask' ? 2.6 : t === 'faint' ? 1.4 : 2);
+  const dash = (d?: boolean) => (d ? '6 4' : undefined);
+  return (
+    <svg class="figure figure-paper" viewBox={`0 0 ${W} ${H}`} style={{ maxWidth: `${W * 1.07}px`, margin: '0 auto' }} role="img" aria-label={spec.label ?? '図'}>
+      <rect x="0" y="0" width={W} height={H} rx="6" fill="#fff" />
+      {spec.items.map((it, i) => {
+        switch (it.t) {
+          case 'seg':
+            return <line key={i} x1={px(it.a[0])} y1={py(it.a[1])} x2={px(it.b[0])} y2={py(it.b[1])} stroke={color(it.tone)} stroke-width={width(it.tone)} stroke-dasharray={dash(it.dash)} />;
+          case 'line': {
+            // 図の 幅と 高さの 和より 長く のばせば、はしは 図の 外で 切れる
+            const dx = it.b[0] - it.a[0];
+            const dy = it.b[1] - it.a[1];
+            const far = (vw + vh) / (Math.hypot(dx, dy) || 1);
+            return (
+              <line
+                key={i}
+                x1={px(it.a[0] - dx * far)}
+                y1={py(it.a[1] - dy * far)}
+                x2={px(it.b[0] + dx * far)}
+                y2={py(it.b[1] + dy * far)}
+                stroke={color(it.tone)}
+                stroke-width={width(it.tone)}
+                stroke-dasharray={dash(it.dash)}
+              />
+            );
+          }
+          case 'poly':
+            return (
+              <path
+                key={i}
+                d={`M${it.pts.map(P).join(' L')} Z`}
+                fill={it.fill ? color(it.tone) : 'none'}
+                fill-opacity={it.fill ? (it.tone === 'ask' ? 0.16 : 0.1) : undefined}
+                stroke={color(it.tone)}
+                stroke-width={width(it.tone)}
+                stroke-dasharray={dash(it.dash)}
+                stroke-linejoin="round"
+              />
+            );
+          case 'circle':
+            return <circle key={i} cx={px(it.c[0])} cy={py(it.c[1])} r={it.r * k} fill="none" stroke={color(it.tone)} stroke-width={width(it.tone)} stroke-dasharray={dash(it.dash)} />;
+          case 'arc': {
+            const at = (deg: number): DiagramPt => [it.c[0] + it.r * Math.cos((deg * Math.PI) / 180), it.c[1] + it.r * Math.sin((deg * Math.PI) / 180)];
+            const sweep = (((it.to - it.from) % 360) + 360) % 360;
+            return <path key={i} d={`M${P(at(it.from))} A${it.r * k},${it.r * k} 0 ${sweep > 180 ? 1 : 0} 0 ${P(at(it.to))}`} fill="none" stroke={color(it.tone)} stroke-width={width(it.tone) + 0.8} />;
+          }
+          case 'dot': {
+            const a = ((it.at ?? 45) * Math.PI) / 180;
+            return (
+              <g key={i}>
+                <circle cx={px(it.p[0])} cy={py(it.p[1])} r="3.5" fill={color(it.tone)} />
+                {it.label && (
+                  <text x={px(it.p[0]) + Math.cos(a) * 15} y={py(it.p[1]) - Math.sin(a) * 15 + 6} text-anchor="middle" font-size="17" font-style="italic" fill={color(it.tone)}>
+                    {it.label}
+                  </text>
+                )}
+              </g>
+            );
+          }
+          case 'text':
+            return (
+              <text key={i} x={px(it.p[0])} y={py(it.p[1]) + 6} text-anchor="middle" font-size="17" font-style={it.italic ? 'italic' : undefined} fill={color(it.tone)}>
+                {it.s}
+              </text>
+            );
+        }
       })}
     </svg>
   );
@@ -592,11 +690,41 @@ function Sector({ spec }: { spec: SectorSpec }) {
   const large = angle > 180 ? 1 : 0;
   const mid = angle / 2;
   const angleText = spec.angleLabel ?? (spec.angle === null ? 'x°' : `${spec.angle}°`);
+  const angleColor = spec.angle === null ? ASK_MARK : 'currentColor';
   const angleR = Math.min(95, Math.max(54, (Math.hypot((angleText.length * 9) / 2, 8) + 5) / Math.sin(Math.min(mid, 90) * (Math.PI / 180))));
+  const [lx, ly] = [c + angleR * Math.cos(rad(mid)), c + angleR * Math.sin(rad(mid))];
+
+  // 紙は 図の ある ところだけに 切る(角の 図と 同じ。正方形の ままだと 下半分が 空く)
+  const used: [number, number][] = [
+    [c - 8, c - 8],
+    [c + r, c + 26],
+    [lx - 20, ly - 12],
+    [lx + 20, ly + 12],
+  ];
+  for (let a = 0; a <= angle; a += 5) used.push([c + r * Math.cos(rad(a)), c + r * Math.sin(rad(a))]);
+  const pad = 8;
+  const x0 = Math.max(0, Math.min(...used.map((q) => q[0])) - pad);
+  const y0 = Math.max(0, Math.min(...used.map((q) => q[1])) - pad);
+  const x1 = Math.min(S, Math.max(...used.map((q) => q[0])) + pad);
+  // 弧の長さ・面積の 書きこみは 図の 下に 1 行
+  const noteY = Math.max(...used.map((q) => q[1])) + 22;
+  const y1 = Math.min(S + 40, (spec.note ? noteY + 8 : Math.max(...used.map((q) => q[1]))) + pad);
+  // 文字の 幅の 見積もり(かなは 14px、数字・記号は 8px)
+  const noteW = [...(spec.note ?? '')].reduce((w, ch) => w + (/[　-鿿]/.test(ch) ? 14 : 8), 0);
+  const nx0 = spec.note ? Math.min(x0, c - noteW / 2 - pad) : x0;
+  const nx1 = spec.note ? Math.max(x1, c + noteW / 2 + pad) : x1;
 
   return (
-    <svg class="figure figure-square" viewBox={`0 0 ${S} ${S}`} role="img" aria-label="おうぎ形">
-      <path d={`M${c},${c} L${c + r},${c} A${r},${r} 0 ${large} 0 ${x2},${y2} Z`} fill="rgba(230,194,92,0.15)" stroke="var(--gold-2)" stroke-width="2.4" />
+    // 角の 図と 同じく 白い 紙に 黒い 線。中心角を 求める ときだけ 中心角が 赤(先生の指摘 2026-10-18)
+    <svg
+      class="figure figure-square figure-paper"
+      viewBox={`${nx0} ${y0} ${nx1 - nx0} ${y1 - y0}`}
+      style={{ maxWidth: `${((nx1 - nx0) / S) * 320}px` }}
+      role="img"
+      aria-label="おうぎ形"
+    >
+      <rect x={nx0} y={y0} width={nx1 - nx0} height={y1 - y0} rx="6" fill="#fff" />
+      <path d={`M${c},${c} L${c + r},${c} A${r},${r} 0 ${large} 0 ${x2},${y2} Z`} fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="2.2" />
       {/* 半径のラベル */}
       <text x={c + r / 2} y={c + 18} text-anchor="middle" font-size="15" fill="currentColor">
         {spec.radiusLabel ?? `${spec.radius}`}
@@ -605,23 +733,16 @@ function Sector({ spec }: { spec: SectorSpec }) {
       <path
         d={`M${c + 34},${c} A34,34 0 ${large} 0 ${c + 34 * Math.cos(rad(angle))},${c + 34 * Math.sin(rad(angle))}`}
         fill="none"
-        stroke="var(--ember)"
-        stroke-width="2"
+        stroke={angleColor}
+        stroke-width={spec.angle === null ? 2.6 : 1.6}
       />
       {/* 中心角の 文字: 小さい 角(20°)では 半径に かからないよう 外へ */}
-      <text
-        x={c + angleR * Math.cos(rad(mid))}
-        y={c + angleR * Math.sin(rad(mid)) + 5}
-        text-anchor="middle"
-        font-size="15"
-        font-weight="bold"
-        fill="var(--ember)"
-      >
+      <text x={lx} y={ly + 5} text-anchor="middle" font-size={spec.angle === null ? 19 : 15} font-weight={spec.angle === null ? 'normal' : 'bold'} font-family={spec.angle === null ? MATH_FONT : undefined} fill={angleColor}>
         {angleText}
       </text>
       <circle cx={c} cy={c} r="3" fill="currentColor" />
       {spec.note && (
-        <text x={c} y={S - 8} text-anchor="middle" font-size="14" fill="currentColor">
+        <text x={c} y={noteY} text-anchor="middle" font-size="14" fill="currentColor">
           {spec.note}
         </text>
       )}
@@ -635,18 +756,18 @@ function Solid({ spec }: { spec: SolidSpec }) {
   const W = 300;
   const H = 260;
   const l = spec.labels;
-  const stroke = { stroke: 'currentColor', 'stroke-width': 2, fill: 'rgba(230,194,92,0.10)' } as const;
+  const stroke = { stroke: 'currentColor', 'stroke-width': 2, fill: 'rgba(0,0,0,0.05)' } as const;
   const dash = { stroke: 'currentColor', 'stroke-width': 1.4, fill: 'none', 'stroke-dasharray': '5 4', opacity: 0.7 } as const;
   const label = (x: number, y: number, t?: string) =>
     t ? (
-      <text x={x} y={y} text-anchor="middle" font-size="15" fill="var(--gold-2)">
+      <text x={x} y={y} text-anchor="middle" font-size="15" fill="currentColor">
         {t}
       </text>
     ) : null;
 
-  /** 頂点の 名前(教科書の 書き方: 直方体は 上の 面 ABCD・下の 面 EFGH、三角柱は ABC と DEF) */
+  /** 頂点の 名前(教科書の 書き方: 直方体は 上の 面 ABCD・下の 面 EFGH、三角柱は ABC と DEF)。点の 名前は 斜体に しない(先生の指摘 2026-10-18) */
   const vname = (x: number, y: number, t: string) => (
-    <text x={x} y={y} text-anchor="middle" font-size="15" font-style="italic" fill="currentColor">
+    <text x={x} y={y} text-anchor="middle" font-size="15" fill="currentColor">
       {t}
     </text>
   );
@@ -714,7 +835,7 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M230,70 L230,190" {...stroke} fill="none" />
             <path d="M70,190 A80,28 0 0 0 230,190" {...stroke} fill="none" />
             <path d="M70,190 A80,28 0 0 1 230,190" {...dash} />
-            <line x1="150" y1="70" x2="230" y2="70" stroke="var(--gold-2)" stroke-width="1.6" />
+            <line x1="150" y1="70" x2="230" y2="70" stroke="currentColor" stroke-width="1.6" />
             {label(190, 65, l.radius)}
             {label(252, 135, l.height)}
           </>
@@ -726,7 +847,7 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M150,40 L240,150 L180,190" {...stroke} />
             <path d="M60,190 L120,150 L240,150" {...dash} />
             <path d="M150,40 L120,150" {...dash} />
-            <line x1="150" y1="40" x2="150" y2="170" stroke="var(--gold-2)" stroke-width="1.6" stroke-dasharray="4 3" />
+            <line x1="150" y1="40" x2="150" y2="170" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
             {label(120, 212, l.base)}
             {label(139, 134, l.height)}
           </>
@@ -736,8 +857,8 @@ function Solid({ spec }: { spec: SolidSpec }) {
           <>
             <path d="M150,45 L70,175 A80,24 0 0 0 230,175 Z" {...stroke} />
             <path d="M70,175 A80,24 0 0 1 230,175" {...dash} />
-            <line x1="150" y1="45" x2="150" y2="175" stroke="var(--gold-2)" stroke-width="1.6" stroke-dasharray="4 3" />
-            <line x1="150" y1="175" x2="230" y2="175" stroke="var(--gold-2)" stroke-width="1.6" />
+            <line x1="150" y1="45" x2="150" y2="175" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
+            <line x1="150" y1="175" x2="230" y2="175" stroke="currentColor" stroke-width="1.6" />
             {label(190, 170, l.radius)}
             {label(166, 115, l.height)}
             {l.slant && label(95, 104, l.slant)}
@@ -748,7 +869,7 @@ function Solid({ spec }: { spec: SolidSpec }) {
           <>
             <circle cx="150" cy="130" r="85" {...stroke} />
             <ellipse cx="150" cy="130" rx="85" ry="32" {...dash} />
-            <line x1="150" y1="130" x2="235" y2="130" stroke="var(--gold-2)" stroke-width="1.8" />
+            <line x1="150" y1="130" x2="235" y2="130" stroke="currentColor" stroke-width="1.8" />
             {label(192, 124, l.radius)}
             <circle cx="150" cy="130" r="3" fill="currentColor" />
           </>
@@ -757,7 +878,9 @@ function Solid({ spec }: { spec: SolidSpec }) {
   };
 
   return (
-    <svg class="figure" viewBox={`0 0 ${W} ${spec.vertices ? H + 10 : H}`} role="img" aria-label="立体の見取図">
+    // ほかの 図と 同じ 白い 紙に 黒い 線・文字(先生の指摘 2026-10-18「第6章の 図形も 白い 背景に 黒い 線」)
+    <svg class="figure figure-paper" viewBox={`0 0 ${W} ${spec.vertices ? H + 10 : H}`} role="img" aria-label="立体の見取図">
+      <rect x="0" y="0" width={W} height={spec.vertices ? H + 10 : H} rx="6" fill="#fff" />
       {body()}
       {vertexNames()}
     </svg>
@@ -772,19 +895,20 @@ function Projection({ spec }: { spec: ProjectionSpec }) {
   const shape = (kind: string, cx: number, cy: number) => {
     switch (kind) {
       case 'circle':
-        return <circle cx={cx} cy={cy} r="42" fill="rgba(230,194,92,0.10)" stroke="currentColor" stroke-width="2" />;
+        return <circle cx={cx} cy={cy} r="42" fill="rgba(0,0,0,0.05)" stroke="currentColor" stroke-width="2" />;
       case 'square':
-        return <rect x={cx - 42} y={cy - 42} width="84" height="84" fill="rgba(230,194,92,0.10)" stroke="currentColor" stroke-width="2" />;
+        return <rect x={cx - 42} y={cy - 42} width="84" height="84" fill="rgba(0,0,0,0.05)" stroke="currentColor" stroke-width="2" />;
       case 'triangle':
-        return <path d={`M${cx},${cy - 44} L${cx - 46},${cy + 40} L${cx + 46},${cy + 40} Z`} fill="rgba(230,194,92,0.10)" stroke="currentColor" stroke-width="2" />;
+        return <path d={`M${cx},${cy - 44} L${cx - 46},${cy + 40} L${cx + 46},${cy + 40} Z`} fill="rgba(0,0,0,0.05)" stroke="currentColor" stroke-width="2" />;
       case 'rect':
-        return <rect x={cx - 38} y={cy - 46} width="76" height="92" fill="rgba(230,194,92,0.10)" stroke="currentColor" stroke-width="2" />;
+        return <rect x={cx - 38} y={cy - 46} width="76" height="92" fill="rgba(0,0,0,0.05)" stroke="currentColor" stroke-width="2" />;
       default:
         return null;
     }
   };
   return (
-    <svg class="figure" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="投影図">
+    <svg class="figure figure-paper" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="投影図">
+      <rect x="0" y="0" width={W} height={H} rx="6" fill="#fff" />
       <text x="150" y="20" text-anchor="middle" font-size="13" fill="currentColor">
         真上から見た図
       </text>

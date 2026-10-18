@@ -119,6 +119,8 @@ export interface Problem {
   hint: string;
   /** 解説(途中式)。1要素 = 1行。KaTeX */
   explanation: string[];
+  /** 解説に 添える 図(対称の軸の 例など。先生の指摘 2026-10-18「対称の軸の 例を 図で」) */
+  explanationFigure?: FigureSpec;
   /** つまずきの種類(苦手集計用)。誤答時に stats.weakTags に入る */
   tags: string[];
   /** 同じ問題の再出題を避けるためのキー */

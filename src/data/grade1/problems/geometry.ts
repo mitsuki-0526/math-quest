@@ -2,7 +2,7 @@ import { registerTemplate, mistakeNum, type Difficulty, type Mistake, type Probl
 import type { Rng } from '@/math/rng';
 import { rat, mul, type Rational, isInteger, toTex } from '@/math/rational';
 import { text } from '@/math/format';
-import type { GridSpec } from '@/math/figure';
+import type { GridSpec, DiagramSpec, DiagramItem, DiagramPt } from '@/math/figure';
 import { choose, piExpr, piTex, mistakePi, type Wrong } from './choice';
 
 /**
@@ -92,10 +92,10 @@ function angleBisector(rng: Rng, d: Difficulty): Problem {
   // ★2 は 半分の 角から もとの 角を 求める(逆向き)
   if (d >= 2 && rng.bool()) {
     return angleProblem(d, {
-      q: `半直線 OE は ∠AOB の 二等分線で、∠AOE = ${half}° のとき、∠AOB は 何度?`,
+      q: `半直線 OE は ∠AOB の 角の二等分線で、∠AOE = ${half}° のとき、∠AOB は 何度?`,
       x: whole,
       hint: '二等分線は 角を ちょうど 半分に 分ける',
-      explanation: [text('OE は ∠AOB の 二等分線だから ∠AOE = ½∠AOB'), `\\angle AOB = ${half}^\\circ \\times 2 = ${whole}^\\circ`, `${text('答え: ')} ${whole}`],
+      explanation: [text('OE は ∠AOB の 角の二等分線だから ∠AOE = ½∠AOB'), `\\angle AOB = ${half}^\\circ \\times 2 = ${whole}^\\circ`, `${text('答え: ')} ${whole}`],
       tags: ['angle_bisector'],
       key: `ang:bis2:${whole}`,
       figure: { kind: 'angles', rays: [0, half, whole], rayLabels: ['A', 'E', 'B'], center: 'O', marks: [{ from: 0, to: 1, label: `${half}°` }, { from: 0, to: 2, label: 'x' }] },
@@ -104,10 +104,10 @@ function angleBisector(rng: Rng, d: Difficulty): Problem {
     });
   }
   return angleProblem(d, {
-    q: `半直線 OE は ∠AOB の 二等分線で、∠AOB = ${whole}° のとき、∠AOE は 何度?`,
+    q: `半直線 OE は ∠AOB の 角の二等分線で、∠AOB = ${whole}° のとき、∠AOE は 何度?`,
     x: half,
     hint: '二等分線は 角を ちょうど 半分に 分ける',
-    explanation: [text('OE は ∠AOB の 二等分線だから ∠AOE = ∠BOE = ½∠AOB'), `\\angle AOE = ${whole}^\\circ \\div 2 = ${half}^\\circ`, `${text('答え: ')} ${half}`],
+    explanation: [text('OE は ∠AOB の 角の二等分線だから ∠AOE = ∠BOE = ½∠AOB'), `\\angle AOE = ${whole}^\\circ \\div 2 = ${half}^\\circ`, `${text('答え: ')} ${half}`],
     tags: ['angle_bisector'],
     key: `ang:bis:${whole}`,
     figure: { kind: 'angles', rays: [0, half, whole], rayLabels: ['A', 'E', 'B'], center: 'O', marks: [{ from: 0, to: 2, label: `${whole}°` }, { from: 0, to: 1, label: 'x' }] },
@@ -132,7 +132,20 @@ function angleRotation(rng: Rng, d: Difficulty): Problem {
     explanation: [text('正三角形の 1 つの 角は 60° だから、1 つ となりへ 回すと 60°'), text(`${from} から ${to} までは 正三角形 ${k} つぶん`), `60^\\circ \\times ${k} = ${x}^\\circ`, `${text('答え: ')} ${x}`],
     tags: ['angle_rotation'],
     key: `ang:rot:${s}:${k}`,
-    figure: { kind: 'angles', rays: [0, 60, 120, 180, 240, 300], throughLines: false, outline: true, rayLabels: names, center: 'O', marks: [] },
+    // 動かす 三角形(灰)と 重ねる 先(赤)を 塗る(先生の指摘 2026-10-18「移動する 三角形が どれか 分かりやすく」)
+    figure: {
+      kind: 'angles',
+      rays: [0, 60, 120, 180, 240, 300],
+      throughLines: false,
+      outline: true,
+      rayLabels: names,
+      center: 'O',
+      marks: [],
+      fills: [
+        { from: s, to: (s + 1) % 6, tone: 'ink' },
+        { from: (s + k) % 6, to: (s + k + 1) % 6, tone: 'ask' },
+      ],
+    },
     mistakes: [mistakeNum(360 - x, '反時計回り(時計の 針と 反対)に 回すよ。その 角は 時計回りの 角'), mistakeNum(k, '何こ 分では なく、何度 回すかを 答えよう(1 つ分は 60°)'), mistakeNum(60 * (k + 1), '重なる 三角形の 数え方を 確かめよう')],
     verify: `60*${k}`,
   });
@@ -150,87 +163,297 @@ function angleRight(rng: Rng, d: Difficulty): Problem {
     explanation: [askBOD ? text('∠BOD = ∠COD − ∠BOC') : text('∠AOC = ∠AOB − ∠BOC'), `90^\\circ - ${b}^\\circ = ${c}^\\circ`, text('(∠AOC と ∠BOD は 等しい)'), `${text('答え: ')} ${c}`],
     tags: ['angle_right'],
     key: `ang:rt:${b}:${askBOD}`,
-    figure: { kind: 'angles', rays: [0, c, 90, c + 90], rayLabels: ['A', 'C', 'B', 'D'], center: 'O', marks: [{ from: 1, to: 2, label: `${b}°` }, askBOD ? { from: 2, to: 3, label: 'x' } : { from: 0, to: 1, label: 'x' }] },
+    // ∠AOB・∠COD の 90° も 図に 書く(先生の指摘 2026-10-18)
+    figure: {
+      kind: 'angles',
+      rays: [0, c, 90, c + 90],
+      rayLabels: ['A', 'C', 'B', 'D'],
+      center: 'O',
+      marks: [{ from: 1, to: 2, label: `${b}°` }, askBOD ? { from: 2, to: 3, label: 'x' } : { from: 0, to: 1, label: 'x' }, { from: 0, to: 2, label: '90°' }, { from: 1, to: 3, label: '90°' }],
+    },
     mistakes: [mistakeNum(b, `∠BOC = ${b}° と 同じでは ないよ。90° から ひこう`), mistakeNum(90 + b, '90° に たすのでは なく、重なりの ∠BOC を ひくよ'), mistakeNum(180 - b, '一直線では なく 90° から ひこう')],
     verify: `90-${b}`,
   });
 }
 
-/** 一直線上の 2 つの 角の 二等分線(章の問題 A: ∠ECF は 何度) */
+/**
+ * 一直線上の 2 つの 角の 二等分線(章の問題 A: ∠ECF は 何度)。
+ * ∠DCF を 問う ときは CE を 書かない(使わない 二等分線は いらない。先生の判定 2026-10-18)。
+ * ∠ECD(∠ACD の 半分)は ★1 の 二等分線と 同じなので 出さない
+ */
 function angleTwoBisectors(rng: Rng, d: Difficulty): Problem {
   const a = rng.pick([40, 50, 60, 70, 80, 100, 110, 120, 130, 140]);
-  const ask = rng.pick(['ECF', 'DCF', 'ECD'] as const);
+  const askECF = rng.bool();
   const b = 180 - a;
-  const x = ask === 'ECF' ? 90 : ask === 'DCF' ? b / 2 : a / 2;
-  const mistakes: Mistake[] =
-    ask === 'ECF'
-      ? [mistakeNum(a, '∠ECF は ∠ECD と ∠DCF を 合わせた 角。それぞれ 半分ずつ だよ'), mistakeNum(180, '∠ACB(180°)の 半分ずつを 合わせるから 90°'), mistakeNum(a / 2, '∠DCF(∠BCD の 半分)も 合わせよう')]
-      : ask === 'DCF'
-        ? [mistakeNum(b, '二等分線 CF は ∠BCD を 半分に 分けるよ'), mistakeNum(a / 2, 'それは ∠ECD。∠BCD = 180° − ∠ACD を 半分に しよう')]
-        : [mistakeNum(a, '二等分線 CE は ∠ACD を 半分に 分けるよ'), mistakeNum(b / 2, 'それは ∠DCF。∠ACD を 半分に しよう')];
+  const x = askECF ? 90 : b / 2;
+  const mistakes: Mistake[] = askECF
+    ? [mistakeNum(a, '∠ECF は ∠ECD と ∠DCF を 合わせた 角。それぞれ 半分ずつ だよ'), mistakeNum(180, '∠ACB(180°)の 半分ずつを 合わせるから 90°'), mistakeNum(a / 2, '∠DCF(∠BCD の 半分)も 合わせよう')]
+    : [mistakeNum(b, '角の二等分線 CF は ∠BCD を 半分に 分けるよ'), mistakeNum(a / 2, '∠ACD では なく、∠BCD = 180° − ∠ACD を 半分に しよう')];
   return angleProblem(d, {
-    q: `直線 AB 上の 点 C から 半直線 CD を ひいた。∠ACD = ${a}° で、CE は ∠ACD の、CF は ∠BCD の 二等分線。∠${ask} は 何度?`,
+    q: askECF
+      ? `直線 AB 上の 点 C から 半直線 CD を ひいた。∠ACD = ${a}° で、CE は ∠ACD の、CF は ∠BCD の 角の二等分線。∠ECF は 何度?`
+      : `直線 AB 上の 点 C から 半直線 CD を ひいた。∠ACD = ${a}° で、CF は ∠BCD の 角の二等分線。∠DCF は 何度?`,
     x,
-    hint: '∠ACD + ∠BCD = 180°。二等分線で それぞれ 半分',
+    hint: askECF ? '∠ACD + ∠BCD = 180°。角の二等分線で それぞれ 半分' : '∠BCD = 180° − ∠ACD。それを 半分に',
     explanation: [
       `\\angle BCD = 180^\\circ - ${a}^\\circ = ${b}^\\circ`,
-      ask === 'DCF' ? `\\angle DCF = ${b}^\\circ \\div 2 = ${x}^\\circ` : ask === 'ECD' ? `\\angle ECD = ${a}^\\circ \\div 2 = ${x}^\\circ` : `\\angle ECF = ${a}^\\circ \\div 2 + ${b}^\\circ \\div 2 = ${a / 2}^\\circ + ${b / 2}^\\circ = 90^\\circ`,
-      ...(ask === 'ECF' ? [text('(∠ACD が 何度でも、180° の 半分で 90°)')] : []),
+      askECF ? `\\angle ECF = ${a}^\\circ \\div 2 + ${b}^\\circ \\div 2 = ${a / 2}^\\circ + ${b / 2}^\\circ = 90^\\circ` : `\\angle DCF = ${b}^\\circ \\div 2 = ${x}^\\circ`,
+      ...(askECF ? [text('(∠ACD が 何度でも、180° の 半分で 90°)')] : []),
       `${text('答え: ')} ${x}`,
     ],
     tags: ['angle_two_bisectors'],
-    key: `ang:2bis:${a}:${ask}`,
-    figure: {
-      kind: 'angles',
-      rays: [180, 180 - a / 2, 180 - a, b / 2, 0],
-      rayLabels: ['A', 'E', 'D', 'F', 'B'],
-      center: 'C',
-      marks:
-        ask === 'ECF'
-          ? [{ from: 0, to: 2, label: `${a}°` }, { from: 1, to: 3, label: 'x' }]
-          : ask === 'DCF'
-            ? [{ from: 0, to: 2, label: `${a}°` }, { from: 2, to: 3, label: 'x' }]
-            : [{ from: 0, to: 2, label: `${a}°` }, { from: 1, to: 2, label: 'x' }],
-    },
+    key: `ang:2bis:${a}:${askECF ? 'ECF' : 'DCF'}`,
+    figure: askECF
+      ? {
+          kind: 'angles',
+          rays: [180, 180 - a / 2, 180 - a, b / 2, 0],
+          rayLabels: ['A', 'E', 'D', 'F', 'B'],
+          center: 'C',
+          marks: [
+            { from: 0, to: 2, label: `${a}°` },
+            { from: 1, to: 3, label: 'x' },
+          ],
+        }
+      : {
+          kind: 'angles',
+          rays: [180, 180 - a, b / 2, 0],
+          rayLabels: ['A', 'D', 'F', 'B'],
+          center: 'C',
+          marks: [
+            { from: 0, to: 1, label: `${a}°` },
+            { from: 1, to: 2, label: 'x' },
+          ],
+        },
     mistakes,
     verify: `${x}`,
   });
 }
 
-/** 作図できる 角(90°・60° を もとに。75° = 45° + 30°) */
-function angleConstructible(rng: Rng, d: Difficulty): Problem {
-  const recipes: { q: string; x: number; steps: string; wrong: { v: number; say: string }[] }[] = [
-    { q: '90° の 角を 二等分した 角と、60° の 角を 二等分した 角を 合わせる', x: 75, steps: '90^\\circ \\div 2 + 60^\\circ \\div 2 = 45^\\circ + 30^\\circ = 75^\\circ', wrong: [{ v: 150, say: '二等分(半分)に してから 合わせよう' }, { v: 105, say: '60° も 二等分して 30° に しよう' }, { v: 120, say: '90° も 二等分して 45° に しよう' }] },
-    { q: '60° の 角から、90° の 角を 二等分した 角を ひく', x: 15, steps: '60^\\circ - 90^\\circ \\div 2 = 60^\\circ - 45^\\circ = 15^\\circ', wrong: [{ v: 30, say: '90° を 二等分すると 45° だよ' }, { v: 105, say: 'たすのでは なく ひくよ' }] },
-    { q: '60° の 角に、90° の 角を 二等分した 角を 合わせる', x: 105, steps: '60^\\circ + 90^\\circ \\div 2 = 60^\\circ + 45^\\circ = 105^\\circ', wrong: [{ v: 150, say: '90° を 二等分して 45° に してから 合わせよう' }, { v: 15, say: '合わせる(たす)よ' }] },
-    { q: '90° の 角に、90° の 角を 二等分した 角を 合わせる', x: 135, steps: '90^\\circ + 90^\\circ \\div 2 = 90^\\circ + 45^\\circ = 135^\\circ', wrong: [{ v: 180, say: '1 つは 二等分して 45° に しよう' }, { v: 45, say: '合わせる(たす)よ' }] },
-    { q: '90° の 角に、60° の 角を 合わせる', x: 150, steps: '90^\\circ + 60^\\circ = 150^\\circ', wrong: [{ v: 30, say: '合わせる(たす)よ' }, { v: 75, say: '二等分は しないよ' }] },
-    { q: '一直線(180°)から、60° の 角を 二等分した 角を ひいて、その 角を 二等分する', x: 75, steps: '(180^\\circ - 60^\\circ \\div 2) \\div 2 = (180^\\circ - 30^\\circ) \\div 2 = 75^\\circ', wrong: [{ v: 150, say: '最後に 二等分するのを わすれずに' }, { v: 60, say: '60° を 二等分して 30° に してから ひこう' }] },
-    { q: '60° の 角を 二等分した 角を、さらに 二等分する', x: 15, steps: '60^\\circ \\div 2 \\div 2 = 15^\\circ', wrong: [{ v: 30, say: 'もう 1 回 二等分するよ' }, { v: 120, say: '二等分は 半分に すること' }] },
-    { q: '一直線(180°)から、60° の 角を ひく', x: 120, steps: '180^\\circ - 60^\\circ = 120^\\circ', wrong: [{ v: 240, say: 'たすのでは なく ひくよ' }, { v: 60, say: '一直線は 180° だよ' }] },
-  ];
-  const r = rng.pick(d === 2 ? recipes.filter((r) => Number.isInteger(r.x) && r.x !== 105) : recipes);
-  return angleProblem(d, {
-    q: `次の ように 作図した 角は 何度?: ${r.q}`,
-    x: r.x,
-    hint: '90° と 60° は 作図できる。二等分は 半分',
-    explanation: [r.steps, `${text('答え: ')} ${r.x}`],
-    tags: ['angle_construct'],
-    key: `ang:con:${r.q}`,
-    mistakes: r.wrong.map((w) => mistakeNum(w.v, w.say)),
-    verify: `${r.x}`,
-  });
-}
-
 function genAngle(rng: Rng, d: Difficulty): Problem {
   // ★1: 一直線・二等分線 / ★2: 3 つの 角が 一直線・二等分線(逆)・90° を 重ねた 角・回転の 角 /
-  // ★3: 2 つの 二等分線(章の問題 A)・作図できる 角(75°)・回転の 角
+  // ★3: 2 つの 二等分線(章の問題 A)・回転の 角・90° を 重ねた 角。
+  // 「作図できる 角」(60° から 90° の 二等分を ひく …)は 文が ややこしい だけなので 出さない(先生の判定 2026-10-18)
   if (d === 1) return rng.pick([angleStraight, angleBisector])(rng, d);
-  if (d === 2) return rng.pick([angleStraight, angleBisector, angleRight, angleRotation, angleConstructible])(rng, d);
-  return rng.pick([angleTwoBisectors, angleTwoBisectors, angleConstructible, angleRotation, angleRight])(rng, d);
+  if (d === 2) return rng.pick([angleStraight, angleBisector, angleRight, angleRotation])(rng, d);
+  return rng.pick([angleTwoBisectors, angleTwoBisectors, angleRotation, angleRight])(rng, d);
 }
 
 // ---------------------------------------------------------------- 対称
+
+/*
+ * 対称・作図の 図(先生の判定 2026-10-18「文では 想像が 難しいので 図を」)。
+ * 座標は 図ごとの 単位。'ask'(赤)は 答えに かかわる 所、'faint'(灰)は 補助線
+ */
+const deg = (a: number): DiagramPt => [Math.cos((a * Math.PI) / 180), Math.sin((a * Math.PI) / 180)];
+const at = (c: DiagramPt, r: number, a: number): DiagramPt => [c[0] + r * deg(a)[0], c[1] + r * deg(a)[1]];
+/** 点 q を 原点の まわりに a° 回す */
+const turn = (q: DiagramPt, a: number): DiagramPt => {
+  const [co, si] = deg(a);
+  return [q[0] * co - q[1] * si, q[0] * si + q[1] * co];
+};
+
+/** 解説の 図: 図形と、すべての 対称の軸(赤の 破線) */
+function axesFigure(name: string): DiagramSpec | undefined {
+  const regular: Record<string, [number, number]> = { 正三角形: [3, 90], 正方形: [4, 45], 正五角形: [5, 90], 正六角形: [6, 0], 正八角形: [8, 22.5] };
+  let pts: DiagramPt[];
+  let axes: [DiagramPt, DiagramPt][];
+  if (regular[name]) {
+    const [n, s] = regular[name];
+    pts = Array.from({ length: n }, (_, k) => at([0, 0], 1.2, s + (360 * k) / n));
+    // 正 n 角形の 対称の軸は、頂点の 向きから 180/n° ずつ
+    axes = Array.from({ length: n }, (_, k) => [at([0, 0], 1.5, s + (180 * k) / n), at([0, 0], -1.5, s + (180 * k) / n)]);
+  } else if (name === '長方形') {
+    pts = [[-1.4, -0.8], [1.4, -0.8], [1.4, 0.8], [-1.4, 0.8]];
+    axes = [[[-1.7, 0], [1.7, 0]], [[0, -1.1], [0, 1.1]]];
+  } else if (name === 'ひし形') {
+    pts = [[0, -1.25], [0.8, 0], [0, 1.25], [-0.8, 0]];
+    axes = [[[0, -1.5], [0, 1.5]], [[-1.15, 0], [1.15, 0]]];
+  } else if (name === '二等辺三角形') {
+    pts = [[-0.75, -0.9], [0.75, -0.9], [0, 1.2]];
+    axes = [[[0, -1.25], [0, 1.45]]];
+  } else if (name === '台形(等脚台形)') {
+    pts = [[-1.3, -0.7], [1.3, -0.7], [0.65, 0.7], [-0.65, 0.7]];
+    axes = [[[0, -1.05], [0, 1.05]]];
+  } else return undefined;
+  const items: DiagramItem[] = [{ t: 'poly', pts, fill: true }, ...axes.map(([a, b]): DiagramItem => ({ t: 'seg', a, b, tone: 'ask', dash: true }))];
+  return { kind: 'diagram', view: [-1.8, -1.6, 3.6, 3.2], items, width: 220, label: `${name}と 対称の軸` };
+}
+
+/** 半径が 等しい 2 つの 円(中心 A、B)と 交点 P、Q */
+const FIG_TWO_CIRCLES: DiagramSpec = (() => {
+  const A: DiagramPt = [-0.8, 0];
+  const B: DiagramPt = [0.8, 0];
+  const h = Math.sqrt(1.3 ** 2 - 0.8 ** 2);
+  return {
+    kind: 'diagram',
+    view: [-2.3, -1.75, 4.6, 3.5],
+    label: '交わる 2 つの 円',
+    items: [
+      { t: 'circle', c: A, r: 1.3 },
+      { t: 'circle', c: B, r: 1.3 },
+      { t: 'seg', a: A, b: B, tone: 'faint' },
+      { t: 'seg', a: [0, h], b: [0, -h], tone: 'faint' },
+      { t: 'dot', p: A, label: 'A', at: 225 },
+      { t: 'dot', p: B, label: 'B', at: -45 },
+      { t: 'dot', p: [0, h], label: 'P', at: 90 },
+      { t: 'dot', p: [0, -h], label: 'Q', at: 270 },
+    ],
+  };
+})();
+
+/** 平行四辺形 ABCD と 対角線の 交点 O */
+const FIG_PARALLELOGRAM: DiagramSpec = (() => {
+  const A: DiagramPt = [-1.3, -0.75];
+  const B: DiagramPt = [0.8, -0.75];
+  const C: DiagramPt = [1.3, 0.75];
+  const D: DiagramPt = [-0.8, 0.75];
+  return {
+    kind: 'diagram',
+    view: [-1.8, -1.2, 3.6, 2.4],
+    label: '平行四辺形 ABCD',
+    items: [
+      { t: 'poly', pts: [A, B, C, D] },
+      { t: 'seg', a: A, b: C, tone: 'faint' },
+      { t: 'seg', a: B, b: D, tone: 'faint' },
+      { t: 'dot', p: A, label: 'A', at: 225 },
+      { t: 'dot', p: B, label: 'B', at: -45 },
+      { t: 'dot', p: C, label: 'C', at: 45 },
+      { t: 'dot', p: D, label: 'D', at: 135 },
+      { t: 'dot', p: [0, 0], label: 'O', at: 270 },
+    ],
+  };
+})();
+
+/** △ABC を 点 O を 中心に 回転移動した △A′B′C′ */
+const FIG_ROTATE: DiagramSpec = (() => {
+  const tri: DiagramPt[] = [
+    [1.5, 0.15],
+    [2.6, 0.35],
+    [1.9, 1.25],
+  ];
+  const moved = tri.map((q) => turn(q, 80));
+  const names = ['A', 'B', 'C'];
+  const out = [-60, -20, 60];
+  return {
+    kind: 'diagram',
+    view: [-1.6, -0.7, 4.6, 3.8],
+    label: '回転移動',
+    items: [
+      { t: 'poly', pts: tri, fill: true },
+      { t: 'poly', pts: moved, fill: true },
+      { t: 'seg', a: [0, 0], b: tri[0], tone: 'faint', dash: true },
+      { t: 'seg', a: [0, 0], b: moved[0], tone: 'faint', dash: true },
+      ...tri.map((q, i): DiagramItem => ({ t: 'dot', p: q, label: names[i], at: out[i] })),
+      ...moved.map((q, i): DiagramItem => ({ t: 'dot', p: q, label: `${names[i]}′`, at: out[i] + 80 })),
+      { t: 'dot', p: [0, 0], label: 'O', at: 225 },
+    ],
+  };
+})();
+
+/** 円 O と 円周上の 2 点 A、B。弧 AB か 弦 AB を 赤で */
+function circleFig(mark: 'arc' | 'chord'): DiagramSpec {
+  const A = at([0, 0], 1, 20);
+  const B = at([0, 0], 1, 130);
+  return {
+    kind: 'diagram',
+    view: [-1.5, -1.3, 3, 2.6],
+    width: 240,
+    label: '円 O',
+    items: [
+      { t: 'circle', c: [0, 0], r: 1 },
+      mark === 'arc' ? { t: 'arc', c: [0, 0], r: 1, from: 20, to: 130, tone: 'ask' } : { t: 'seg', a: A, b: B, tone: 'ask' },
+      { t: 'dot', p: [0, 0], label: 'O', at: 270 },
+      { t: 'dot', p: A, label: 'A', at: 20 },
+      { t: 'dot', p: B, label: 'B', at: 130 },
+    ],
+  };
+}
+
+/** 円 O の 接線と 接点 A を 通る 半径(90° の 印は 書かない) */
+const FIG_TANGENT: DiagramSpec = (() => {
+  const A = at([0, 0], 1, 35);
+  return {
+    kind: 'diagram',
+    view: [-1.4, -1.25, 3.4, 2.6],
+    width: 260,
+    label: '円の 接線',
+    items: [
+      { t: 'circle', c: [0, 0], r: 1 },
+      { t: 'line', a: A, b: [A[0] - deg(35)[1], A[1] + deg(35)[0]] },
+      { t: 'seg', a: [0, 0], b: A },
+      { t: 'dot', p: [0, 0], label: 'O', at: 225 },
+      { t: 'dot', p: A, label: 'A', at: 0 },
+      { t: 'text', p: [1.75, -0.35], s: 'ℓ', italic: true },
+    ],
+  };
+})();
+
+/** 直線 ℓ と ℓ 上に ない 点 P、P から ℓ 上の 点に ひいた 線分 */
+const FIG_POINT_LINE: DiagramSpec = {
+  kind: 'diagram',
+  view: [-2.2, -0.55, 4.4, 2.4],
+  label: '点 P と 直線 ℓ',
+  items: [
+    { t: 'line', a: [-1, 0], b: [1, 0] },
+    { t: 'seg', a: [0, 1.4], b: [-1.6, 0], tone: 'faint', dash: true },
+    { t: 'seg', a: [0, 1.4], b: [-0.6, 0], tone: 'faint', dash: true },
+    { t: 'seg', a: [0, 1.4], b: [0, 0], tone: 'faint', dash: true },
+    { t: 'seg', a: [0, 1.4], b: [0.9, 0], tone: 'faint', dash: true },
+    { t: 'seg', a: [0, 1.4], b: [1.8, 0], tone: 'faint', dash: true },
+    { t: 'dot', p: [0, 1.4], label: 'P', at: 90 },
+    { t: 'text', p: [2.0, 0.22], s: 'ℓ', italic: true },
+  ],
+};
+
+/** 3 つの 地点 P、Q、R */
+const FIG_PQR: DiagramSpec = {
+  kind: 'diagram',
+  view: [-2, -1.3, 4, 2.9],
+  width: 260,
+  label: '3 つの 地点',
+  items: [
+    { t: 'dot', p: [-1.4, -0.7], label: 'P', at: 225 },
+    { t: 'dot', p: [1.5, -0.9], label: 'Q', at: -45 },
+    { t: 'dot', p: [0.2, 1.2], label: 'R', at: 90 },
+  ],
+};
+
+/** 円 O と 周上の 点 A */
+const FIG_CIRCLE_A: DiagramSpec = {
+  kind: 'diagram',
+  view: [-1.5, -1.3, 3, 2.6],
+  width: 240,
+  label: '円 O と 点 A',
+  items: [{ t: 'circle', c: [0, 0], r: 1 }, { t: 'dot', p: [0, 0], label: 'O', at: 225 }, { t: 'dot', p: at([0, 0], 1, 35), label: 'A', at: 35 }],
+};
+
+/** △ABC(辺 BC が 底辺) */
+const FIG_TRIANGLE: DiagramSpec = {
+  kind: 'diagram',
+  view: [-1.6, -0.5, 3.6, 2.4],
+  width: 260,
+  label: '△ABC',
+  items: [
+    { t: 'poly', pts: [[0.4, 1.55], [-1.2, 0], [1.7, 0]] },
+    { t: 'dot', p: [0.4, 1.55], label: 'A', at: 90 },
+    { t: 'dot', p: [-1.2, 0], label: 'B', at: 225 },
+    { t: 'dot', p: [1.7, 0], label: 'C', at: -45 },
+  ],
+};
+
+/** 直線 ℓ と、ℓ の 同じ 側の 2 点 A、B */
+const FIG_LINE_AB: DiagramSpec = {
+  kind: 'diagram',
+  view: [-2.2, -0.5, 4.4, 2.3],
+  label: '直線 ℓ と 2 点 A、B',
+  items: [
+    { t: 'line', a: [-1, 0], b: [1, 0] },
+    { t: 'dot', p: [-1, 1.4], label: 'A', at: 90 },
+    { t: 'dot', p: [1.1, 0.6], label: 'B', at: 45 },
+    { t: 'text', p: [2.0, 0.22], s: 'ℓ', italic: true },
+  ],
+};
+
 
 const SHAPES: { name: string; line: boolean; point: boolean; axes: number; why?: string }[] = [
   { name: '正方形', line: true, point: true, axes: 4 },
@@ -293,6 +516,7 @@ function genSymmetry(rng: Rng, d: Difficulty): Problem {
         answer,
         hint: '折って ぴったり 重なる 直線を 1 本ずつ 数えよう',
         explanation: [text(`${s.name}の 対称の軸は ${n} 本`), ...(s.name.startsWith('正') ? [text('正多角形の 対称の軸は 頂点の 数と 同じ')] : [])],
+        explanationFigure: axesFigure(s.name),
         tags: ['symmetry_axes'],
         key: `sym2:axes:${s.name}`,
         mistakes,
@@ -365,8 +589,8 @@ function genSymmetry(rng: Rng, d: Difficulty): Problem {
       verify: String(answer.kind === 'choice' ? answer.correct : 0),
     };
   }
-  // ★3: 対称移動・回転移動の 性質(教科書の まとめ)
-  const facts: { q: string; a: string; w: Wrong[]; tag: string }[] = [
+  // ★3: 対称移動・回転移動の 性質(教科書の まとめ)。文だけでは 思いうかべにくい ものに 図(先生の指摘 2026-10-18)
+  const facts: { q: string; a: string; w: Wrong[]; tag: string; fig?: DiagramSpec }[] = [
     {
       q: '△ABC を 直線 ℓ を 対称の軸として 対称移動した。点 A と、対応する 点 A′ を 結ぶ 線分 AA′ と ℓ の 関係は?',
       a: 'ℓ は AA′ を 垂直に 2 等分する',
@@ -378,6 +602,7 @@ function genSymmetry(rng: Rng, d: Difficulty): Problem {
       a: 'OA = OA′、∠AOA′ = ∠BOB′',
       w: [{ opt: 'AA′ // BB′、AA′ = BB′', say: 'それは 平行移動の 性質だよ' }, { opt: 'O は AA′ の 中点', say: 'それは 180° の 回転(点対称移動)の ときだけ' }, { opt: 'OA と OA′ は 垂直', say: '90° 回した ときだけ 垂直。いつも 等しいのは 長さ' }],
       tag: 'symmetry_rotate',
+      fig: FIG_ROTATE,
     },
     {
       q: '点対称な 図形で、対応する 2 点を 結ぶ 線分は どうなる?',
@@ -402,6 +627,7 @@ function genSymmetry(rng: Rng, d: Difficulty): Problem {
       a: '直線 PQ は 線分 AB の 垂直二等分線',
       w: [{ opt: 'PQ // AB', say: '2 つの 円の 交点を 結ぶ 線は、中心を 結ぶ 線と 垂直に 交わるよ' }, { opt: 'PQ = AB', say: '長さが 等しいとは かぎらないよ' }, { opt: 'A は 線分 PQ の 中点', say: 'PQ の 中点は 2 つの 中心の 真ん中に あるよ' }],
       tag: 'symmetry_two_circles',
+      fig: FIG_TWO_CIRCLES,
     },
     {
       q: '△ABC を 点 O を 中心に 回転移動した。点 A の 動いた あとは どんな 線?',
@@ -420,6 +646,7 @@ function genSymmetry(rng: Rng, d: Difficulty): Problem {
       a: '頂点 C',
       w: [{ opt: '頂点 B', say: '180° 回すと、O を はさんで 反対側の 頂点に 重なるよ' }, { opt: '頂点 D', say: '180° 回すと、O を はさんで 反対側の 頂点に 重なるよ' }, { opt: '頂点 A(動かない)' }],
       tag: 'symmetry_parallelogram',
+      fig: FIG_PARALLELOGRAM,
     },
     {
       q: '長方形の 対称の軸は どれ?',
@@ -471,6 +698,7 @@ function genSymmetry(rng: Rng, d: Difficulty): Problem {
     explanation: [text(`答え: ${f.a}`)],
     tags: [f.tag],
     key: `sym3:${f.q}`,
+    figure: f.fig,
     mistakes,
     verify: String(answer.kind === 'choice' ? answer.correct : 0),
   };
@@ -523,8 +751,8 @@ function sectorArcArea(d: Difficulty, r: number, a: number, asArc: boolean): Pro
   return {
     templateId: 'g1.geo.sector',
     difficulty: d,
-    prompt: text(`半径 ${r} cm、中心角 ${a}° の おうぎ形の ${label}は?(π を 使って 答える)`),
-    promptText: `半径 ${r} cm、中心角 ${a}° のおうぎ形の${label}は?(π を使って答える)`,
+    prompt: text(`半径 ${r} cm、中心角 ${a}° の おうぎ形の ${label}は?(円周率は π と する)`),
+    promptText: `半径 ${r} cm、中心角 ${a}° のおうぎ形の${label}は?(円周率は π とする)`,
     answer: { kind: 'expression', expected: piExpr(v) },
     layout: 'prose',
     hint: asArc ? `円周 2πr の ${a}/360 倍` : `円の 面積 πr² の ${a}/360 倍`,
@@ -551,7 +779,8 @@ function sectorAngle(rng: Rng, d: Difficulty): Problem {
   return {
     templateId: 'g1.geo.sector',
     difficulty: d,
-    prompt: text(`半径 ${r} cm の おうぎ形で、${given} のとき、中心角は 何度?(数だけ 答える)`),
+    // 問題文は「何度?」まで(先生の指摘 2026-10-18)
+    prompt: text(`半径 ${r} cm の おうぎ形で、${given} のとき、中心角は 何度?`),
     promptText: `半径 ${r} cm のおうぎ形で、${given} のとき、中心角は何度?`,
     answer: { kind: 'number', value: rat(a) },
     layout: 'prose',
@@ -612,6 +841,8 @@ interface Fact {
   a: string;
   w: Wrong[];
   tag: string;
+  /** 状況の 図(先生の指摘 2026-10-18「図を 出しましょう」) */
+  fig?: DiagramSpec;
 }
 
 /** ★1: 何の 作図か・用語 */
@@ -621,8 +852,8 @@ const CONSTRUCT_1: Fact[] = [
   { q: '2 直線が 垂直に 交わるとき、一方の 直線を 他方の 直線の 何という?', a: '垂線', w: [{ opt: '平行線', say: '平行線は 交わらない 2 直線だよ' }, { opt: '接線' }, { opt: '弦' }], tag: 'construct_term' },
   { q: '線分を 2 等分する 点を 何という?', a: '中点', w: [{ opt: '交点', say: '交点は 線が 交わる 点。2 等分する 点は …' }, { opt: '接点' }, { opt: '頂点' }], tag: 'construct_term' },
   { q: '作図で 使う 道具は?', a: '定規と コンパスだけ', w: [{ opt: '定規・コンパス・分度器', say: '作図では 分度器を 使わない。角は コンパスで つくるよ' }, { opt: '目もりの ある ものさしと 分度器', say: '作図では 長さも 角度も はからないよ' }, { opt: '三角定規 2 枚' }], tag: 'construct_term' },
-  { q: '円周上の 2 点 A、B を 結ぶ 線分を 何という?', a: '弦 AB', w: [{ opt: '弧 AB', say: '弧は 円周の 一部(曲がった 線)。まっすぐ 結ぶ 線分は …' }, { opt: '直径' }, { opt: '半径' }], tag: 'construct_term' },
-  { q: '円周の A から B までの 部分を 何という?', a: '弧 AB', w: [{ opt: '弦 AB', say: '弦は A と B を まっすぐ 結ぶ 線分。円周の 一部は …' }, { opt: '中心角' }, { opt: 'おうぎ形' }], tag: 'construct_term' },
+  { q: '円周上の 2 点 A、B を 結ぶ 線分を 何という?', a: '弦 AB', w: [{ opt: '弧 AB', say: '弧は 円周の 一部(曲がった 線)。まっすぐ 結ぶ 線分は …' }, { opt: '直径' }, { opt: '半径' }], tag: 'construct_term', fig: circleFig('chord') },
+  { q: '円周の A から B までの 部分を 何という?', a: '弧 AB', w: [{ opt: '弦 AB', say: '弦は A と B を まっすぐ 結ぶ 線分。円周の 一部は …' }, { opt: '中心角' }, { opt: 'おうぎ形' }], tag: 'construct_term', fig: circleFig('arc') },
   { q: '直線が 円と 1 点だけで 出あうとき、その 直線を 何という?', a: '円の 接線', w: [{ opt: '弦', say: '弦は 円周上の 2 点を 結ぶ 線分だよ' }, { opt: '垂線' }, { opt: '直径' }], tag: 'construct_term' },
   { q: '中心が O である 円を 何という?', a: '円 O', w: [{ opt: '弧 O', say: '弧は 円周の 一部。中心が O の 円は …' }, { opt: '点 O', say: '点 O は 中心。円全体の よび方は …' }, { opt: '弦 O' }], tag: 'construct_term' },
   { q: '作図で 定規は 何のために 使う?', a: '直線を ひくため(長さは はからない)', w: [{ opt: '長さを はかるため', say: '作図では 目もりを 使わない。長さを うつすのは コンパス' }, { opt: '円を かくため', say: '円を かくのは コンパスだよ' }, { opt: '角度を はかるため' }], tag: 'construct_term' },
@@ -638,17 +869,18 @@ const CONSTRUCT_1: Fact[] = [
 const CONSTRUCT_2: Fact[] = [
   { q: '線分 AB の 垂直二等分線 上の 点 P について、正しいのは?', a: 'PA = PB', w: [{ opt: 'PA と PB は 垂直', say: '垂直なのは 垂直二等分線と AB。P は A と B から 等しい 距離に あるよ' }, { opt: 'P は いつも AB の 中点', say: '中点は 垂直二等分線上の 1 点だけ。どの 点でも 言えるのは …' }, { opt: 'PA = AB' }], tag: 'construct_prop' },
   { q: '∠AOB の 二等分線 上の 点 P について、正しいのは?', a: 'P から 辺 OA、OB までの 距離は 等しい', w: [{ opt: 'PO = PA', say: '等しいのは 2 つの 辺までの 距離(垂線の 長さ)だよ' }, { opt: 'P は O から 等しい 距離に ある', say: 'O からの 距離では なく、2 辺までの 距離が 等しい' }, { opt: 'P から A、B までの 距離が 等しい', say: 'それは 垂直二等分線の 性質だよ' }], tag: 'construct_prop' },
-  { q: '2 点 A、B から 等しい 距離に ある 点は、どこに ある?', a: '線分 AB の 垂直二等分線上', w: [{ opt: '∠A の 二等分線上', say: '2 点からの 距離は 垂直二等分線、2 辺からの 距離は 角の二等分線' }, { opt: '線分 AB 上だけ', say: 'AB の 外にも たくさん あるよ。折り目の 線を 思い出そう' }, { opt: 'A を 中心とする 円の 上' }], tag: 'construct_prop' },
-  { q: '角の 内部で、その 角の 2 辺から 等しい 距離に ある 点は、どこに ある?', a: 'その 角の 二等分線上', w: [{ opt: '2 辺の 垂直二等分線上', say: '2 辺からの 距離は 角の二等分線だよ' }, { opt: '角の 頂点を 中心とする 円の 上', say: '頂点からの 距離が 等しい 点の 集まりは 円。2 辺からの 距離は …' }, { opt: 'どこにも ない' }], tag: 'construct_prop' },
-  { q: '円の 接線と、接点を 通る 半径の 関係は?', a: '垂直に 交わる', w: [{ opt: '平行', say: '接線は 接点で 半径と 90° に 交わるよ' }, { opt: '45° で 交わる' }, { opt: '重なる' }], tag: 'construct_prop' },
+  // 「点の 集まりを 何という?」の 形(教科書の ことば。先生の指摘 2026-10-18)
+  { q: '2 点 A、B から 等しい 距離に ある 点の 集まりを 何という?', a: '線分 AB の 垂直二等分線', w: [{ opt: '∠A の 二等分線', say: '2 点からの 距離は 垂直二等分線、2 辺からの 距離は 角の二等分線' }, { opt: '線分 AB', say: 'AB の 外にも たくさん あるよ。折り目の 線を 思い出そう' }, { opt: 'A を 中心とする 円' }], tag: 'construct_prop' },
+  { q: '角の 内部で、その 角の 2 辺から 等しい 距離に ある 点の 集まりを 何という?', a: 'その 角の 二等分線', w: [{ opt: '2 辺の 垂直二等分線', say: '2 辺からの 距離は 角の二等分線だよ' }, { opt: '角の 頂点を 中心とする 円', say: '頂点からの 距離が 等しい 点の 集まりは 円。2 辺からの 距離は …' }, { opt: '角の 頂点を 通る 垂線' }], tag: 'construct_prop' },
+  // 図に 90° の 印は 書かない(答えに なるので。先生の指摘 2026-10-18)
+  { q: '円の 接線と、接点を 通る 半径の 関係は?', a: '垂直に 交わる', w: [{ opt: '平行', say: '接線は 接点で 半径と 90° に 交わるよ' }, { opt: '45° で 交わる' }, { opt: '重なる' }], tag: 'construct_prop', fig: FIG_TANGENT },
   { q: '点 P と 直線 ℓ との 距離とは?', a: 'P から ℓ に ひいた 垂線の 長さ', w: [{ opt: 'P と ℓ 上の どの 点までの 長さでも よい', say: 'ℓ 上の 点までの 長さは いろいろ。もっとも 短い 垂線の 長さが 距離だよ' }, { opt: 'P と ℓ の はしまでの 長さ', say: '直線には はしが ないよ' }, { opt: 'ℓ に 平行に はかった 長さ' }], tag: 'construct_prop' },
   { q: '線分 AB の 中点を 作図で 求めるには?', a: 'AB の 垂直二等分線と AB の 交点を とる', w: [{ opt: 'ものさしで はかって 半分の 位置に 印を つける', say: '作図では 目もりを 使わない。垂直二等分線を 使うよ' }, { opt: 'A を 中心に AB を 半径と する 円を かく' }, { opt: '∠A の 二等分線を ひく', say: '角の二等分線では 線分の 真ん中は 出ないよ' }], tag: 'construct_prop' },
   { q: '60° の 角を 作図するには?', a: '正三角形を 作図して 1 つの 角を 使う', w: [{ opt: '直角を 3 等分する', say: '作図で 角を 3 等分は できないよ。正三角形の 角は 60°' }, { opt: '分度器で はかる', say: '作図では 分度器を 使わないよ' }, { opt: '直角を 二等分する', say: '直角の 二等分は 45° だよ' }], tag: 'construct_angle' },
   { q: '45° の 角を 作図するには?', a: '垂線で 90° を つくり、二等分する', w: [{ opt: '正三角形の 角を 二等分する', say: '正三角形の 角(60°)の 二等分は 30° だよ' }, { opt: '90° から 60° を ひく', say: '90° − 60° = 30° だよ' }, { opt: '分度器で はかる' }], tag: 'construct_angle' },
   { q: '30° の 角を 作図するには?', a: '正三角形の 角(60°)を 二等分する', w: [{ opt: '90° を 二等分する', say: '90° の 二等分は 45° だよ' }, { opt: '60° を 3 等分する' }, { opt: '分度器で はかる' }], tag: 'construct_angle' },
-  { q: '直線 AB 上の 点 O を 通る、AB の 垂線を 作図するには?', a: '一直線の 角 ∠AOB(180°)の 二等分線を ひく', w: [{ opt: 'O を 中心とする 円を 1 つ かく だけ', say: '円を かいた あと、交点から 二等分線を ひくよ' }, { opt: 'AB の 垂直二等分線を ひく', say: 'O が AB の 中点とは かぎらないよ' }, { opt: 'O から 平行線を ひく' }], tag: 'construct_prop' },
   { q: '平行な 2 直線 ℓ、m の 距離とは?', a: 'ℓ 上の 点から m に ひいた 垂線の 長さ', w: [{ opt: 'ℓ 上の 点と m 上の 点を 結ぶ どの 線分の 長さでも よい', say: 'ななめの 線分は 長く なるよ。垂線の 長さで はかる' }, { opt: 'ℓ の 長さ' }, { opt: '決まらない', say: 'ℓ 上の どこから はかっても 同じ 長さ(一定)に なるよ' }], tag: 'construct_prop' },
-  { q: '直線 ℓ 上に ない 点 P と、ℓ 上の 点を 結ぶ 線分の うち、もっとも 短いのは?', a: 'P から ℓ に ひいた 垂線', w: [{ opt: 'ℓ と 45° に 交わる 線分', say: 'ななめの 線分は 垂線より 長く なるよ' }, { opt: 'どれも 同じ 長さ' }, { opt: 'ℓ と 平行な 線分', say: '平行な 線は ℓ と 交わらないよ' }], tag: 'construct_prop' },
+  { q: '直線 ℓ 上に ない 点 P と、ℓ 上の 点を 結ぶ 線分の うち、もっとも 短いのは?', a: 'P から ℓ に ひいた 垂線', w: [{ opt: 'ℓ と 45° に 交わる 線分', say: 'ななめの 線分は 垂線より 長く なるよ' }, { opt: 'どれも 同じ 長さ' }, { opt: 'ℓ と 平行な 線分', say: '平行な 線は ℓ と 交わらないよ' }], tag: 'construct_prop', fig: FIG_POINT_LINE },
   { q: '中心 A、B の 2 つの 円が 2 点 P、Q で 交わる。直線 AB と 直線 PQ の 関係は?', a: 'AB ⊥ PQ', w: [{ opt: 'AB // PQ', say: '2 つの 円の 交点を 結ぶ 線は、中心を 結ぶ 線と 垂直だよ' }, { opt: 'AB = PQ' }, { opt: '関係は ない' }], tag: 'construct_prop' },
   { q: '線分 AB の 垂直二等分線を 作図するとき、A と B を 中心に かく 2 つの 円の 半径は?', a: '等しく する', w: [{ opt: 'A の 円を 大きく する', say: '半径が ちがうと、交点を 結ぶ 線は 中点を 通らないよ' }, { opt: 'どちらも AB の 半分に する', say: 'AB の 半分では 2 つの 円が 1 点でしか 出あわない。半分より 大きく' }, { opt: 'ちがう 長さに する' }], tag: 'construct_prop' },
   { q: '∠AOB の 二等分線の 作図で、O を 中心に 円を かいて 辺との 交点 C、D を とった。次に する ことは?', a: 'C、D を 中心に 等しい 半径の 円を かき、交点 E を とる', w: [{ opt: 'C と D を 結ぶ 線分を ひく', say: 'まだ 手順が いるよ。C、D から 等しい 半径の 円を かこう' }, { opt: 'O を 中心に もう 1 つ 円を かく' }, { opt: '分度器で ∠AOB を はかる', say: '作図では 分度器を 使わないよ' }], tag: 'construct_prop' },
@@ -656,15 +888,17 @@ const CONSTRUCT_2: Fact[] = [
 
 /** ★3: 組み合わせ・利用 */
 const CONSTRUCT_3: Fact[] = [
+  // ★2 から 移した(先生の判定 2026-10-18「難易度 3 に」)
+  { q: '直線 AB 上の 点 O を 通る、AB の 垂線を 作図するには?', a: '一直線の 角 ∠AOB(180°)の 二等分線を ひく', w: [{ opt: 'O を 中心とする 円を 1 つ かく だけ', say: '円を かいた あと、交点から 二等分線を ひくよ' }, { opt: 'AB の 垂直二等分線を ひく', say: 'O が AB の 中点とは かぎらないよ' }, { opt: 'O から 平行線を ひく' }], tag: 'construct_use' },
   { q: '円の 一部(弧)だけが 残っている。もとの 円の 中心を 作図で 求めるには?', a: '弧の 上に 3 点を とり、2 本の 弦の 垂直二等分線の 交点を とる', w: [{ opt: '1 本の 弦の 中点を とる', say: '中心は 弦の 中点では なく、垂直二等分線の 上に あるよ。2 本で 1 点に 決まる' }, { opt: '弧の 両はしを 結ぶ 弦の 角の 二等分線を ひく' }, { opt: '弧の 両はしで 接線を ひく', say: '接線どうしの 交点は 中心では ないよ' }], tag: 'construct_use' },
-  { q: '3 つの 地点 P、Q、R から 等しい 距離に ある 地点を 作図で 求めるには?', a: 'PQ と QR の 垂直二等分線の 交点', w: [{ opt: '∠PQR の 二等分線と PR の 交点', say: '2 点からの 距離が 等しいのは 垂直二等分線。2 本 使おう' }, { opt: 'PQ の 中点', say: 'PQ の 中点は R からの 距離が ちがうよ' }, { opt: '3 つの 角の 二等分線の 交点', say: 'それは 3 つの 辺からの 距離が 等しい 点だよ' }], tag: 'construct_use' },
+  { q: '3 つの 地点 P、Q、R から 等しい 距離に ある 地点を 作図で 求めるには?', a: 'PQ と QR の 垂直二等分線の 交点', w: [{ opt: '∠PQR の 二等分線と PR の 交点', say: '2 点からの 距離が 等しいのは 垂直二等分線。2 本 使おう' }, { opt: 'PQ の 中点', say: 'PQ の 中点は R からの 距離が ちがうよ' }, { opt: '3 つの 角の 二等分線の 交点', say: 'それは 3 つの 辺からの 距離が 等しい 点だよ' }], tag: 'construct_use', fig: FIG_PQR },
   { q: '2 つの 地点 P、Q に AED が ある。どちらの AED が 近いかで 地図を 2 つに 分ける 線は?', a: '線分 PQ の 垂直二等分線', w: [{ opt: '線分 PQ', say: 'PQ の 上でも、P に 近い 所と Q に 近い 所が あるよ' }, { opt: 'P を 中心とする 円', say: '境目は P と Q から 等しい 距離の 点の 集まり' }, { opt: '∠P の 二等分線' }], tag: 'construct_use' },
   { q: '線分 AB と、半直線 AC、BD がある。AC、AB、BD までの 距離が 等しい 点 P を 求めるには?', a: '∠CAB の 二等分線と ∠ABD の 二等分線の 交点', w: [{ opt: 'AB の 垂直二等分線と AC の 交点', say: '2 つの 線までの 距離は 角の二等分線。2 本 使おう' }, { opt: 'A と B から 等しい 距離の 点', say: '点からの 距離では なく、直線までの 距離だよ' }, { opt: 'AB の 中点' }], tag: 'construct_use' },
-  { q: '円 O の 周上の 点 A を 通る 接線を 作図するには?', a: '直線 OA を ひき、A を 通る OA の 垂線を ひく', w: [{ opt: 'OA の 垂直二等分線を ひく', say: '垂直二等分線は OA の 中点を 通る。接線は A を 通るよ' }, { opt: '∠OA の 二等分線を ひく' }, { opt: 'A を 中心に 半径 OA の 円を かく' }], tag: 'construct_use' },
-  { q: '△ABC で、辺 BC を 底辺と したときの 高さを 作図するには?', a: '頂点 A から 直線 BC への 垂線を ひく', w: [{ opt: 'BC の 垂直二等分線を ひく', say: '垂直二等分線は A を 通るとは かぎらないよ' }, { opt: '∠A の 二等分線を ひく', say: '二等分線は BC に 垂直とは かぎらないよ' }, { opt: 'A と BC の 中点を 結ぶ' }], tag: 'construct_use' },
+  { q: '円 O の 周上の 点 A を 通る 接線を 作図するには?', a: '直線 OA を ひき、A を 通る OA の 垂線を ひく', w: [{ opt: 'OA の 垂直二等分線を ひく', say: '垂直二等分線は OA の 中点を 通る。接線は A を 通るよ' }, { opt: '∠OA の 二等分線を ひく' }, { opt: 'A を 中心に 半径 OA の 円を かく' }], tag: 'construct_use', fig: FIG_CIRCLE_A },
+  { q: '△ABC で、辺 BC を 底辺と したときの 高さを 作図するには?', a: '頂点 A から 直線 BC への 垂線を ひく', w: [{ opt: 'BC の 垂直二等分線を ひく', say: '垂直二等分線は A を 通るとは かぎらないよ' }, { opt: '∠A の 二等分線を ひく', say: '二等分線は BC に 垂直とは かぎらないよ' }, { opt: 'A と BC の 中点を 結ぶ' }], tag: 'construct_use', fig: FIG_TRIANGLE },
   { q: '75° の 角を 作図する 方法として 正しいのは?', a: '90° の 二等分(45°)と 60° の 二等分(30°)を 合わせる', w: [{ opt: '90° と 60° を 合わせて 二等分しない', say: '90° + 60° = 150° だよ' }, { opt: '60° に 90° の 二等分(45°)を 合わせる', say: '60° + 45° = 105° だよ' }, { opt: '60° から 90° の 二等分(45°)を ひく', say: '60° − 45° = 15° だよ' }], tag: 'construct_angle' },
   { q: '線分 AB を 1 辺と する 正方形を 作図するとき、まず 使う 作図は?', a: 'A を 通る AB の 垂線', w: [{ opt: 'AB の 垂直二等分線', say: '正方形の 辺は A から 垂直に 立てるよ。中点では ない' }, { opt: '∠A の 二等分線' }, { opt: '60° の 角' }], tag: 'construct_use' },
-  { q: '直線 ℓ 上に あって、2 点 A、B から 等しい 距離に ある 点を 求めるには?', a: '線分 AB の 垂直二等分線と ℓ の 交点', w: [{ opt: '線分 AB の 中点', say: '中点は ℓ 上に あるとは かぎらないよ' }, { opt: 'A から ℓ への 垂線と ℓ の 交点', say: 'それは A に いちばん 近い 点。A と B から 等しい 点は …' }, { opt: 'A と B を 結ぶ 直線と ℓ の 交点' }], tag: 'construct_use' },
+  { q: '直線 ℓ 上に あって、2 点 A、B から 等しい 距離に ある 点を 求めるには?', a: '線分 AB の 垂直二等分線と ℓ の 交点', w: [{ opt: '線分 AB の 中点', say: '中点は ℓ 上に あるとは かぎらないよ' }, { opt: 'A から ℓ への 垂線と ℓ の 交点', say: 'それは A に いちばん 近い 点。A と B から 等しい 点は …' }, { opt: 'A と B を 結ぶ 直線と ℓ の 交点' }], tag: 'construct_use', fig: FIG_LINE_AB },
   { q: '∠AOB の 辺 OB 上の 点 C で OB に 接し、辺 OA にも 接する 円の 中心を 求めるには?', a: 'C を 通る OB の 垂線と、∠AOB の 二等分線の 交点', w: [{ opt: 'OC の 垂直二等分線と ∠AOB の 二等分線の 交点', say: '接線は 接点を 通る 半径に 垂直。C を 通る 垂線を ひこう' }, { opt: 'C を 通る OB の 垂線と OA の 交点', say: '中心は 2 つの 辺から 等しい 距離 → 角の二等分線の 上にも あるよ' }, { opt: 'O と C の 中点' }], tag: 'construct_use' },
   { q: '正方形 ABCD の 紙を、頂点 A が 辺 CD の 中点 M に 重なるように 折った。折り目の 線は?', a: '線分 AM の 垂直二等分線', w: [{ opt: '∠A の 二等分線', say: '2 つの 点が 重なる 折り目は、その 2 点を 結ぶ 線分の 対称の軸' }, { opt: '線分 AM', say: '折り目は AM と 垂直に 交わるよ' }, { opt: '対角線 AC' }], tag: 'construct_use' },
   { q: '点 P を、直線 ℓ を 対称の軸として 対称移動した 点 P′ を 作図するには?', a: 'P から ℓ への 垂線を ひき、ℓ を はさんで P と 等しい 距離に とる', w: [{ opt: 'P を 通る ℓ の 平行線の 上に とる', say: 'P と P′ を 結ぶ 線は ℓ と 垂直に 交わるよ' }, { opt: 'ℓ 上の 好きな 点を 中心に P を 180° 回す', say: 'それは 回転移動。対称移動は 折り返し' }, { opt: 'P から ℓ への 垂線と ℓ の 交点' }], tag: 'construct_use' },
@@ -688,6 +922,7 @@ function genConstruct(rng: Rng, d: Difficulty): Problem {
     explanation: [text(`答え: ${c.a}`), ...(c.tag === 'construct_prop' || c.tag === 'construct_use' ? [text('垂直二等分線は 線分の 対称の軸、角の二等分線は 角の 対称の軸')] : [])],
     tags: [c.tag],
     key: `con:${c.q}`,
+    figure: c.fig,
     mistakes,
     verify: String(answer.kind === 'choice' ? answer.correct : 0),
   };

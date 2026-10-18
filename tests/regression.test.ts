@@ -58,8 +58,8 @@ describe('レビュー指摘の回帰', () => {
     const seen = new Set<string>();
     for (let i = 0; i < 200; i++) {
       const p = getTemplate('g1.geo.angle').generate(rng, 2);
-      // 回転の 角(正六角形)は 角に 印を 付けない。作図できる 角は 図なし
-      if (p.tags.includes('angle_rotation') || p.tags.includes('angle_construct')) continue;
+      // 回転の 角(正六角形)は 角に 印を 付けない
+      if (p.tags.includes('angle_rotation')) continue;
       expect(p.figure?.kind, p.promptText).toBe('angles');
       if (p.figure?.kind !== 'angles') continue;
       const xMark = p.figure.marks.find((m) => m.label === 'x');

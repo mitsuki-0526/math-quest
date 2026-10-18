@@ -605,6 +605,11 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                 <b>正解:</b> <Tex tex={answerTex(explain.problem)} />
               </span>
             </p>
+            {explain.problem.explanationFigure && (
+              <div class="question-figure">
+                <Figure spec={explain.problem.explanationFigure} />
+              </div>
+            )}
             <ol class="explain-steps">
               {explain.problem.explanation.map((line, i) => (
                 <li key={i}>

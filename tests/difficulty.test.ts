@@ -760,10 +760,10 @@ const piCoef = (p: Problem) => {
 };
 
 describe('第5章 平面図形', () => {
-  it('角: 対頂角(2 年)・三角形の 内角の和(小学校)は 出さない。★1 は 一直線と 角の二等分線、★3 は 2 つの 二等分線(章の問題)と 作図できる 角', () => {
+  it('角: 対頂角(2 年)・三角形の 内角の和(小学校)は 出さない。★1 は 一直線と 角の二等分線、★3 は 2 つの 二等分線(章の問題)。作図できる 角は 文が ややこしい だけなので 出さない(先生の判定 2026-10-18)', () => {
     expect(tagsOf('g1.geo.angle', 1)).toEqual(['angle_bisector', 'angle_straight']);
-    expect(tagsOf('g1.geo.angle', 2)).toEqual(['angle_bisector', 'angle_construct', 'angle_right', 'angle_rotation', 'angle_straight']);
-    expect(tagsOf('g1.geo.angle', 3)).toEqual(['angle_construct', 'angle_right', 'angle_rotation', 'angle_two_bisectors']);
+    expect(tagsOf('g1.geo.angle', 2)).toEqual(['angle_bisector', 'angle_right', 'angle_rotation', 'angle_straight']);
+    expect(tagsOf('g1.geo.angle', 3)).toEqual(['angle_right', 'angle_rotation', 'angle_two_bisectors']);
     for (const d of [1, 2, 3] as const)
       each('g1.geo.angle', d, (p) => {
         expect(p.promptText, p.promptText).not.toMatch(/対頂角|内角/);

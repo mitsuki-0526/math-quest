@@ -256,6 +256,11 @@ export function JudgeScene() {
             <b>正解:</b> <Tex tex={answerTex(p)} />
           </p>
           <div class="judge-detail">
+            {p.explanationFigure && (
+              <div class="question-figure">
+                <Figure spec={p.explanationFigure} />
+              </div>
+            )}
             <ol class="explain-steps">
               {p.explanation.map((line, i) => (
                 <li key={i}>

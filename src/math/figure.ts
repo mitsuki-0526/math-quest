@@ -40,6 +40,11 @@ export interface AnglesSpec {
   center?: string;
   /** 半直線の 先を 順に 結ぶ(正六角形の 外わく) */
   outline?: boolean;
+  /**
+   * 中心と 2 本の 半直線の 先で できる 三角形を 塗る(回転移動で 動かす 三角形 'ink' と 重ねる 先 'ask'。
+   * 先生の指摘 2026-10-18「移動する 三角形が どれか 分かりやすく」)
+   */
+  fills?: { from: number; to: number; tone: 'ink' | 'ask' }[];
 }
 
 /** おうぎ形(第5章) */
@@ -77,6 +82,36 @@ export interface GridSpec {
   lines?: { x1: number; y1: number; x2: number; y2: number; label?: string; arrow?: boolean }[];
 }
 
+/**
+ * 点・線分・直線・円・多角形を 組み合わせた 図(第5章 対称・作図の 状況の 図など)。
+ * 座標は 好きな 単位で(y は 上が +)、view の 範囲を 幅 width px に 描く。
+ * 色は 'ink'(黒)・'ask'(赤: 答えに かかわる 所)・'faint'(灰: 補助)の 3 つだけ
+ */
+export type DiagramTone = 'ink' | 'ask' | 'faint';
+export type DiagramPt = [number, number];
+export type DiagramItem =
+  | { t: 'seg'; a: DiagramPt; b: DiagramPt; tone?: DiagramTone; dash?: boolean }
+  /** 両方へ 図の はしまで のばす 直線 */
+  | { t: 'line'; a: DiagramPt; b: DiagramPt; tone?: DiagramTone; dash?: boolean }
+  | { t: 'poly'; pts: DiagramPt[]; tone?: DiagramTone; fill?: boolean; dash?: boolean }
+  | { t: 'circle'; c: DiagramPt; r: number; tone?: DiagramTone; dash?: boolean }
+  /** 弧(from° から to° へ 反時計回り。0° が 右) */
+  | { t: 'arc'; c: DiagramPt; r: number; from: number; to: number; tone?: DiagramTone }
+  /** 点と 名前。at は 名前を 置く 向き(度。0 が 右、90 が 上) */
+  | { t: 'dot'; p: DiagramPt; label?: string; at?: number; tone?: DiagramTone }
+  | { t: 'text'; p: DiagramPt; s: string; tone?: DiagramTone; italic?: boolean };
+
+export interface DiagramSpec {
+  kind: 'diagram';
+  /** 描く 範囲 [左, 下, 幅, 高さ] */
+  view: [number, number, number, number];
+  items: DiagramItem[];
+  /** 描く 幅(px)。既定 300 */
+  width?: number;
+  /** 読み上げ用の 名前 */
+  label?: string;
+}
+
 /** 投影図(第6章): 上から見た図と正面から見た図 */
 export interface ProjectionSpec {
   kind: 'projection';
@@ -106,4 +141,4 @@ export interface TableSpec {
   caption?: string;
 }
 
-export type FigureSpec = NumberLineSpec | PlaneSpec | AnglesSpec | SectorSpec | SolidSpec | ProjectionSpec | ChartSpec | TableSpec | GridSpec;
+export type FigureSpec = NumberLineSpec | PlaneSpec | AnglesSpec | SectorSpec | SolidSpec | ProjectionSpec | ChartSpec | TableSpec | GridSpec | DiagramSpec;
