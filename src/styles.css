@@ -835,10 +835,28 @@ img.sprite {
   filter: drop-shadow(0 12px 10px rgba(0, 0, 0, 0.55));
   animation: hover 3s ease-in-out infinite;
 }
-.enemy-sprite.hit {
-  animation: hit-flash 0.5s steps(2) 3;
+/*
+ * 当たったら 3 回 光る(先生の希望で 3 回の まま)。ダメージの 数字が 消える 0.9 秒で 3 回 そろうように 0.3 秒ずつ
+ * (前は 0.5 秒ずつで、0.9 秒で 打ち切られて 2 回しか 見えなかった)。hit-a / hit-b は 同じ 動きで、名前を 替えて かけ直す
+ * (絵を 作り直すと 一瞬 消えるので key は 変えない。2026-10-19)
+ */
+.enemy-sprite.hit-a {
+  animation: hit-flash-a 0.3s steps(2) 3;
 }
-@keyframes hit-flash {
+.enemy-sprite.hit-b {
+  animation: hit-flash-b 0.3s steps(2) 3;
+}
+@keyframes hit-flash-a {
+  0% {
+    filter: brightness(3) drop-shadow(0 0 12px #fff);
+    transform: translateX(-4px);
+  }
+  50% {
+    filter: brightness(1) drop-shadow(0 12px 10px rgba(0, 0, 0, 0.55));
+    transform: translateX(4px);
+  }
+}
+@keyframes hit-flash-b {
   0% {
     filter: brightness(3) drop-shadow(0 0 12px #fff);
     transform: translateX(-4px);

@@ -49,8 +49,15 @@ import { FractionPractice, FRACTION_PRACTICE_FLAG } from '@/ui/components/Fracti
  * - boss: フェーズあり。勝つとボス後の会話へ
  */
 
-type Fx = { id: number; kind: 'enemy' | 'player'; amount: number; targetKey?: string };
+/** seq: 何回目の 演出か(敵が 光る アニメを 絵を 作り直さずに かけ直すため、偶数・奇数で クラスを 替える) */
+type Fx = { id: number; seq: number; kind: 'enemy' | 'player'; amount: number; targetKey?: string };
 type Cmd = 'attack' | 'hint' | 'item' | 'run';
+
+/** その 敵の 最新の 当たりの 演出の クラス(なければ 空) */
+function hitClass(fx: Fx[], enemyKey: string): string {
+  const hit = [...fx].reverse().find((f) => f.kind === 'enemy' && f.targetKey === enemyKey);
+  return hit ? (hit.seq % 2 ? 'hit-a' : 'hit-b') : '';
+}
 
 export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: string; tutorial?: boolean; review?: boolean; templateId?: string }) {
   const save = useStore(saveStore);
@@ -66,6 +73,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
   const [input, setInput] = useState('');
   const [remaining, setRemaining] = useState(0);
   const [fx, setFx] = useState<Fx[]>([]);
+  const fxSeq = useRef(0);
   const [shake, setShake] = useState(0);
   const [cmd, setCmd] = useState<Cmd>('attack');
   const [menu, setMenu] = useState<'none' | 'item'>('none');
@@ -248,13 +256,13 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
       if (change !== 0) next = { ...next, log: [...next.log, change > 0 ? `${characters.pita.name}「調子いいね! 問題が 少し 難しくなるよ」` : `${characters.pita.name}「少し やさしい 問題に するね。ゆっくり いこう」`] };
     });
     if (last.correct) {
-      setFx((f) => [...f, { id: Date.now(), kind: 'enemy', amount: last.damage, targetKey: last.targetKey }]);
+      setFx((f) => [...f, { id: Date.now(), seq: ++fxSeq.current, kind: 'enemy', amount: last.damage, targetKey: last.targetKey }]);
       if (tutorial && !tutorialSaid.correct) {
         next = { ...next, log: [...next.log, `${characters.pita.name}「ホホッ、やった! 見て、スライムが 小さくなった。もう一回!」`] };
         setTutorialSaid((t) => ({ ...t, correct: true }));
       }
     } else {
-      setFx((f) => [...f, { id: Date.now(), kind: 'player', amount: last.damage }]);
+      setFx((f) => [...f, { id: Date.now(), seq: ++fxSeq.current, kind: 'player', amount: last.damage }]);
       setShake((n) => n + 1);
       setExplain({ problem: before.problem!, note: last.note, timeout: false, given: value });
     }
@@ -266,7 +274,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
     if (!state || state.phase !== 'question') return;
     const before = state;
     const next = engineTimeout(state, ctx);
-    setFx((f) => [...f, { id: Date.now(), kind: 'player', amount: next.last!.damage }]);
+    setFx((f) => [...f, { id: Date.now(), seq: ++fxSeq.current, kind: 'player', amount: next.last!.damage }]);
     setShake((n) => n + 1);
     updateSave((d) => {
       tally(d, before.problem!, false, before.timeLimit, before.hintUsedForCurrent, true);
@@ -448,7 +456,9 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                   </span>
                 )}
               </div>
-              <div class={`enemy-sprite ${fx.some((f) => f.kind === 'enemy' && f.targetKey === e.key) ? 'hit' : ''}`} key={`sp-${fx.find((f) => f.targetKey === e.key)?.id ?? 0}`}>
+              {/* 当たったら 光る。絵(img)を 作り直すと 一瞬 消えて 点滅に 見え、浮かぶ 動きも 最初に 戻るので(先生の報告 2026-10-19)、
+                  key は 変えずに クラス(hit-a / hit-b)を 替えて アニメを かけ直す */}
+              <div class={`enemy-sprite ${hitClass(fx, e.key)}`}>
                 <Sprite id={e.def.sprite} size={isBoss ? 170 : state.enemies.length > 2 ? 100 : 130} />
               </div>
               {e.key === state.targetKey && state.phase === 'question' && <span class="asking-mark">?</span>}
