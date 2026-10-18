@@ -127,7 +127,7 @@ export interface ProjectionSpec {
 export interface ChartSpec {
   kind: 'chart';
   type: 'histogram' | 'dot';
-  /** 階級の下限(histogram)または値(dot) */
+  /** 階級の 境目(histogram。values より 1 こ 多い)または値(dot) */
   labels: string[];
   values: number[];
   xTitle?: string;

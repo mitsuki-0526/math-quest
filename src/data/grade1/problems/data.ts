@@ -213,7 +213,8 @@ function genFreq(rng: Rng, d: Difficulty): Problem {
     const i = rng.int(0, k - 1);
     const figure: FigureSpec =
       ask === 'hist'
-        ? { kind: 'chart', type: 'histogram', labels: t.lows.map((l) => fmt(l, t.decimals)), values: t.counts, xTitle: `${t.title}(左の はしが 階級の 下の 値)`, yTitle: '度数(人)' }
+        ? // 横軸は 階級の 境目を 長方形の はしの 下に(教科書の ヒストグラム)
+          { kind: 'chart', type: 'histogram', labels: [...t.lows, t.lows[k - 1] + t.width].map((l) => fmt(l, t.decimals)), values: t.counts, xTitle: t.title, yTitle: '度数(人)' }
         : fig;
     return dataProblem(ID, d, {
       q: `${ask === 'hist' ? 'ヒストグラム' : '度数分布表'}で、${classLabel(t, i)} の 階級の 度数は 何人?`,

@@ -1045,53 +1045,59 @@ function Chart({ spec }: { spec: ChartSpec }) {
   const n = spec.values.length;
   const bw = (W - padL - 20) / n;
   const yOf = (v: number) => H - padB - (v / max) * (H - padB - padT);
+  // 階級の 境目(n + 1 こ)が あれば 教科書と 同じく 長方形の はしの 下に 書く。なければ 真ん中の 下
+  const edges = spec.labels.length === n + 1;
 
   return (
-    <svg class="figure" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={spec.type === 'histogram' ? 'ヒストグラム' : 'ドットプロット'}>
-      {/* 軸 */}
-      <line x1={padL} y1={H - padB} x2={W - 8} y2={H - padB} stroke="currentColor" stroke-width="1.6" />
-      <line x1={padL} y1={H - padB} x2={padL} y2={padT - 4} stroke="currentColor" stroke-width="1.6" />
+    // ほかの 図と 同じ 白い 紙に 黒い 線・文字(先生の指摘 2026-10-19「ヒストグラムが ほかの 図と スタイルが そろって いない」)
+    <svg class="figure figure-paper" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={spec.type === 'histogram' ? 'ヒストグラム' : 'ドットプロット'}>
+      <rect x="0" y="0" width={W} height={H} rx="6" fill="#fff" />
       {/* 目盛り */}
       {Array.from({ length: max + 1 }, (_, i) => i).filter((v) => max <= 8 || v % Math.ceil(max / 6) === 0).map((v) => (
         <g key={v}>
           <line x1={padL - 4} y1={yOf(v)} x2={W - 8} y2={yOf(v)} stroke="currentColor" stroke-width="0.5" opacity="0.25" />
-          <text x={padL - 8} y={yOf(v) + 4} text-anchor="end" font-size="11" fill="currentColor" opacity="0.8">
+          <text x={padL - 8} y={yOf(v) + 4} text-anchor="end" font-size="12" fill="currentColor">
             {v}
           </text>
         </g>
       ))}
       {spec.values.map((v, i) =>
         spec.type === 'histogram' ? (
+          // ヒストグラムの 長方形は すきまなく 並べる(教科書の 形)
           <rect
             key={i}
-            x={padL + i * bw + 1}
+            x={padL + i * bw}
             y={yOf(v)}
-            width={bw - 2}
+            width={bw}
             height={H - padB - yOf(v)}
-            fill={spec.highlight === i ? 'var(--ember)' : 'rgba(230,194,92,0.55)'}
-            stroke="var(--gold-2)"
-            stroke-width="1.2"
+            fill={spec.highlight === i ? ASK_MARK : '#fff'}
+            fill-opacity={spec.highlight === i ? 0.25 : 1}
+            stroke="currentColor"
+            stroke-width="1.4"
           />
         ) : (
           <g key={i}>
             {Array.from({ length: v }, (_, k) => (
-              <circle key={k} cx={padL + i * bw + bw / 2} cy={H - padB - 10 - k * 13} r="5" fill="var(--ember)" opacity="0.9" />
+              <circle key={k} cx={padL + i * bw + bw / 2} cy={H - padB - 10 - k * 13} r="5" fill="currentColor" />
             ))}
           </g>
         ),
       )}
+      {/* 軸(長方形の 線の 上に 描く) */}
+      <line x1={padL} y1={H - padB} x2={W - 8} y2={H - padB} stroke="currentColor" stroke-width="1.6" />
+      <line x1={padL} y1={H - padB} x2={padL} y2={padT - 4} stroke="currentColor" stroke-width="1.6" />
       {spec.labels.map((t, i) => (
-        <text key={i} x={padL + i * bw + bw / 2} y={H - padB + 18} text-anchor="middle" font-size="11" fill="currentColor">
+        <text key={i} x={edges ? padL + i * bw : padL + i * bw + bw / 2} y={H - padB + 18} text-anchor="middle" font-size="12" fill="currentColor">
           {t}
         </text>
       ))}
       {spec.xTitle && (
-        <text x={W / 2} y={H - 8} text-anchor="middle" font-size="12" fill="currentColor" opacity="0.85">
+        <text x={W / 2} y={H - 8} text-anchor="middle" font-size="13" fill="currentColor">
           {spec.xTitle}
         </text>
       )}
       {spec.yTitle && (
-        <text x={padL - 30} y={16} font-size="12" fill="currentColor" opacity="0.85">
+        <text x={padL - 30} y={16} font-size="13" fill="currentColor">
           {spec.yTitle}
         </text>
       )}
