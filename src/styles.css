@@ -1251,6 +1251,11 @@ img.sprite {
   background-position: center 40%;
   image-rendering: pixelated;
 }
+.talk-bg-fill {
+  inset: 0;
+  border: none;
+  border-radius: 0;
+}
 .talk-bg-tint {
   position: absolute;
   inset: 0;

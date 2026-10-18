@@ -205,7 +205,10 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
   return (
     <div class="scene scene-talk" onClick={advance}>
       <div class="talk-stage">
-        {bgAsset.path ? (
+        {bgAsset.fill ? (
+          // 暗転などの塗りつぶし: 枠も文字も出さず、舞台全体を その色にする
+          <div class="talk-bg talk-bg-fill" style={{ background: bgAsset.fill }} />
+        ) : bgAsset.path ? (
           // 背景画像: 全面に敷き、場所の名前は左上に小さく出す
           <div class="talk-bg has-image" style={{ backgroundImage: `url(${assetUrl(bgAsset.path)})` }}>
             {bgAsset.tint && <div class="talk-bg-tint" style={{ background: bgAsset.tint }} />}

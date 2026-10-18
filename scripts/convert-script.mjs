@@ -35,7 +35,22 @@ const NAME_TO_ID = {
 };
 
 /** 台本の背景名 → 素材ID。台本は `village_shop` のように接頭辞なしで書く */
-const bgId = (name) => (name.startsWith('bg_') ? name : `bg_${name}`);
+const bgId = (name) => {
+  // 「village_square(夕方)」のような時間帯の注記は、素材ID の接尾辞にする(マニフェストに `_evening` がある)
+  const base = name.replace(/[((]夕方[))]$/, '_evening');
+  return base.startsWith('bg_') ? base : `bg_${base}`;
+};
+
+/**
+ * セリフの文末に「。」を付ける。台本は かぎかっこの中の最後の「。」を省いて書くが、
+ * ゲームの窓では かぎかっこを出さないので、句点がないと 文が途中で切れたように見える(先生の指摘)。
+ * ?!…などで終わる文と、(心の声)のように丸ごと かっこの文には付けない
+ */
+const withPeriod = (say) => {
+  if (/[。.?!?!…‥―ー〜~♪]$/.test(say)) return say;
+  if (/^[((].*[))]$/.test(say)) return say;
+  return `${say}。`;
+};
 
 const SKIP_KINDS = ['敵セリフ', '小ネタ', 'ボス戦中', 'システム'];
 
@@ -136,7 +151,7 @@ function parseFile(path) {
     if ((m = /^([^\s「」]+?)(?:\((声のみ|声)\))?「(.+)」$/.exec(line.trim()))) {
       const nameRaw = m[1];
       const id = NAME_TO_ID[nameRaw] ?? `npc:${nameRaw}`;
-      const entry = { who: id, say: m[3] };
+      const entry = { who: id, say: withPeriod(m[3]) };
       if (face[id]) entry.face = face[id];
       if (m[2]) entry.voiceOnly = true;
       cur.lines.push(entry);
@@ -144,7 +159,7 @@ function parseFile(path) {
     }
     // 二人同時「「…」」
     if ((m = /^(.+?)「「(.+)」」$/.exec(line.trim()))) {
-      cur.lines.push({ who: `npc:${m[1]}`, say: m[2] });
+      cur.lines.push({ who: `npc:${m[1]}`, say: withPeriod(m[2]) });
       continue;
     }
   }

@@ -16,6 +16,8 @@ export interface AssetEntry {
   alias?: string;
   /** 画像の上に重ねる色(夕方など。CSS の色) */
   tint?: string;
+  /** 画像を使わず、この色で塗りつぶす背景(暗転など。絵がなくても完成形なので 素材待ちの表示にしない) */
+  fill?: string;
 }
 
 export const assetManifest: Record<string, AssetEntry> = {
@@ -167,8 +169,8 @@ export const assetManifest: Record<string, AssetEntry> = {
   bg_tower_corridor: { emoji: '🕯️', label: '代表値の回廊', alias: 'bg_tower_records' },
   bg_tower_window: { emoji: '🪟', label: '確率の窓', alias: 'bg_tower_records' },
   bg_tower_top: { emoji: '🌌', label: '塔の最上階' },
-  bg_black: { emoji: '⬛', label: '暗転' },
-  bg_village_square_evening: { emoji: '🌇', label: 'はじまりの村(夕方)', alias: 'bg_village_square', tint: 'rgba(255, 120, 60, 0.28)' },
+  bg_black: { emoji: '⬛', label: '暗転', fill: 'var(--night-900)' },
+  bg_village_square_evening: { emoji: '🌇', label: 'はじまりの村(夕方)', alias: 'bg_village_square', tint: 'rgba(255, 110, 50, 0.6)' },
 
   // --- アイコン ---
   icon_node_town: { emoji: '🏘️', label: '村' },

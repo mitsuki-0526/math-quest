@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import paths from '@/assets/paths.json';
 import { assetManifest, getAsset } from '@/assets/manifest';
@@ -34,5 +34,21 @@ describe('素材', () => {
     for (const [id, path] of entries) expect(getAsset(id).path).toBe(path);
     const noImage = Object.keys(assetManifest).find((id) => !(id in paths) && !assetManifest[id].path && !assetManifest[id].alias);
     if (noImage) expect(getAsset(noImage).path).toBeUndefined();
+  });
+
+  it('会話の背景はすべて、絵か塗りつぶしで描かれる(台本の背景名の書き方で 素材待ちの表示にならない)', () => {
+    const dir = 'src/data/grade1/scripts';
+    const ids = new Set<string>();
+    for (const f of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
+      JSON.parse(readFileSync(resolve(dir, f), 'utf8'), (k, v: unknown) => {
+        if (k === 'bg' && typeof v === 'string') ids.add(v);
+        return v;
+      });
+    }
+    expect(ids.size).toBeGreaterThan(0);
+    for (const id of ids) {
+      const a = getAsset(id);
+      expect(Boolean(a.path || a.fill), `${id}(${a.label})に 絵がない`).toBe(true);
+    }
   });
 });
