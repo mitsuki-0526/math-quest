@@ -82,6 +82,8 @@ export interface BattleState {
   history: Record<string, string[]>;
   /** この戦闘(地点)で出した ★3 の数(テンプレートごと) */
   hardAsked: Record<string, number>;
+  /** この 地点で 出した「1 地点 1 問まで」の 問題(Problem.oncePerNode) */
+  onceAsked: string[];
   /** 答え合わせに使うため、テンプレートごとに出した問題の履歴(難易度調整用) */
   levelUps: number;
 }
@@ -140,6 +142,7 @@ export function createBattle(ctx: BattleContext): BattleState {
     recentShapes: [],
     history: { ...(ctx.history ?? {}) },
     hardAsked: {},
+    onceAsked: [],
     levelUps: 0,
   };
   return nextEncounter(state, ctx);
@@ -185,7 +188,12 @@ export function ask(state: BattleState, ctx: BattleContext): BattleState {
     else s.hardAsked = { ...s.hardAsked, [templateId]: (s.hardAsked[templateId] ?? 0) + 1 };
   }
   const seen = s.history[templateId] ?? [];
-  const problem = generateProblem(templateId, difficulty, seen, rng, ctx.basis, s.recentShapes);
+  let problem = generateProblem(templateId, difficulty, seen, rng, ctx.basis, s.recentShapes);
+  // 「1 地点 1 問まで」の 問題が もう 出ていたら 作り直す(何度か やって だめなら そのまま)
+  for (let i = 0; i < 10 && problem.oncePerNode && s.onceAsked.includes(problem.oncePerNode); i++) {
+    problem = generateProblem(templateId, difficulty, seen, rng, ctx.basis, s.recentShapes);
+  }
+  if (problem.oncePerNode) s.onceAsked = [...s.onceAsked, problem.oncePerNode];
   const base = getTemplate(templateId).timeLimit[difficulty];
   s.problem = problem;
   s.turn = state.turn + 1;
@@ -245,7 +253,10 @@ function resolveCorrect(s: BattleState, elapsedSec: number, ctx: BattleContext):
   const streakMul = config.battle.streakBonus.find((b) => s.streak >= b.streak)?.mul ?? 1;
   const quick = elapsedSec <= s.timeLimit * config.battle.quickRatio;
   const raw = config.battle.baseDamage + s.player.attack * config.battle.attackScale;
-  const damage = Math.round(raw * streakMul * (quick ? config.battle.quickMul : 1));
+  // 重い 問題(Problem.finisher)は 雑魚なら 1 撃で たおす。ボスは 段階が 飛ぶので ふつうの ダメージ
+  const finisher = !!s.problem!.finisher && !s.isBoss;
+  const normal = Math.round(raw * streakMul * (quick ? config.battle.quickMul : 1));
+  const damage = finisher ? Math.max(normal, target.hp) : normal;
   const enemies = s.enemies.map((e) => (e.key === target.key ? { ...e, hp: Math.max(0, e.hp - damage) } : e));
   const defeated = enemies.find((e) => e.key === target.key)!.hp === 0;
   const difficulty = s.problem!.difficulty;
@@ -256,7 +267,7 @@ function resolveCorrect(s: BattleState, elapsedSec: number, ctx: BattleContext):
   s.enemies = enemies;
   s.last = { correct: true, timeout: false, damage, quick, streakMul, targetKey: target.key, defeated, expGain };
 
-  const bonus = [quick ? '会心!' : '', streakMul > 1 ? `${s.streak}連続!` : ''].filter(Boolean).join(' ');
+  const bonus = [finisher ? '一撃!' : '', quick ? '会心!' : '', streakMul > 1 ? `${s.streak}連続!` : ''].filter(Boolean).join(' ');
   push(s, `${s.player.name}の こうげき! ${bonus} ${target.def.name}に ${damage}の ダメージ!`.replace(/\s+/g, ' '));
   if (defeated) {
     s.totals.gold += target.def.gold;

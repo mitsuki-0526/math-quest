@@ -7,10 +7,10 @@ import { choose, type Wrong } from './choice';
 
 /**
  * 第7章「データの活用」のテンプレート(台本 07_record_tower.md の敵に対応)。
- *   g1.data.mean   平均ゴースト      平均値(小数・四捨五入も)、代表値の 選び方
+ *   g1.data.mean   平均ゴースト      平均値(★2 は 5 人・★3 は 10 人で 小数)、代表値の 選び方
  *   g1.data.median 中央値の司書      中央値(偶数個も)・最頻値・範囲、度数分布表の 最頻値と 中央値の 階級
  *   g1.data.freq   度数コウモリ      度数分布表(以上・未満)・累積度数・相対度数・累積相対度数
- *   g1.data.prob   キマグレフクロウ  多数回の試行による確率(相対度数)
+ *   g1.data.prob   キマグレフクロウ  多数回の試行による確率(相対度数)。確率は 分数で 見せる
  *
  * 教科書 7 章の 本文(2026-10-16。refs/prints/7章_honbun-features.md)に 合わせた。
  * 度数分布表は 表(以上・未満)で 見せる。相対度数は 小数第 2 位、確率の 実験の 相対度数は 小数第 3 位まで。
@@ -19,6 +19,7 @@ import { choose, type Wrong } from './choice';
 const UNIT = 'データの活用';
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 const sorted = (xs: number[]) => [...xs].sort((a, b) => a - b);
 const listTex = (xs: number[]): string => xs.join(',\\ ');
 /** 小数の 答えを 見せる 文字(74.1、0.35) */
@@ -27,7 +28,7 @@ const dec = (v: Rational): string => String(Math.round(toNumber(v) * 1000) / 100
 function dataProblem(
   id: string,
   d: Difficulty,
-  p: Pick<Problem, 'hint' | 'explanation' | 'tags' | 'key' | 'figure' | 'mistakes' | 'verify' | 'answerLabel'> & { q: string; data?: number[]; v: Rational | number },
+  p: Pick<Problem, 'hint' | 'explanation' | 'tags' | 'key' | 'figure' | 'mistakes' | 'verify' | 'answerLabel' | 'answerUnit' | 'finisher' | 'oncePerNode'> & { q: string; data?: number[]; v: Rational | number },
 ): Problem {
   const value = typeof p.v === 'number' ? rat(p.v) : p.v;
   return {
@@ -37,6 +38,9 @@ function dataProblem(
     promptText: p.data ? `${p.data.join(', ')} ${p.q}` : p.q,
     answer: { kind: 'number', value },
     answerLabel: p.answerLabel,
+    answerUnit: p.answerUnit,
+    finisher: p.finisher,
+    oncePerNode: p.oncePerNode,
     layout: 'prose',
     hint: p.hint,
     explanation: p.explanation,
@@ -53,31 +57,17 @@ function dataProblem(
 function genMean(rng: Rng, d: Difficulty): Problem {
   const ID = 'g1.data.mean';
   if (d === 3 && rng.int(0, 2) === 0) return chooseRepresentative(rng, d);
-  // ★1: 5 こ・整数の 平均 / ★2: ゲームの 得点 10 人(平均が 小数第 1 位)/ ★3: 1500 m 走の 記録(3 けた)の 平均を 四捨五入
-  const n = d === 1 ? rng.pick([4, 5]) : d === 2 ? rng.pick([5, 10]) : rng.pick([6, 7, 8]);
-  const lo = d === 1 ? 10 : d === 2 ? 45 : 290;
-  const hi = d === 1 ? 40 : d === 2 ? 95 : 390;
+  // ★1: 4〜5 人・整数の 平均 / ★2: 5 人の 得点(平均が 小数第 1 位)/ ★3: 10 人の 得点(小数第 1 位)。
+  // 3 けたの 記録の 平均を 四捨五入する 問題は やめた(先生の判定 2026-10-18「四捨五入が 必要な 問題は やめましょう」。10 人は ★3 に)
+  const n = d === 1 ? rng.pick([4, 5]) : d === 2 ? 5 : 10;
+  const lo = d === 1 ? 10 : 45;
+  const hi = d === 1 ? 40 : 95;
   const xs = Array.from({ length: n }, () => rng.int(lo, hi));
   const total = sum(xs);
   const exact = rat(total, n);
   if (d === 1 && exact.d !== 1n) return genMean(rng, d);
-  const label = d === 1 ? '点' : d === 2 ? '点' : '秒';
-  const what = d === 3 ? '1500 m 走の 記録(秒)' : 'ゲームの 得点(点)';
-  if (d === 3) {
-    const v = Math.round(total / n);
-    if (Math.abs(total / n - Math.floor(total / n) - 0.5) < 1e-9) return genMean(rng, d);
-    return dataProblem(ID, d, {
-      q: `上の データは ${n} 人の ${what}。平均値は およそ 何秒?(小数第 1 位を 四捨五入して 整数で)`,
-      data: xs,
-      v,
-      hint: '合計を 人数で わって、小数第 1 位を 四捨五入',
-      explanation: [text('(平均値)=(データの 値の 合計)÷(データの 総数)'), `${text('合計: ')} ${total}`, `${total} \\div ${n} = ${(total / n).toFixed(2)} \\cdots`, `${text('答え: およそ ')} ${v} ${text(label)}`],
-      tags: ['mean_round'],
-      key: `mean3:${xs.join(',')}`,
-      mistakes: [mistakeNum(Math.floor(total / n) === v ? v + 1 : Math.floor(total / n), '小数第 1 位を 四捨五入しよう(5 以上なら くり上げ)'), mistakeNum(Math.round(total / (n - 1)), `${n} 人 だから ${n} で わろう`), mistakeNum(median(xs), 'それは 中央値。平均値は 合計 ÷ 人数')],
-      verify: `Math.round((${xs.join('+')})/${n})`,
-    });
-  }
+  const label = '点';
+  const what = 'ゲームの 得点(点)';
   const mistakes: Mistake[] = [mistakeNum(rat(total, n - 1), `データは ${n} こ。${n} で わろう`), mistakeNum(total, '合計を 個数で わるのを 忘れずに')];
   const med = median(xs);
   if (toNumber(exact) !== med) mistakes.push(mistakeNum(rat(Math.round(med * 2), 2), 'それは 中央値(真ん中の 値)。平均値は 合計 ÷ 個数'));
@@ -98,7 +88,7 @@ function genMean(rng: Rng, d: Difficulty): Problem {
 /** 代表値の 選び方(極端な 値・目的) */
 function chooseRepresentative(rng: Rng, d: Difficulty): Problem {
   const facts: { q: string; a: string; w: Wrong[] }[] = [
-    { q: 'ほかから 大きく はずれた 値(極端な 値)が ふくまれる データで、その 影響を いちばん 大きく 受ける 代表値は?', a: '平均値', w: [{ opt: '中央値', say: '中央値は 真ん中の 値なので、はしの 値が 大きく なっても あまり 変わらないよ' }, { opt: '最頻値', say: '最頻値は いちばん 多い 値。極端な 値 1 つでは 変わらないよ' }, { opt: 'どれも 同じように 受ける' }] },
+    { q: 'ほかから 大きく はずれた 値(極端な 値)が ふくまれる データで、その 影響を いちばん 受けるのは どれか?', a: '平均値', w: [{ opt: '中央値', say: '中央値は 真ん中の 値なので、はしの 値が 大きく なっても あまり 変わらないよ' }, { opt: '最頻値', say: '最頻値は いちばん 多い 値。極端な 値 1 つでは 変わらないよ' }, { opt: 'どれも 同じように 受ける' }] },
     { q: '5 人の こづかいが 1000 円、1200 円、1300 円、1500 円、20000 円。この データの ようすを 表すのに 適した 代表値は?', a: '中央値', w: [{ opt: '平均値', say: '20000 円が 平均値を 大きく 引き上げるので、多くの 人の ようすとは ずれるよ' }, { opt: '最大値', say: '最大値は 代表値では ないよ' }, { opt: '範囲' }] },
     { q: '靴の 店が、いちばん よく 売れる サイズを 多めに 仕入れたい。参考に する 代表値は?', a: '最頻値', w: [{ opt: '平均値', say: '平均の サイズの 靴が いちばん 売れるとは かぎらないよ' }, { opt: '中央値' }, { opt: '範囲' }] },
     { q: '左右 対称な 山の 形の 分布で、平均値・中央値・最頻値の 関係は?', a: 'ほぼ 同じ 値に なる', w: [{ opt: '平均値が いちばん 大きい', say: '左右 対称なら、真ん中・平均・山の 頂上が そろうよ' }, { opt: '中央値が いちばん 小さい' }, { opt: '関係は ない' }] },
@@ -196,7 +186,7 @@ function tableFigure(t: Table, extra?: { head: string; values: string[] }): Figu
 
 function genFreq(rng: Rng, d: Difficulty): Problem {
   const ID = 'g1.data.freq';
-  const ask = d === 1 ? rng.pick(['width', 'count', 'which', 'which', 'hist'] as const) : d === 2 ? rng.pick(['cum', 'rel', 'rel', 'mode', 'which'] as const) : rng.pick(['cumRel', 'percent', 'relRound', 'cum'] as const);
+  const ask = d === 1 ? rng.pick(['width', 'count', 'which', 'which', 'hist'] as const) : d === 2 ? rng.pick(['cum', 'rel', 'rel', 'which'] as const) : rng.pick(['cumRel', 'percent', 'relRound', 'cum'] as const);
   // 相対度数が 小数第 2 位で わり切れる 合計(20・25・50)。40 人・42 人などは 四捨五入(教科書の 50 m 走 40 人・1500 m 走 42 人)
   const total = ask === 'rel' || ask === 'cumRel' || ask === 'percent' ? rng.pick([20, 25, 50]) : ask === 'relRound' ? rng.pick([30, 40, 42, 45]) : undefined;
   const t = makeTable(rng, total);
@@ -298,7 +288,8 @@ function genFreq(rng: Rng, d: Difficulty): Problem {
       verify: ask === 'rel' ? `${t.counts[i]}/${n}` : `Math.round(${t.counts[i]}/${n}*100)/100`,
     });
   }
-  if (ask === 'cumRel' || ask === 'percent') {
+  {
+    // 累積相対度数 または %(最頻値の 階級値は 2 で わるので 出さない。先生の判定 2026-10-18)
     const i = rng.int(1, k - 2);
     const cum = sum(t.counts.slice(0, i + 1));
     const v = ask === 'cumRel' ? rat(cum, n) : rat(cum * 100, n);
@@ -307,9 +298,12 @@ function genFreq(rng: Rng, d: Difficulty): Problem {
       q:
         ask === 'cumRel'
           ? `表で、${classLabel(t, i)} の 階級の 累積相対度数は?(小数で)`
-          : `表で、記録が ${upper} ${t.unit} 未満の 人は、全体の 何 % ?(数だけ 答える)`,
+          : `表で、記録が ${upper} ${t.unit} 未満の 人は、全体の 何 % ?`,
       v,
       answerLabel: dec(v),
+      answerUnit: ask === 'percent' ? '%' : undefined,
+      // 累積相対度数は 難しいので 1 つの 地点で 1 問まで(先生の判定 2026-10-18「各ダンジョンで 1 問だけ」)
+      oncePerNode: ask === 'cumRel' ? 'freq_cum_relative' : undefined,
       hint: ask === 'cumRel' ? '最初の 階級から その 階級までの 度数の 合計(累積度数)÷ 合計' : '累積度数 ÷ 合計 で 割合、100 を かけて %',
       explanation: [
         `${text('累積度数: ')} ${t.counts.slice(0, i + 1).join(' + ')} = ${cum}`,
@@ -326,31 +320,15 @@ function genFreq(rng: Rng, d: Difficulty): Problem {
       verify: ask === 'cumRel' ? `(${t.counts.slice(0, i + 1).join('+')})/${n}` : `(${t.counts.slice(0, i + 1).join('+')})/${n}*100`,
     });
   }
-  // 最頻値(度数が もっとも 多い 階級の 階級値)
-  const max = Math.max(...t.counts);
-  if (t.counts.filter((c) => c === max).length > 1) return genFreq(rng, d);
-  const i = t.counts.indexOf(max);
-  const mid = Number((t.lows[i] + t.width / 2).toFixed(t.decimals + 2));
-  return dataProblem(ID, d, {
-    q: `表の 度数分布表で、最頻値は いくつ?(${t.unit})`,
-    v: rat(Math.round(mid * 100), 100),
-    answerLabel: String(mid),
-    hint: '度数が もっとも 多い 階級の 階級値(階級の 真ん中の 値)',
-    explanation: [text(`度数が もっとも 多いのは ${classLabel(t, i)}(${max} 人)`), text('階級値 = (以上の 値 + 未満の 値)÷ 2'), `(${fmt(t.lows[i], t.decimals)} + ${fmt(t.lows[i] + t.width, t.decimals)}) \\div 2 = ${mid}`, `${text('答え: ')} ${mid} ${text(t.unit)}`],
-    tags: ['freq_mode'],
-    key: `frq:mode:${key}`,
-    figure: fig,
-    mistakes: [mistakeNum(max, 'それは 度数(人数)。最頻値は 記録の 値(階級値)'), mistakeNum(rat(Math.round(t.lows[i] * 100), 100), '階級の 下の はしでは なく、真ん中の 値(階級値)')],
-    verify: `${mid}`,
-  });
 }
 
 // ---------------------------------------------------------------- 中央値・最頻値・範囲
 
 function genMedian(rng: Rng, d: Difficulty): Problem {
   const ID = 'g1.data.median';
-  const ask = d === 1 ? rng.pick(['medOdd', 'medOdd', 'range'] as const) : d === 2 ? rng.pick(['medEven', 'medEven', 'mode', 'range'] as const) : rng.pick(['medClass', 'tableMode', 'medEven', 'judge'] as const);
-  if (ask === 'medClass' || ask === 'tableMode') return medianFromTable(rng, d, ask);
+  const ask = d === 1 ? rng.pick(['medOdd', 'medOdd', 'range'] as const) : d === 2 ? rng.pick(['medEven', 'medEven', 'mode', 'range'] as const) : rng.pick(['medClass', 'medEven', 'judge'] as const);
+  // 度数分布表の 最頻値(階級値 = 2 で わる)は 出さない(先生の判定 2026-10-18「割らないと いけない 最頻値は やめておきましょう」)
+  if (ask === 'medClass') return medianClass(rng, d);
   if (ask === 'judge') return judgeStatement(rng, d);
   if (ask === 'mode') {
     const n = rng.pick([7, 8, 9, 10]);
@@ -385,7 +363,7 @@ function genMedian(rng: Rng, d: Difficulty): Problem {
       q: '上の データの 範囲は?',
       data: xs,
       v: r,
-      hint: '(範囲)=(最大値)−(最小値)',
+      hint: '範囲は、最大値と 最小値の 差だよ',
       explanation: [text(`最大値 ${s[n - 1]}、最小値 ${s[0]}`), `${s[n - 1]} - ${s[0]} = ${r}`, `${text('答え: ')} ${r}`],
       tags: ['range'],
       key: `rng:${xs.join(',')}`,
@@ -416,31 +394,13 @@ function genMedian(rng: Rng, d: Difficulty): Problem {
   });
 }
 
-/** 度数分布表から: 中央値が ふくまれる 階級・最頻値 */
-function medianFromTable(rng: Rng, d: Difficulty, ask: 'medClass' | 'tableMode'): Problem {
+/** 度数分布表から: 中央値が ふくまれる 階級 */
+function medianClass(rng: Rng, d: Difficulty): Problem {
   const t = makeTable(rng, rng.pick([20, 25, 30, 40]));
   const n = sum(t.counts);
   const k = t.counts.length;
   const fig = tableFigure(t);
   const key = `${t.title}:${t.lows[0]}:${t.width}:${t.counts.join(',')}`;
-  if (ask === 'tableMode') {
-    const max = Math.max(...t.counts);
-    if (t.counts.filter((c) => c === max).length > 1) return medianFromTable(rng, d, ask);
-    const i = t.counts.indexOf(max);
-    const mid = Number((t.lows[i] + t.width / 2).toFixed(t.decimals + 2));
-    return dataProblem('g1.data.median', d, {
-      q: `表の 度数分布表で、最頻値は いくつ?(${t.unit})`,
-      v: rat(Math.round(mid * 100), 100),
-      answerLabel: String(mid),
-      hint: '度数が もっとも 多い 階級の 階級値(真ん中の 値)',
-      explanation: [text(`度数が もっとも 多いのは ${classLabel(t, i)}`), `(${fmt(t.lows[i], t.decimals)} + ${fmt(t.lows[i] + t.width, t.decimals)}) \\div 2 = ${mid}`, `${text('答え: ')} ${mid} ${text(t.unit)}`],
-      tags: ['table_mode'],
-      key: `med:tmode:${key}`,
-      figure: fig,
-      mistakes: [mistakeNum(max, 'それは 度数(人数)。最頻値は 階級値'), mistakeNum(rat(Math.round(t.lows[i] * 100), 100), '階級の 下の はしでは なく、真ん中の 値(階級値)')],
-      verify: `${mid}`,
-    });
-  }
   // 中央値が ふくまれる 階級(n が 偶数なら n/2 番目と n/2+1 番目)
   const pos = n % 2 ? [(n + 1) / 2] : [n / 2, n / 2 + 1];
   const classOf = (p: number) => {
@@ -452,7 +412,7 @@ function medianFromTable(rng: Rng, d: Difficulty, ask: 'medClass' | 'tableMode')
     return k - 1;
   };
   const ci = pos.map(classOf);
-  if (ci.length === 2 && ci[0] !== ci[1]) return medianFromTable(rng, d, ask);
+  if (ci.length === 2 && ci[0] !== ci[1]) return medianClass(rng, d);
   const i = ci[0];
   const maxI = t.counts.indexOf(Math.max(...t.counts));
   const { answer, mistakes } = choose(rng, classLabel(t, i), [
@@ -484,7 +444,7 @@ function medianFromTable(rng: Rng, d: Difficulty, ask: 'medClass' | 'tableMode')
 /** 代表値・範囲の 表から 確実に いえる ことか(2 節 札幌の 最低気温) */
 function judgeStatement(rng: Rng, d: Difficulty): Problem {
   const a = { mean: rng.int(40, 60), med: rng.int(40, 60), min: rng.int(10, 30), max: rng.int(80, 98) };
-  const b = { mean: a.mean + rng.pick([-6, -4, 4, 6]), med: a.med + rng.pick([-5, -3, 3, 5]), min: a.min + rng.pick([-6, 6]), max: a.max + rng.pick([-8, 8]) };
+  const b = { mean: a.mean + rng.pick([-6, -4, 4, 6]), med: a.med + rng.pick([-5, -3, 3, 5]), min: a.min + rng.pick([-6, 6]), max: a.max + (a.max > 92 ? -8 : rng.pick([-8, 8])) };
   const rA = a.max - a.min;
   const rB = b.max - b.min;
   if (rA === rB) return judgeStatement(rng, d);
@@ -507,6 +467,8 @@ function judgeStatement(rng: Rng, d: Difficulty): Problem {
     explanation: [text(`範囲: A 組 ${a.max} − ${a.min} = ${rA}、B 組 ${b.max} − ${b.min} = ${rB}`), text(`答え: ${correct}`)],
     tags: ['judge'],
     key: `med:judge:${JSON.stringify([a, b])}`,
+    // 表を 読んで 4 つの 文を くらべる 重い 問題なので、正解したら 1 撃で たおせる(先生の判定 2026-10-18)
+    finisher: true,
     figure: {
       kind: 'table',
       head: ['', '平均値', '中央値', '最小値', '最大値'],
@@ -524,7 +486,7 @@ function judgeStatement(rng: Rng, d: Difficulty): Problem {
 // ---------------------------------------------------------------- 確率(多数回の試行)
 
 const PROB_SCENES = [
-  { thing: 'ペットボトルの キャップ', event: '表向き', other: 'それ以外' },
+  { thing: 'ペットボトルの キャップ', event: '表向き', other: '裏向き' },
   { thing: '画びょう', event: '針が 上向き', other: '針が 下向き' },
   { thing: 'びんの 王冠', event: '上向き', other: '下向き' },
   { thing: '紙コップ', event: '横向き', other: 'それ以外' },
@@ -533,7 +495,9 @@ const PROB_SCENES = [
 function genProb(rng: Rng, d: Difficulty): Problem {
   const ID = 'g1.data.prob';
   const s = rng.pick(PROB_SCENES);
-  const ask = d === 1 ? 'rel' : d === 2 ? rng.pick(['estimate', 'estimate', 'compare', 'likely'] as const) : rng.pick(['predict', 'predict', 'compare', 'likely'] as const);
+  // ★1: 相対度数・どちらが 起こりやすいか / ★2: 2 社の 割合・回数の 予想(分母 4・5・10)/ ★3: 回数の 予想(分母 20・25・50)・上ばき・2 社。
+  // 表から 確率を 読む 問題は あいまいなので やめた。確率は 分数で 見せる(先生の判定 2026-10-18)
+  const ask = d === 1 ? rng.pick(['rel', 'rel', 'likely'] as const) : d === 2 ? rng.pick(['compare', 'predict'] as const) : rng.pick(['predict', 'predict', 'compare'] as const);
   if (ask === 'rel') {
     // 教科書: 200 回 中 43 回 → 0.215(小数第 3 位まで)
     const n = rng.pick([200, 400, 500, 1000, 2000]);
@@ -542,7 +506,7 @@ function genProb(rng: Rng, d: Difficulty): Problem {
     if ((1000 * c) % n !== 0) return genProb(rng, d);
     const v = rat(c, n);
     return dataProblem(ID, d, {
-      q: `${s.thing}を ${n} 回 投げたら、${s.event}に なったのは ${c} 回 だった。${s.event}に なる 相対度数は?(小数で)`,
+      q: `${s.thing}を ${n} 回 投げたら、${s.event}に なったのは ${c} 回 だった。${s.event}に なる 場合の 相対度数は?(小数で)`,
       v,
       answerLabel: dec(v),
       hint: '相対度数 =(起きた 回数)÷(投げた 回数)',
@@ -556,25 +520,6 @@ function genProb(rng: Rng, d: Difficulty): Problem {
   // 本当の 確率 p(小数第 2 位まで)。回数が 少ないうちは ばらつき、多く なると p に 近づく 表
   const p100 = rng.int(15, 85);
   if (p100 === 50) return genProb(rng, d);
-  if (ask === 'estimate') {
-    const ns = [50, 100, 200, 500, 1000, 2000];
-    const spread = [0.12, 0.08, 0.05, 0.03, 0.015, 0];
-    const counts = ns.map((n, i) => Math.min(n, Math.max(0, Math.round(n * (p100 / 100 + (rng.int(-100, 100) / 100) * spread[i])))));
-    const last = counts[counts.length - 1];
-    const first = rat(Math.round((counts[0] / 50) * 100), 100);
-    return dataProblem(ID, d, {
-      q: `表は、${s.thing}を 投げて ${s.event}に なった 回数。${s.event}に なる 確率は およそ いくつと 考えられるか(小数第 2 位まで)`,
-      v: rat(p100, 100),
-      answerLabel: String(p100 / 100),
-      hint: '投げる 回数が 多いほど、相対度数は ある 値に 近づく。いちばん 多く 投げた ときの 相対度数を 求めよう',
-      explanation: [text('回数が 多いほど 相対度数は 一定の 値に 近づく → その 値を 確率と 考える'), `${last} \\div 2000 = ${p100 / 100}`, `${text('答え: およそ ')} ${p100 / 100}`],
-      tags: ['prob_estimate'],
-      key: `prob2:${s.event}:${counts.join(',')}`,
-      figure: { kind: 'table', head: ['投げた 回数', ...ns.map(String)], rows: [[`${s.event}の 回数`, ...counts.map(String)]] },
-      mistakes: [...(Math.abs(toNumber(first) - p100 / 100) >= 0.01 ? [mistakeNum(first, '少ない 回数では たまたまの ことが 多い。いちばん 多く 投げた 結果で 考えよう')] : []), mistakeNum(rat(100 - p100, 100), `それは ${s.other}の 割合`)],
-      verify: `${last}/2000`,
-    });
-  }
   if (ask === 'likely') {
     const n = rng.pick([1000, 2000]);
     const c = Math.round((n * p100) / 100);
@@ -588,7 +533,7 @@ function genProb(rng: Rng, d: Difficulty): Problem {
       answer,
       layout: 'prose',
       hint: '相対度数を 求めて、0.5 と くらべよう',
-      explanation: [`${c} \\div ${n} = ${p100 / 100}`, text(`${s.event}の 確率は およそ ${p100 / 100}、${s.other}は およそ ${(100 - p100) / 100}`), text(`答え: ${eventLikely ? s.event : s.other}`)],
+      explanation: [`${c} \\div ${n} = ${p100 / 100}`, text(`${s.event}の 相対度数は 0.5 より ${eventLikely ? '大きい' : '小さい'} → ${eventLikely ? s.event : s.other}の ほうが 起こりやすい`), text(`答え: ${eventLikely ? s.event : s.other}`)],
       tags: ['prob_likely'],
       key: `prob:likely:${s.event}:${n}:${c}`,
       mistakes,
@@ -628,20 +573,31 @@ function genProb(rng: Rng, d: Difficulty): Problem {
     }
     return genProb(rng, d);
   }
-  // ★3: 予想(上ばきの サイズ: 相対度数 × 人数)
-  if (rng.bool()) {
-    const total = rng.pick([500, 1000, 2000, 3000, 5000]);
-    const expected = (p100 * total) / 100;
-    return dataProblem(ID, d, {
-      q: `${s.thing}を 投げて ${s.event}に なる 確率を ${p100 / 100} と する。${total} 回 投げると、${s.event}に なるのは およそ 何回と 考えられるか`,
-      v: expected,
+  // 予想: 起きる 回数 ≒ 投げる 回数 × 確率(★3 は 上ばきの サイズも)
+  if (d === 2 || rng.bool()) {
+    const b = d === 2 ? rng.pick([4, 5, 10]) : rng.pick([20, 25, 50]);
+    const a = rng.int(1, b - 1);
+    // 約分できない・0.15〜0.85・1/2 でない 分数
+    if (gcd(a, b) !== 1 || a / b < 0.15 || a / b > 0.85 || a * 2 === b) return genProb(rng, d);
+    const total = rng.pick([500, 1000, 2000]);
+    const expected = (total * a) / b;
+    const pre = `${s.thing}を 投げて ${s.event}に なる 確率を`;
+    const post = `と する。${total} 回 投げると、${s.event}に なるのは およそ 何回と 考えられるか`;
+    return {
+      templateId: ID,
+      difficulty: d,
+      prompt: `${text(pre)} \\dfrac{${a}}{${b}} ${text(post)}`,
+      promptText: `${pre} ${a}/${b} ${post}`,
+      answer: { kind: 'number', value: rat(expected) },
+      answerUnit: '回',
+      layout: 'prose',
       hint: '起きる 回数 ≒ 投げる 回数 × 確率',
-      explanation: [`${total} \\times ${p100 / 100} = ${expected}`, `${text('答え: およそ ')} ${expected} ${text('回')}`],
+      explanation: [`${total} \\times \\dfrac{${a}}{${b}} = ${expected}`, `${text('答え: およそ ')} ${expected} ${text('回')}`],
       tags: ['prob_predict'],
-      key: `prob3:${s.event}:${p100}:${total}`,
-      mistakes: [mistakeNum(total - expected, `それは ${s.other}に なる 回数`), mistakeNum(rat(total, p100), 'わるのでは なく、かけるよ(回数 × 確率)')],
-      verify: `${total}*${p100}/100`,
-    });
+      key: `prob3:${s.event}:${a}/${b}:${total}`,
+      mistakes: [mistakeNum(total - expected, `それは ${s.other}に なる 回数`), mistakeNum(rat(total * b, a), 'わるのでは なく、かけるよ(回数 × 確率)')],
+      verify: `${total}*${a}/${b}`,
+    };
   }
   const size = rng.pick(['23.5', '24.0', '24.5', '25.0']);
   const rel = rng.pick([0.1, 0.15, 0.2, 0.25, 0.3]);

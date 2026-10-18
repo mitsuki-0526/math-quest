@@ -36,6 +36,26 @@ function ctx(over: Partial<BattleContext> = {}): BattleContext {
 }
 
 describe('battle engine', () => {
+  it('重い 問題(finisher)に 正解すると 雑魚は 1 撃で たおれる', () => {
+    const c = ctx({ encounters: [['median_librarian']] });
+    let s = createBattle(c);
+    s = { ...s, problem: { ...s.problem!, finisher: true } };
+    s = answer(s, correctInput(s.problem!.answer), 1, c);
+    expect(s.last?.defeated).toBe(true);
+    expect(s.log.join('')).toContain('一撃!');
+  });
+
+  it('「1 地点 1 問まで」の 問題(累積相対度数)は 1 つの 地点で 2 回 出ない', () => {
+    const c = ctx({ encounters: [['freq_bat']], templateOverride: 'g1.data.freq', pickDifficulty: () => 3, player: { name: 'テスト', hp: 99999, maxHp: 99999, attack: 5, defense: 2, timeBonus: 0, expMul: 1 } });
+    let s = createBattle(c);
+    let once = 0;
+    for (let i = 0; i < 60; i++) {
+      if (s.problem?.oncePerNode) once++;
+      s = continueAfterExplain(timeout(s, c), c);
+    }
+    expect(once).toBe(1);
+  });
+
   it('出題のたびに turn が増える(同じ問題キーが続いても画面が新しい問題と分かる)', () => {
     const c = ctx();
     let s = createBattle(c);

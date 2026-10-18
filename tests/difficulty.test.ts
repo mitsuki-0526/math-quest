@@ -919,7 +919,7 @@ describe('第7章 データの活用', () => {
     expect(n).toBeGreaterThan(20);
   });
 
-  it('中央値: 偶数個は 真ん中 2 つの 平均(★2 から)。平均値: ★2 は 小数第 1 位まで、★3 は 3 けたの 記録を 四捨五入して 整数', () => {
+  it('中央値: 偶数個は 真ん中 2 つの 平均(★2 から)。平均値: ★2 は 5 人・★3 は 10 人で 小数第 1 位まで(四捨五入は 出さない)', () => {
     let even = 0;
     each('g1.data.median', 2, (p) => {
       if (!p.tags.includes('median_even')) return;
@@ -930,21 +930,48 @@ describe('第7章 データの活用', () => {
       even++;
     });
     expect(even).toBeGreaterThan(N / 4);
-    each('g1.data.mean', 2, (p) => expect(Math.abs(answerOf(p) * 10 - Math.round(answerOf(p) * 10)), p.promptText).toBeLessThan(1e-9));
-    each('g1.data.mean', 3, (p) => {
-      if (p.tags.includes('mean_round')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
+    for (const d of [2, 3] as const)
+      each('g1.data.mean', d, (p) => {
+        expect(p.promptText, p.promptText).not.toContain('四捨五入');
+        if (p.answer.kind !== 'number') return;
+        expect(Math.abs(answerOf(p) * 10 - Math.round(answerOf(p) * 10)), p.promptText).toBeLessThan(1e-9);
+        expect(p.promptText, p.promptText).toContain(d === 2 ? '5 人' : '10 人');
+      });
+  });
+
+  it('最頻値は 度数分布表(階級値を 2 で わる)では 出さない。2 組の 表の 問題は 1 撃で たおせる', () => {
+    for (const d of [1, 2, 3] as const) {
+      each('g1.data.freq', d, (p) => expect(p.promptText).not.toContain('最頻値'));
+      each('g1.data.median', d, (p) => {
+        if (p.figure?.kind === 'table') expect(p.promptText).not.toContain('最頻値');
+        expect(!!p.finisher, p.promptText).toBe(p.tags.includes('judge'));
+      });
+    }
+  });
+
+  it('% の 問題: 解説の % が TeX の コメントに ならない(\% に する)。累積相対度数は 1 地点 1 問', () => {
+    each('g1.data.freq', 3, (p) => {
+      if (p.tags.includes('freq_percent')) {
+        expect(p.prompt).toContain('\\%');
+        expect(p.explanation.join('')).not.toMatch(/(?<!\\)%/);
+        expect(p.answerUnit).toBe('%');
+      }
+      expect(p.oncePerNode === 'freq_cum_relative', p.promptText).toBe(p.tags.includes('freq_cum_relative'));
     });
   });
 
-  it('確率(多数回の試行): ★1 の 相対度数は 小数第 3 位まで(200 回 中 43 回 → 0.215)、確率の 推定は 表つきで 小数第 2 位、予想は 整数', () => {
-    each('g1.data.prob', 1, (p) => expect(Math.abs(answerOf(p) * 1000 - Math.round(answerOf(p) * 1000)), p.promptText).toBeLessThan(1e-9));
+  it('確率(多数回の試行): ★1 は 相対度数(小数第 3 位まで)と どちらが 起こりやすいか。表から 確率を 読む 問題は 出さない。予想の 確率は 分数で、答えは 整数', () => {
+    each('g1.data.prob', 1, (p) => {
+      expect(['prob_relative', 'prob_likely']).toContain(p.tags[0]);
+      if (p.answer.kind === 'number') expect(Math.abs(answerOf(p) * 1000 - Math.round(answerOf(p) * 1000)), p.promptText).toBeLessThan(1e-9);
+    });
     for (const d of [2, 3] as const)
       each('g1.data.prob', d, (p) => {
-        if (p.tags.includes('prob_estimate')) {
-          expect(p.figure?.kind).toBe('table');
-          expect(Math.abs(answerOf(p) * 100 - Math.round(answerOf(p) * 100)), p.promptText).toBeLessThan(1e-9);
-        }
+        expect(p.tags, p.promptText).not.toContain('prob_likely');
+        expect(p.tags, p.promptText).not.toContain('prob_estimate');
+        if (p.tags.includes('prob_predict')) expect(p.prompt, p.promptText).toContain('\\dfrac');
         if (p.tags.includes('prob_predict') || p.tags.includes('prob_predict_shoe')) expect(Number.isInteger(answerOf(p)), p.promptText).toBe(true);
       });
+    for (const d of [1, 2, 3] as const) each('g1.data.prob', d, (p) => expect(p.promptText).not.toMatch(/キャップ.*それ以外/));
   });
 });

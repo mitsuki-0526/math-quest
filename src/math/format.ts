@@ -21,7 +21,8 @@ export function plainMinus(s: string): string {
  */
 export function text(s: string): string {
   const parts = s.split(/(?<![A-Za-z])([abcnxy])(?![A-Za-z])/);
-  return parts.map((p, i) => (i % 2 ? p : p ? `\\text{${p}}` : '')).join(' ').trim();
+  // % は TeX の コメントの 記号なので、そのままだと 後ろが 消える(先生の判定 2026-10-18「解説の 3 番が バグって います」)
+  return parts.map((p, i) => (i % 2 ? p : p ? `\\text{${p.replace(/%/g, '\\%')}}` : '')).join(' ').trim();
 }
 
 /** 有理数を KaTeX に(負の分数はかっこ付き) */
