@@ -758,9 +758,10 @@ function Solid({ spec }: { spec: SolidSpec }) {
   const l = spec.labels;
   const stroke = { stroke: 'currentColor', 'stroke-width': 2, fill: 'rgba(0,0,0,0.05)' } as const;
   const dash = { stroke: 'currentColor', 'stroke-width': 1.4, fill: 'none', 'stroke-dasharray': '5 4', opacity: 0.7 } as const;
-  const label = (x: number, y: number, t?: string) =>
+  // 長さには 単位(cm)まで 書くので 文字が 長い。線に かかっても 読めるよう 白く ふちどる
+  const label = (x: number, y: number, t?: string, anchor: 'start' | 'middle' | 'end' = 'middle') =>
     t ? (
-      <text x={x} y={y} text-anchor="middle" font-size="15" fill="currentColor">
+      <text x={x} y={y} text-anchor={anchor} font-size="15" fill="currentColor" stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">
         {t}
       </text>
     ) : null;
@@ -813,7 +814,7 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M110,170 L110,60" {...dash} />
             {label(130, 222, l.base)}
             {label(227, 205, l.base2)}
-            {label(52, 150, l.height)}
+            {label(63, 150, l.height, 'end')}
           </>
         );
       case 'prism3': // 三角柱(手前の 面 ABC、奥の 面 DEF)
@@ -849,7 +850,7 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M150,40 L120,150" {...dash} />
             <line x1="150" y1="40" x2="150" y2="170" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
             {label(120, 212, l.base)}
-            {label(139, 134, l.height)}
+            {label(146, 168, l.height, 'end')}
           </>
         );
       case 'cone':
@@ -860,8 +861,8 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <line x1="150" y1="45" x2="150" y2="175" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
             <line x1="150" y1="175" x2="230" y2="175" stroke="currentColor" stroke-width="1.6" />
             {label(190, 170, l.radius)}
-            {label(166, 115, l.height)}
-            {l.slant && label(95, 104, l.slant)}
+            {label(156, 142, l.height, 'start')}
+            {l.slant && label(106, 104, l.slant, 'end')}
           </>
         );
       case 'sphere':

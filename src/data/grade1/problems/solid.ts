@@ -84,7 +84,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
       explanation: [text('(角柱の 体積)=(底面積)×(高さ)'), `${text('底面積: ')} ${a} \\times ${b} = ${a * b}`, `${a * b} \\times ${h} = ${v}`, `${text('答え: ')} ${v} ${text('cm³')}`],
       tags: ['prism_volume'],
       key: `pri:box:${a}:${b}:${h}`,
-      figure: { kind: 'solid', shape: 'prism4', labels: { base: `${a}`, base2: `${b}`, height: `${h}` } },
+      figure: { kind: 'solid', shape: 'prism4', labels: { base: `${a} cm`, base2: `${b} cm`, height: `${h} cm` } },
       mistakes: [mistakeNum(a * b, '底面積に 高さを かけよう'), mistakeNum(2 * (a * b + b * h + a * h), 'それは 表面積。体積は 底面積 × 高さ')],
       verify: `${a}*${b}*${h}`,
     });
@@ -103,7 +103,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
       explanation: [text('(角柱の 体積)=(底面積)×(高さ)'), `${text('底面積: ')} ${p} \\times ${q} \\div 2 = ${S}`, `${S} \\times ${h} = ${v}`, `${text('答え: ')} ${v} ${text('cm³')}`],
       tags: ['prism_triangle'],
       key: `pri:tri:${p}:${q}:${h}`,
-      figure: { kind: 'solid', shape: 'prism3', labels: { base: `${p}`, height: `${h}` } },
+      figure: { kind: 'solid', shape: 'prism3', labels: { base: `${p} cm`, height: `${h} cm` } },
       mistakes: [mistakeNum(p * q * h, '三角形の 面積は 底辺 × 高さ ÷ 2。÷ 2 を 忘れずに'), mistakeNum(S, '底面積に 高さを かけよう')],
       verify: `${p}*${q}/2*${h}`,
     });
@@ -133,7 +133,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
     ],
     tags: [rot ? 'cylinder_rotate' : 'cylinder_volume'],
     key: `pri:${kind}:${r}:${h}`,
-    figure: { kind: 'solid', shape: 'cylinder', labels: { radius: byD || rot ? undefined : `${r}`, height: `${h}` } },
+    figure: { kind: 'solid', shape: 'cylinder', labels: { radius: byD || rot ? undefined : `${r} cm`, height: `${h} cm` } },
     mistakes: [
       mistakePi(rat(2 * r * h), '2πr は 円周。底面積は πr²'),
       mistakePi(rat(r * r), '底面積に 高さを かけよう'),
@@ -164,7 +164,7 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
       explanation: [text('(角錐の 体積)= ⅓ ×(底面積)×(高さ)'), `${text('底面積: ')} ${a} \\times ${b} = ${S}`, `\\frac{1}{3} \\times ${S} \\times ${h} = ${toTex(v)}`, `${text('答え: ')} ${toTex(v)} ${text('cm³')}`],
       tags: ['pyramid_volume'],
       key: `pyr:${kind}:${a}:${b}:${h}`,
-      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a}`, height: `${h}` } },
+      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a} cm`, height: `${h} cm` } },
       mistakes: [mistakeNum(S * h, '錐は 柱の ⅓。3 で わるのを 忘れずに'), mistakeNum(rat(S * h, 2), '⅓ だよ(½ では ない)'), mistakeNum(third(rat(S)), '底面積 × 高さ × ⅓。高さを かけ忘れて いないかな')],
       verify: `${a}*${b}*${h}/3`,
     });
@@ -205,7 +205,7 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
     ],
     tags: [rot ? 'cone_rotate' : 'cone_volume'],
     key: `pyr:${kind}:${r}:${h}`,
-    figure: rot ? undefined : { kind: 'solid', shape: 'cone', labels: { radius: `${r}`, height: `${h}` } },
+    figure: rot ? undefined : { kind: 'solid', shape: 'cone', labels: { radius: `${r} cm`, height: `${h} cm` } },
     mistakes: [
       mistakePi(rat(r * r * h), '円錐は 円柱の ⅓。3 で わろう'),
       mistakePi(third(rat(2 * r * h)), '2πr は 円周。底面積は πr²'),
@@ -232,7 +232,7 @@ function genSphere(rng: Rng, d: Difficulty): Problem {
   // 半分は「直径」で 出して、半径を 求める 一手間を 入れる(★1 から)
   const byD = kind !== 'hemiV' && kind !== 'hemiS' && rng.bool();
   const given = byD ? `直径 ${2 * r} cm` : `半径 ${r} cm`;
-  const figure: SolidSpec = { kind: 'solid', shape: 'sphere', labels: byD ? {} : { radius: `${r}` } };
+  const figure: SolidSpec = { kind: 'solid', shape: 'sphere', labels: byD ? {} : { radius: `${r} cm` } };
   const radiusStep = byD ? [text(`半径は ${2 * r} ÷ 2 = ${r}`)] : [];
   const dMistake = (v: Rational): Mistake[] => (byD ? [mistakePi(v, '直径の 半分が 半径だよ')] : []);
   if (kind === 'area') {
@@ -323,7 +323,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
           : [text('表面積は すべての 面の 面積の 和'), `(${a} \\times ${b} + ${b} \\times ${c} + ${a} \\times ${c}) \\times 2 = ${s}`, `${text('答え: ')} ${s} ${text('cm²')}`],
       tags: [kind === 'cube' ? 'surface_cube' : 'surface_box'],
       key: `sur:${kind}:${a}:${b}:${c}`,
-      figure: { kind: 'solid', shape: 'prism4', labels: { base: `${a}`, base2: `${b}`, height: `${c}` } },
+      figure: { kind: 'solid', shape: 'prism4', labels: { base: `${a} cm`, base2: `${b} cm`, height: `${c} cm` } },
       mistakes: kind === 'cube' ? [mistakeNum(a * a * a, 'それは 体積。表面積は 面の 面積の 和'), mistakeNum(4 * a * a, '面は 6 つ あるよ')] : [mistakeNum(a * b * c, 'それは 体積。表面積は 面の 面積の 和'), mistakeNum(a * b + b * c + a * c, '向かい合う 面が 2 つずつ。2 倍しよう')],
       verify: `2*(${a}*${b}+${b}*${c}+${a}*${c})`,
     });
@@ -338,7 +338,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
       explanation: [text('側面の 長方形の 横の 長さ = 底面の 円周'), `2\\pi \\times ${r} = ${piTex(v)}`, `${text('答え: ')} ${piTex(v)} ${text('cm')}`],
       tags: ['cylinder_net'],
       key: `sur:side:${r}`,
-      figure: { kind: 'solid', shape: 'cylinder', labels: { radius: `${r}` } },
+      figure: { kind: 'solid', shape: 'cylinder', labels: { radius: `${r} cm` } },
       mistakes: [mistakePi(rat(r * r), 'πr² は 底面の 面積。横の 長さは 円周 2πr'), mistakePi(rat(r), '円周は 2πr。2 を かけよう')],
       verify: `2*${r}π`,
     });
@@ -362,7 +362,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
       ],
       tags: [kind === 'cyl' ? 'surface_cylinder' : 'surface_rotate'],
       key: `sur:${kind}:${r}:${h}`,
-      figure: kind === 'cyl' ? { kind: 'solid', shape: 'cylinder', labels: { radius: `${r}`, height: `${h}` } } : undefined,
+      figure: kind === 'cyl' ? { kind: 'solid', shape: 'cylinder', labels: { radius: `${r} cm`, height: `${h} cm` } } : undefined,
       mistakes: [
         mistakePi(rat(side + base), '底面は 上と 下の 2 つ あるよ'),
         mistakePi(rat(side), '側面だけでなく、底面の 円 2 つも たそう'),
@@ -385,7 +385,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
       explanation: [`${text('側面積: ')} ${a} \\times ${l} \\div 2 \\times 4 = ${side}`, `${text('底面積: ')} ${a} \\times ${a} = ${a * a}`, `${side} + ${a * a} = ${s}`, `${text('答え: ')} ${s} ${text('cm²')}`],
       tags: ['surface_pyramid'],
       key: `sur:pyr:${a}:${l}`,
-      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a}` } },
+      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a} cm` } },
       mistakes: [mistakeNum(side, '底面の 正方形も たそう'), mistakeNum(a * a + 4 * a * l, '三角形の 面積は ÷ 2 を 忘れずに'), mistakeNum(a * a + (a * l) / 2, '側面の 三角形は 4 つ あるよ')],
       verify: `${a}*${a}+4*${a}*${l}/2`,
     });
@@ -413,7 +413,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
       ],
       tags: ['surface_tri_prism'],
       key: `sur:tri:${p}:${q}:${h}`,
-      figure: { kind: 'solid', shape: 'prism3', labels: { height: `${h}` } },
+      figure: { kind: 'solid', shape: 'prism3', labels: { height: `${h} cm` } },
       mistakes: [mistakeNum(side + base, '底面は 2 つ あるよ'), mistakeNum(side, '底面の 三角形 2 つも たそう'), mistakeNum(side + p * q * 2, '三角形の 面積は ÷ 2 を 忘れずに')],
       verify: `${h}*(${p}+${q}+${hyp})+${p}*${q}`,
     });
@@ -451,7 +451,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
     ],
     tags: [withBase ? 'surface_cone' : 'cone_side'],
     key: `sur:${kind}:${r}:${l}`,
-    figure: { kind: 'solid', shape: 'cone', labels: { radius: `${r}`, slant: `${l}` } },
+    figure: { kind: 'solid', shape: 'cone', labels: { radius: `${r} cm`, slant: `${l} cm` } },
     mistakes: [
       mistakePi(rat(l * l), '側面は 半径が 母線の 円の 一部(おうぎ形)。円 全体では ないよ'),
       mistakePi(rat(2 * r * l), '側面積は π × 母線 × 半径。2 は かけないよ'),
@@ -555,7 +555,7 @@ function genProjection(rng: Rng, d: Difficulty): Problem {
       explanation: [text('側面の おうぎ形の 弧の 長さ = 底面の 円周'), `2\\pi \\times ${r} = ${piTex(v)}`, `${text('答え: ')} ${piTex(v)} ${text('cm')}`],
       tags: ['net_cone_arc'],
       key: `prj:arc:${r}`,
-      figure: { kind: 'solid', shape: 'cone', labels: { radius: `${r}` } },
+      figure: { kind: 'solid', shape: 'cone', labels: { radius: `${r} cm` } },
       mistakes: [mistakePi(rat(r * r), 'πr² は 底面の 面積。弧の 長さは 円周 2πr'), mistakePi(rat(r), '円周は 2πr。2 を かけよう')],
       verify: `2*${r}π`,
     });
@@ -593,7 +593,7 @@ function genProjection(rng: Rng, d: Difficulty): Problem {
     ],
     tags: ['net_cone_angle'],
     key: `prj:ang:${r}:${l}`,
-    figure: { kind: 'solid', shape: 'cone', labels: { radius: `${r}`, slant: `${l}` } },
+    figure: { kind: 'solid', shape: 'cone', labels: { radius: `${r} cm`, slant: `${l} cm` } },
     mistakes: [mistakeNum(rat(360 * l, r), '母線 ÷ 半径 では なく、半径 ÷ 母線 だよ'), mistakeNum(rat(180 * r, l), '360° に かけよう'), mistakeNum(rat(360 * r * r, l * l), '弧の 長さは 半径に 比例。2 乗は しないよ')],
     verify: `360*${r}/${l}`,
   });
