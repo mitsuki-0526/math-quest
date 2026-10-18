@@ -107,6 +107,47 @@ const ASK_MARK = PLANE_MARK;
 /** 図の 中の 文字(x)の 書体。styles.css の .mt-var と 同じ */
 const MATH_FONT = "'MQ Math', KaTeX_Math, 'Times New Roman', serif";
 
+/** 文字の 幅の 見積もり(かな・漢字は 1 文字分、数字・記号・英字は 0.55 文字分) */
+const textWidth = (t: string, fs: number) => [...t].reduce((w, ch) => w + (/[　-鿿]/.test(ch) ? fs : fs * 0.55), 0);
+
+/**
+ * 長さの 書き方(教科書と 同じ): 辺の 両はしを 結ぶ 細い 弧を 外側に ふくらませ、まん中を 切って そこに 数を 書く。
+ * 数だけ 置くと どの 辺の 長さか 分かりにくかった(先生の 判定 2026-10-19)。
+ * 座標は SVG の px。(cx, cy) は 図形の 内側の 点(弧は ここから 離れる 向きに ふくらむ)
+ */
+function LengthArc({ x1, y1, x2, y2, text, cx, cy, fs = 15 }: { x1: number; y1: number; x2: number; y2: number; text: string; cx: number; cy: number; fs?: number }) {
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const [dx, dy] = [(x2 - x1) / len, (y2 - y1) / len];
+  const [mx, my] = [(x1 + x2) / 2, (y1 + y2) / 2];
+  let [nx, ny] = [dy, -dx];
+  if (nx * (mx - cx) + ny * (my - cy) < 0) [nx, ny] = [-nx, -ny];
+  // ふくらみは 辺の 長さに 合わせる(短い 辺で 深すぎない、長い 辺で 平らすぎない)
+  const b = Math.min(24, Math.max(9, len * 0.16));
+  const [qx, qy] = [mx + nx * 2 * b, my + ny * 2 * b];
+  const at = (t: number): [number, number] => [(1 - t) ** 2 * x1 + 2 * (1 - t) * t * qx + t * t * x2, (1 - t) ** 2 * y1 + 2 * (1 - t) * t * qy + t * t * y2];
+  // 切れ目の 幅: 文字の 弧に そった 長さ + すきま(弧の まん中の 速さは ほぼ 辺の 長さ)
+  const half = (Math.abs(dx) * textWidth(text, fs)) / 2 + Math.abs(dy) * fs * 0.5 + 3;
+  const g = half / len;
+  const [px, py] = at(0.5);
+  const seg = (t0: number, t1: number) =>
+    Array.from({ length: 13 }, (_, i) => at(t0 + ((t1 - t0) * i) / 12))
+      .map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`)
+      .join(' ');
+  // 文字が 弧より 長い(短い 辺)ときは 切らずに、弧の 外に 書く
+  const outside = g >= 0.42;
+  // 文字の 内側の はしが 辺に かからない ところまで 外へ ずらす(縦の 辺では 横に 長い 文字が 辺に 届いた)
+  const reach = Math.abs(nx) * (textWidth(text, fs) / 2) + Math.abs(ny) * fs * 0.45;
+  const off = outside ? reach + b * 0.3 + 4 : Math.max(0, reach + 4 - b);
+  return (
+    <g>
+      <path d={outside ? seg(0, 1) : `${seg(0, 0.5 - g)} ${seg(0.5 + g, 1)}`} fill="none" stroke="currentColor" stroke-width="1" />
+      <text x={px + nx * off} y={py + ny * off + fs * 0.35} text-anchor="middle" font-size={fs} fill="currentColor">
+        {text}
+      </text>
+    </g>
+  );
+}
+
 function Plane({ spec }: { spec: PlaneSpec }) {
   const R = spec.range ?? 6;
   const S = 360; // 1辺の長さ
@@ -670,6 +711,8 @@ function Diagram({ spec }: { spec: DiagramSpec }) {
               </g>
             );
           }
+          case 'len':
+            return <LengthArc key={i} x1={px(it.a[0])} y1={py(it.a[1])} x2={px(it.b[0])} y2={py(it.b[1])} text={it.s} cx={px(it.inside[0])} cy={py(it.inside[1])} fs={16} />;
           case 'text':
             return (
               <text
@@ -742,10 +785,8 @@ function Sector({ spec }: { spec: SectorSpec }) {
     >
       <rect x={nx0} y={y0} width={nx1 - nx0} height={y1 - y0} rx="6" fill="#fff" />
       <path d={`M${c},${c} L${c + r},${c} A${r},${r} 0 ${large} 0 ${x2},${y2} Z`} fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="2.2" />
-      {/* 半径のラベル */}
-      <text x={c + r / 2} y={c + 18} text-anchor="middle" font-size="15" fill="currentColor">
-        {spec.radiusLabel ?? `${spec.radius}`}
-      </text>
+      {/* 半径(下の 半径に 切れ目の ある 弧) */}
+      <LengthArc x1={c} y1={c} x2={c + r} y2={c} text={spec.radiusLabel ?? `${spec.radius}`} cx={c + r / 2} cy={c - 40} />
       {/* 中心角 */}
       <path
         d={`M${c + 34},${c} A34,34 0 ${large} 0 ${c + 34 * Math.cos(rad(angle))},${c + 34 * Math.sin(rad(angle))}`}
@@ -785,6 +826,15 @@ function Solid({ spec }: { spec: SolidSpec }) {
       </text>
     ) : null;
 
+  /** 辺の 長さ(教科書の 切れ目の ある 弧)。(cx, cy) は 立体の 中ほど */
+  const dim = (x1: number, y1: number, x2: number, y2: number, t: string | undefined, cx: number, cy: number) =>
+    t ? <LengthArc x1={x1} y1={y1} x2={x2} y2={y2} text={t} cx={cx} cy={cy} /> : null;
+  /** 直角の 印(頂点 (x, y) から (ux, uy)・(vx, vy) の 向きに) */
+  const right = (x: number, y: number, ux: number, uy: number, vx: number, vy: number) => {
+    const m = 10;
+    return <path d={`M${x + ux * m},${y + uy * m} L${x + (ux + vx) * m},${y + (uy + vy) * m} L${x + vx * m},${y + vy * m}`} fill="none" stroke="currentColor" stroke-width="1.2" />;
+  };
+
   /** 頂点の 名前(教科書の 書き方: 直方体は 上の 面 ABCD・下の 面 EFGH、三角柱は ABC と DEF)。点の 名前は 斜体に しない(先生の指摘 2026-10-18) */
   const vname = (x: number, y: number, t: string) => (
     <text x={x} y={y} text-anchor="middle" font-size="15" fill="currentColor">
@@ -810,17 +860,18 @@ function Solid({ spec }: { spec: SolidSpec }) {
     if (spec.shape === 'prism3')
       return (
         <>
-          {vname(90, 96, 'A')}
-          {vname(50, 220, 'B')}
-          {vname(174, 229, 'C')}
-          {vname(196, 52, 'D')}
-          {vname(169, 190, 'E')}
-          {vname(271, 176, 'F')}
+          {vname(48, 98, 'A')}
+          {vname(48, 224, 'B')}
+          {vname(176, 228, 'C')}
+          {vname(150, 50, 'D')}
+          {vname(164, 160, 'E')}
+          {vname(272, 176, 'F')}
         </>
       );
     return null;
   };
 
+  // 問題文に ある 長さは すべて 図に 書く(先生の 判定 2026-10-19「問題文に ある 情報は すべて 記載」)
   const body = () => {
     switch (spec.shape) {
       case 'prism4': // 直方体・四角柱
@@ -831,20 +882,23 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M190,90 L230,60 L230,170 L190,200" {...stroke} />
             <path d="M70,200 L110,170 L230,170" {...dash} />
             <path d="M110,170 L110,60" {...dash} />
-            {label(130, 222, l.base)}
-            {label(227, 205, l.base2)}
-            {label(63, 150, l.height, 'end')}
+            {dim(70, 200, 190, 200, l.base, 150, 130)}
+            {dim(190, 200, 230, 170, l.base2, 150, 130)}
+            {dim(70, 90, 70, 200, l.height, 150, 130)}
           </>
         );
-      case 'prism3': // 三角柱(手前の 面 ABC、奥の 面 DEF)
+      case 'prism3': // 三角柱(手前の 面 ABC は ∠B = 90° の 直角三角形、奥の 面 DEF)
         return (
           <>
-            <path d="M60,210 L100,100 L170,210 Z" {...stroke} />
-            <path d="M100,100 L190,60 L260,170 L170,210" {...stroke} />
+            <path d="M60,210 L60,100 L170,210 Z" {...stroke} />
+            <path d="M60,100 L150,60 L260,170 L170,210" {...stroke} />
             <path d="M60,210 L150,170 L260,170" {...dash} />
-            <path d="M150,170 L190,60" {...dash} />
-            {label(115, 232, l.base)}
-            {label(228, 209, l.height)}
+            <path d="M150,170 L150,60" {...dash} />
+            {right(60, 210, 0, -1, 1, 0)}
+            {dim(60, 210, 170, 210, l.base, 97, 173)}
+            {dim(60, 100, 60, 210, l.base2, 97, 173)}
+            {dim(60, 100, 170, 210, l.hyp, 97, 173)}
+            {dim(170, 210, 260, 170, l.height, 160, 135)}
           </>
         );
       case 'cylinder':
@@ -855,9 +909,12 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M230,70 L230,190" {...stroke} fill="none" />
             <path d="M70,190 A80,28 0 0 0 230,190" {...stroke} fill="none" />
             <path d="M70,190 A80,28 0 0 1 230,190" {...dash} />
-            <line x1="150" y1="70" x2="230" y2="70" stroke="currentColor" stroke-width="1.6" />
-            {label(190, 65, l.radius)}
-            {label(252, 135, l.height)}
+            {/* 半径・直径は 上の 円に 線を ひいて その 上に 書く(線が 1 本なので どの 長さか 分かる) */}
+            <line x1={l.diameter ? 70 : 150} y1="70" x2="230" y2="70" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="150" cy="70" r="2.5" fill="currentColor" />
+            {label(190, 63, l.radius)}
+            {label(150, 63, l.diameter)}
+            {dim(230, 70, 230, 190, l.height, 150, 130)}
           </>
         );
       case 'pyramid4':
@@ -867,9 +924,23 @@ function Solid({ spec }: { spec: SolidSpec }) {
             <path d="M150,40 L240,150 L180,190" {...stroke} />
             <path d="M60,190 L120,150 L240,150" {...dash} />
             <path d="M150,40 L120,150" {...dash} />
-            <line x1="150" y1="40" x2="150" y2="170" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
-            {label(120, 212, l.base)}
-            {label(146, 168, l.height, 'end')}
+            {l.height && (
+              <>
+                <line x1="150" y1="40" x2="150" y2="170" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
+                {right(150, 170, 0, -1, -1, 0)}
+                {label(145, 122, l.height, 'end')}
+              </>
+            )}
+            {/* 側面の 三角形の 高さ(頂点から 手前の 底辺の 中点へ) */}
+            {l.faceHeight && (
+              <>
+                <line x1="150" y1="40" x2="120" y2="190" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
+                {right(120, 190, 1, 0, 0.196, -0.98)}
+                {label(126, 118, l.faceHeight, 'end')}
+              </>
+            )}
+            {dim(60, 190, 180, 190, l.base, 150, 130)}
+            {dim(180, 190, 240, 150, l.base2, 150, 130)}
           </>
         );
       case 'cone':
@@ -877,11 +948,17 @@ function Solid({ spec }: { spec: SolidSpec }) {
           <>
             <path d="M150,45 L70,175 A80,24 0 0 0 230,175 Z" {...stroke} />
             <path d="M70,175 A80,24 0 0 1 230,175" {...dash} />
-            <line x1="150" y1="45" x2="150" y2="175" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
+            {l.height && (
+              <>
+                <line x1="150" y1="45" x2="150" y2="175" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" />
+                {right(150, 175, 0, -1, 1, 0)}
+                {label(156, 115, l.height, 'start')}
+              </>
+            )}
             <line x1="150" y1="175" x2="230" y2="175" stroke="currentColor" stroke-width="1.6" />
-            {label(190, 170, l.radius)}
-            {label(156, 142, l.height, 'start')}
-            {l.slant && label(106, 104, l.slant, 'end')}
+            <circle cx="150" cy="175" r="2.5" fill="currentColor" />
+            {label(196, 169, l.radius)}
+            {dim(70, 175, 150, 45, l.slant, 150, 140)}
           </>
         );
       case 'sphere':
@@ -894,6 +971,17 @@ function Solid({ spec }: { spec: SolidSpec }) {
             {label(192, 124, l.radius)}
             {label(150, 156, l.diameter)}
             <circle cx="150" cy="130" r="3" fill="currentColor" />
+          </>
+        );
+      case 'hemisphere':
+        // 平らな 面を 下に 置いた 半球(球の 図を 使うと 球 全体に 見えた)
+        return (
+          <>
+            <path d="M65,170 A85,85 0 0 1 235,170 A85,30 0 0 1 65,170 Z" {...stroke} />
+            <path d="M65,170 A85,30 0 0 1 235,170" {...dash} />
+            <line x1="150" y1="170" x2="235" y2="170" stroke="currentColor" stroke-width="1.8" />
+            <circle cx="150" cy="170" r="3" fill="currentColor" />
+            {label(192, 164, l.radius)}
           </>
         );
     }

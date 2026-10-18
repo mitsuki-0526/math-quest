@@ -64,9 +64,9 @@ export interface SectorSpec {
 /** 立体の見取図(第6章) */
 export interface SolidSpec {
   kind: 'solid';
-  shape: 'prism3' | 'prism4' | 'cylinder' | 'pyramid4' | 'cone' | 'sphere';
+  shape: 'prism3' | 'prism4' | 'cylinder' | 'pyramid4' | 'cone' | 'sphere' | 'hemisphere';
   /** 寸法のラベル(底面の辺・半径・高さなど) */
-  labels: { base?: string; base2?: string; height?: string; radius?: string; slant?: string; diameter?: string };
+  labels: { base?: string; base2?: string; height?: string; radius?: string; slant?: string; diameter?: string; hyp?: string; faceHeight?: string };
   /** 頂点の 名前を 書く(直方体 A〜H・三角柱 A〜F)。辺や 面の 位置関係を 問う ときに 使う */
   vertices?: boolean;
 }
@@ -101,7 +101,9 @@ export type DiagramItem =
   | { t: 'arc'; c: DiagramPt; r: number; from: number; to: number; tone?: DiagramTone }
   /** 点と 名前。at は 名前を 置く 向き(度。0 が 右、90 が 上) */
   | { t: 'dot'; p: DiagramPt; label?: string; at?: number; tone?: DiagramTone }
-  | { t: 'text'; p: DiagramPt; s: string; tone?: DiagramTone; italic?: boolean };
+  | { t: 'text'; p: DiagramPt; s: string; tone?: DiagramTone; italic?: boolean }
+  /** 辺 a–b の 長さ(教科書の 切れ目の ある 弧)。inside は 図形の 内側の 点(弧は そこから 離れる 向きに ふくらむ) */
+  | { t: 'len'; a: DiagramPt; b: DiagramPt; s: string; inside: DiagramPt };
 
 export interface DiagramSpec {
   kind: 'diagram';

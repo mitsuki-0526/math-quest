@@ -255,10 +255,12 @@ export function rotationDiagram(shape: 'rect' | 'tri' | 'semi', a: number, b: nu
     const m = 0.22;
     items.push({ t: 'poly', pts: [[0, 0], [m, 0], [m, m], [0, m]], tone: 'ink' });
   }
-  if (aLabel) items.push({ t: 'text', p: [-0.55, y0 + A / 2], s: aLabel });
-  if (bLabel) items.push({ t: 'text', p: [B / 2, (shape === 'semi' ? 0 : 0) - 0.32], s: bLabel });
-  const left = aLabel ? -1.2 : -0.6;
-  const v0 = bottom - (bLabel ? 0.3 : 0);
+  // 長さは 教科書と 同じ 切れ目の ある 弧で(軸の 上の 辺は 左へ、下の 辺は 下へ ふくらむ)
+  const inside: DiagramPt = [B / 3, y0 + A / 3];
+  if (aLabel) items.push({ t: 'len', a: [0, y0], b: [0, y0 + A], s: aLabel, inside });
+  if (bLabel) items.push({ t: 'len', a: [0, 0], b: [B, 0], s: bLabel, inside });
+  const left = aLabel ? -1.3 : -0.6;
+  const v0 = bottom - (bLabel ? 0.45 : 0);
   const vw = Math.max(B, 0.6) + pad - left;
   const vh = top + 0.6 - v0;
   // 縦長の 図形(縦 7・横 2 など)でも 高さを 220px ほどに おさえる(低い 画面で 問題窓から はみ出さない)

@@ -88,9 +88,9 @@ function cubeCutFigure(edge: string): FigureSpec {
   // 1 辺の 長さは 手前の 下の 辺に 書く
   const bottom = d.frontEdges.find(([a, b]) => pts[a][2] === 0 && pts[b][2] === 0)!;
   const [p, q] = [d.at[bottom[0]], d.at[bottom[1]]];
-  d.items.push({ t: 'text', p: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2 - 0.2], s: edge });
+  d.items.push({ t: 'len', a: p, b: q, s: edge, inside: d.at[c] });
   const spec = solidDiagram(d, '立方体から 切り取った 三角錐');
-  spec.view = [spec.view[0], spec.view[1] - 0.2, spec.view[2], spec.view[3] + 0.2];
+  spec.view = [spec.view[0], spec.view[1] - 0.35, spec.view[2], spec.view[3] + 0.35];
   return spec;
 }
 
@@ -150,7 +150,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
       explanation: [text('(角柱の 体積)=(底面積)×(高さ)'), `${text('底面積: ')} ${p} \\times ${q} \\div 2 = ${S}`, `${S} \\times ${h} = ${v}`, `${text('答え: ')} ${v} ${text('cm³')}`],
       tags: ['prism_triangle'],
       key: `pri:tri:${p}:${q}:${h}`,
-      figure: { kind: 'solid', shape: 'prism3', labels: { base: `${p} cm`, height: `${h} cm` } },
+      figure: { kind: 'solid', shape: 'prism3', labels: { base: `${p} cm`, base2: `${q} cm`, height: `${h} cm` } },
       mistakes: [mistakeNum(p * q * h, '三角形の 面積は 底辺 × 高さ ÷ 2。÷ 2 を 忘れずに'), mistakeNum(S, '底面積に 高さを かけよう')],
       verify: `${p}*${q}/2*${h}`,
     });
@@ -182,7 +182,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
     tags: [rot ? 'cylinder_rotate' : 'cylinder_volume'],
     key: `pri:${kind}:${r}:${h}`,
     // 回転体は 回す 前の 長方形と 軸(先生の 判定 2026-10-18「軸と 回転前の 図を ください」)
-    figure: rot ? rotationDiagram('rect', h, r, `${h} cm`, `${r} cm`) : { kind: 'solid', shape: 'cylinder', labels: { radius: byD ? undefined : `${r} cm`, height: `${h} cm` } },
+    figure: rot ? rotationDiagram('rect', h, r, `${h} cm`, `${r} cm`) : { kind: 'solid', shape: 'cylinder', labels: byD ? { diameter: `${2 * r} cm`, height: `${h} cm` } : { radius: `${r} cm`, height: `${h} cm` } },
     mistakes: [
       mistakePi(rat(2 * r * h), '2πr は 円周。底面積は πr²'),
       mistakePi(rat(r * r), '底面積に 高さを かけよう'),
@@ -214,7 +214,7 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
       explanation: [text('(角錐の 体積)= ⅓ ×(底面積)×(高さ)'), `${text('底面積: ')} ${a} \\times ${b} = ${S}`, `\\frac{1}{3} \\times ${S} \\times ${h} = ${toTex(v)}`, `${text('答え: ')} ${toTex(v)} ${text('cm³')}`],
       tags: ['pyramid_volume'],
       key: `pyr:${kind}:${a}:${b}:${h}`,
-      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a} cm`, height: `${h} cm` } },
+      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a} cm`, base2: kind === 'rect' ? `${b} cm` : undefined, height: `${h} cm` } },
       mistakes: [mistakeNum(S * h, '錐は 柱の ⅓。3 で わるのを 忘れずに'), mistakeNum(rat(S * h, 2), '⅓ だよ(½ では ない)'), mistakeNum(third(rat(S)), '底面積 × 高さ × ⅓。高さを かけ忘れて いないかな')],
       verify: `${a}*${b}*${h}/3`,
     });
@@ -286,7 +286,8 @@ function genSphere(rng: Rng, d: Difficulty): Problem {
   const byD = kind !== 'hemiV' && kind !== 'hemiS' && rng.bool();
   const given = byD ? `直径 ${2 * r} cm` : `半径 ${r} cm`;
   // 直径で 出す ときも 半径を 書く(先生の 判定 2026-10-18「半径も 書いてください」)
-  const figure: SolidSpec = { kind: 'solid', shape: 'sphere', labels: byD ? { diameter: `${2 * r} cm`, radius: `${r} cm` } : { radius: `${r} cm` } };
+  const hemi = kind === 'hemiV' || kind === 'hemiS';
+  const figure: SolidSpec = { kind: 'solid', shape: hemi ? 'hemisphere' : 'sphere', labels: byD ? { diameter: `${2 * r} cm`, radius: `${r} cm` } : { radius: `${r} cm` } };
   const radiusStep = byD ? [text(`半径は ${2 * r} ÷ 2 = ${r}`)] : [];
   const dMistake = (v: Rational): Mistake[] => (byD ? [mistakePi(v, '直径の 半分が 半径だよ')] : []);
   if (kind === 'area') {
@@ -447,7 +448,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
       explanation: [`${text('側面積: ')} ${a} \\times ${l} \\div 2 \\times 4 = ${side}`, `${text('底面積: ')} ${a} \\times ${a} = ${a * a}`, `${side} + ${a * a} = ${s}`, `${text('答え: ')} ${s} ${text('cm²')}`],
       tags: ['surface_pyramid'],
       key: `sur:pyr:${a}:${l}`,
-      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a} cm` } },
+      figure: { kind: 'solid', shape: 'pyramid4', labels: { base: `${a} cm`, faceHeight: `${l} cm` } },
       mistakes: [mistakeNum(side, '底面の 正方形も たそう'), mistakeNum(a * a + 4 * a * l, '三角形の 面積は ÷ 2 を 忘れずに'), mistakeNum(a * a + (a * l) / 2, '側面の 三角形は 4 つ あるよ')],
       verify: `${a}*${a}+4*${a}*${l}/2`,
     });
@@ -476,7 +477,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
       ],
       tags: ['surface_tri_prism'],
       key: `sur:tri:${p}:${q}:${h}`,
-      figure: { kind: 'solid', shape: 'prism3', labels: { height: `${h} cm` } },
+      figure: { kind: 'solid', shape: 'prism3', labels: { base: `${p} cm`, base2: `${q} cm`, hyp: `${hyp} cm`, height: `${h} cm` } },
       mistakes: [mistakeNum(side + base, '底面は 2 つ あるよ'), mistakeNum(side, '底面の 三角形 2 つも たそう'), mistakeNum(side + p * q * 2, '三角形の 面積は ÷ 2 を 忘れずに')],
       verify: `${h}*(${p}+${q}+${hyp})+${p}*${q}`,
     });
