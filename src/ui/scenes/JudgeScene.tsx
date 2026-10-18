@@ -253,7 +253,7 @@ export function JudgeScene() {
             </ol>
           )}
           <p class="judge-answer">
-            <b>正解:</b> <Tex tex={answerTex(p)} />
+            <b>正解:</b> <Tex tex={answerTex(p)} />{p.answerUnit && ` ${p.answerUnit}`}
           </p>
           <div class="judge-detail">
             {p.explanationFigure && (

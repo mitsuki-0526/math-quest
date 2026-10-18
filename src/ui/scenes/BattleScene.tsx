@@ -523,7 +523,7 @@ export function BattleScene({ nodeId, tutorial, review, templateId }: { nodeId: 
                   <Sprite id="char_pita_icon" size={28} class="inline-icon" alt="" /> {characters.pita.name}「{hintText}」
                 </p>
               )}
-              <AnswerInput answer={problem.answer} value={input} onChange={setInput} onSubmit={submit} disabled={!!explain || practicing} fraction={needsFractionInput(problem)} />
+              <AnswerInput answer={problem.answer} value={input} onChange={setInput} onSubmit={submit} disabled={!!explain || practicing} fraction={needsFractionInput(problem)} unit={problem.answerUnit} />
             </>
           )}
           {state.phase === 'victory' && (

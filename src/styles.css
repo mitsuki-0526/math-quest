@@ -1019,6 +1019,12 @@ img.sprite {
   color: var(--txt);
   letter-spacing: 0.04em;
 }
+.answer-unit {
+  align-self: center;
+  font-size: 1.25em;
+  color: var(--txt);
+  white-space: nowrap;
+}
 .answer-input:focus-visible {
   outline: none;
   border-color: var(--gold);

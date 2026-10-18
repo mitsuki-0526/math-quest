@@ -53,6 +53,8 @@ interface Props {
   submitLabel?: string;
   /** 答えが 分数(needsFractionInput)。入れ方の 見本を 出し、「/」キーを 目立たせる */
   fraction?: boolean;
+  /** 解答欄の 右に 出す 単位(cm³ など)。単位は 入れなくて よいことが 見て わかる */
+  unit?: string;
 }
 
 interface Key {
@@ -144,6 +146,7 @@ export function AnswerInput({
   disabled,
   submitLabel = 'こうげき (Enter)',
   fraction,
+  unit,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const yRef = useRef<HTMLInputElement>(null);
@@ -310,6 +313,7 @@ export function AnswerInput({
               }
             }}
           />
+          {unit && <span class="answer-unit">{unit}</span>}
           <Button primary type="submit" disabled={disabled || !value.trim()}>
             {submitLabel}
           </Button>

@@ -2,8 +2,9 @@ import { registerTemplate, mistakeNum, type Difficulty, type Mistake, type Probl
 import type { Rng } from '@/math/rng';
 import { rat, mul, add, type Rational, isInteger, toTex } from '@/math/rational';
 import { text } from '@/math/format';
-import type { SolidSpec } from '@/math/figure';
+import type { FigureSpec, SolidSpec } from '@/math/figure';
 import { choose, piExpr, piTex, mistakePi, type Wrong } from './choice';
+import { drawConvex, netDiagram, prismPts, pyramidPts, regularPts, rotationDiagram, solidDiagram, type NetAsk, type NetKind } from './solidFigures';
 
 /**
  * 第6章「空間図形」のテンプレート(台本 06_solid_mountain.md の敵に対応)。
@@ -26,7 +27,7 @@ const third = (v: Rational): Rational => mul(v, rat(1, 3));
 function piProblem(
   id: string,
   d: Difficulty,
-  p: Pick<Problem, 'hint' | 'explanation' | 'tags' | 'key' | 'figure' | 'mistakes' | 'verify'> & { q: string; v: Rational },
+  p: Pick<Problem, 'hint' | 'explanation' | 'tags' | 'key' | 'figure' | 'mistakes' | 'verify'> & { q: string; v: Rational; unit?: string },
 ): Problem {
   return {
     templateId: id,
@@ -42,13 +43,14 @@ function piProblem(
     figure: p.figure,
     mistakes: p.mistakes,
     verify: p.verify,
+    answerUnit: p.unit,
   };
 }
 
 function numProblem(
   id: string,
   d: Difficulty,
-  p: Pick<Problem, 'hint' | 'explanation' | 'tags' | 'key' | 'figure' | 'mistakes' | 'verify'> & { q: string; v: Rational | number },
+  p: Pick<Problem, 'hint' | 'explanation' | 'tags' | 'key' | 'figure' | 'mistakes' | 'verify'> & { q: string; v: Rational | number; unit?: string },
 ): Problem {
   return {
     templateId: id,
@@ -64,7 +66,50 @@ function numProblem(
     figure: p.figure,
     mistakes: p.mistakes,
     verify: p.verify,
+    answerUnit: p.unit,
   };
+}
+
+// ---------------------------------------------------------------- 図(先生の 判定 2026-10-18「図を 提示して ください」)
+
+/** 見取図の 向き(斜め 上から)。辺が 重なって 見えない 角度に してある */
+const VIEW = { yaw: 18, pitch: 24 };
+
+/** 立方体の 角を 切り取った 三角錐(切り口の 三角形と 三角錐の 辺を 赤く) */
+function cubeCutFigure(edge: string): FigureSpec {
+  const pts: [number, number, number][] = [0, 1].flatMap((x) => [0, 1].flatMap((y) => [0, 1].map((z) => [x, y, z] as [number, number, number])));
+  const d = drawConvex(pts, VIEW);
+  // 手前 右の 上の 頂点(1, 0, 1)を 切り取る(3 本の 辺が どれも 見える 角)
+  const c = pts.findIndex((q) => q[0] === 1 && q[1] === 0 && q[2] === 1);
+  const nb = pts.map((_, i) => i).filter((i) => pts[i].filter((v, k) => v !== pts[c][k]).length === 1);
+  const tri = nb.map((i) => d.at[i]);
+  d.items.push({ t: 'poly', pts: tri, tone: 'ask', fill: true });
+  for (const i of nb) d.items.push({ t: 'seg', a: d.at[c], b: d.at[i], tone: 'ask' });
+  // 1 辺の 長さは 手前の 下の 辺に 書く
+  const bottom = d.frontEdges.find(([a, b]) => pts[a][2] === 0 && pts[b][2] === 0)!;
+  const [p, q] = [d.at[bottom[0]], d.at[bottom[1]]];
+  d.items.push({ t: 'text', p: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2 - 0.2], s: edge });
+  const spec = solidDiagram(d, '立方体から 切り取った 三角錐');
+  spec.view = [spec.view[0], spec.view[1] - 0.2, spec.view[2], spec.view[3] + 0.2];
+  return spec;
+}
+
+/** 正多面体の 見取図(正四面体は 真上に 近いと 平らな 三角形に 見えるので 向きを 変える) */
+function regularFigure(name: string): FigureSpec {
+  return solidDiagram(drawConvex(regularPts(name), name.startsWith('正四面体') ? { yaw: 30, pitch: 22 } : { yaw: 20, pitch: 18 }), name);
+}
+
+/** n 角柱・n 角錐の 見取図 */
+function polyFigure(kind: 'prism' | 'pyramid', n: number): FigureSpec {
+  return solidDiagram(drawConvex(kind === 'prism' ? prismPts(n) : pyramidPts(n), VIEW), `${n} 角${kind === 'prism' ? '柱' : '錐'}`);
+}
+
+/** 正 n 角柱で、問う 辺(側面の 辺 か 上の 底面の 辺)を 赤く */
+function prismAskFigure(n: number, ofBase: boolean): FigureSpec {
+  const pts = prismPts(n);
+  const first = drawConvex(pts, VIEW);
+  const e = first.frontEdges.find(([a, b]) => (ofBase ? a >= n && b >= n : Math.abs(a - b) === n))!;
+  return solidDiagram(drawConvex(pts, { ...VIEW, ask: [e] }), `正${n}角柱`);
 }
 
 // ---------------------------------------------------------------- 柱の体積
@@ -80,6 +125,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: `底面が 縦 ${a} cm、横 ${b} cm の 長方形で、高さが ${h} cm の 四角柱の 体積は?(cm³)`,
       v,
+      unit: 'cm³',
       hint: '角柱の 体積 = 底面積 × 高さ',
       explanation: [text('(角柱の 体積)=(底面積)×(高さ)'), `${text('底面積: ')} ${a} \\times ${b} = ${a * b}`, `${a * b} \\times ${h} = ${v}`, `${text('答え: ')} ${v} ${text('cm³')}`],
       tags: ['prism_volume'],
@@ -99,6 +145,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: `底面が、直角を はさむ 2 辺が ${p} cm と ${q} cm の 直角三角形で、高さが ${h} cm の 三角柱の 体積は?(cm³)`,
       v,
+      unit: 'cm³',
       hint: 'まず 底面の 三角形の 面積(÷ 2 を 忘れずに)',
       explanation: [text('(角柱の 体積)=(底面積)×(高さ)'), `${text('底面積: ')} ${p} \\times ${q} \\div 2 = ${S}`, `${S} \\times ${h} = ${v}`, `${text('答え: ')} ${v} ${text('cm³')}`],
       tags: ['prism_triangle'],
@@ -122,6 +169,7 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
   return piProblem(ID, d, {
     q,
     v,
+    unit: 'cm³',
     hint: rot ? '長方形を 回すと 円柱。横の 辺が 底面の 半径、縦の 辺が 高さ' : byD ? 'まず 半径(直径の 半分)。底面積は πr²' : '底面積は πr²。それに 高さを かける',
     explanation: [
       ...(rot ? [text(`できる 立体は 底面の 半径 ${r} cm、高さ ${h} cm の 円柱`)] : []),
@@ -133,7 +181,8 @@ function genPrism(rng: Rng, d: Difficulty): Problem {
     ],
     tags: [rot ? 'cylinder_rotate' : 'cylinder_volume'],
     key: `pri:${kind}:${r}:${h}`,
-    figure: { kind: 'solid', shape: 'cylinder', labels: { radius: byD || rot ? undefined : `${r} cm`, height: `${h} cm` } },
+    // 回転体は 回す 前の 長方形と 軸(先生の 判定 2026-10-18「軸と 回転前の 図を ください」)
+    figure: rot ? rotationDiagram('rect', h, r, `${h} cm`, `${r} cm`) : { kind: 'solid', shape: 'cylinder', labels: { radius: byD ? undefined : `${r} cm`, height: `${h} cm` } },
     mistakes: [
       mistakePi(rat(2 * r * h), '2πr は 円周。底面積は πr²'),
       mistakePi(rat(r * r), '底面積に 高さを かけよう'),
@@ -160,6 +209,7 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: `底面が ${shape}で、高さが ${h} cm の ${kind === 'rect' ? '四角錐' : '正四角錐'}の 体積は?(cm³)`,
       v,
+      unit: 'cm³',
       hint: '錐の 体積は、底面積と 高さが 同じ 柱の ⅓',
       explanation: [text('(角錐の 体積)= ⅓ ×(底面積)×(高さ)'), `${text('底面積: ')} ${a} \\times ${b} = ${S}`, `\\frac{1}{3} \\times ${S} \\times ${h} = ${toTex(v)}`, `${text('答え: ')} ${toTex(v)} ${text('cm³')}`],
       tags: ['pyramid_volume'],
@@ -176,10 +226,12 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: `1 辺 ${a} cm の 立方体から、1 つの 頂点に 集まる 3 本の 辺の はしを 結んで 三角錐を 切り取った。この 三角錐の 体積は?(cm³)`,
       v,
+      unit: 'cm³',
       hint: '底面は 直角を はさむ 2 辺が それぞれ 1 辺の 長さの 三角形。高さも 1 辺の 長さ',
       explanation: [`${text('底面積: ')} ${a} \\times ${a} \\div 2 = ${(a * a) / 2}`, `\\frac{1}{3} \\times ${(a * a) / 2} \\times ${a} = ${v}`, `${text('答え: ')} ${v} ${text('cm³')}`],
       tags: ['pyramid_cut'],
       key: `pyr:cut:${a}`,
+      figure: cubeCutFigure(`${a} cm`),
       mistakes: [mistakeNum(a ** 3 / 3, '底面の 三角形は ÷ 2 を 忘れずに'), mistakeNum(a ** 3 / 2, '錐だから ⅓ を かけよう'), mistakeNum(a ** 3, 'それは 立方体 全体の 体積')],
       verify: `${a}*${a}/2*${a}/3`,
     });
@@ -196,6 +248,7 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
   return piProblem(ID, d, {
     q,
     v,
+    unit: 'cm³',
     hint: rot ? '直角三角形を 回すと 円錐。軸の 辺が 高さ、もう 1 つの 辺が 底面の 半径' : '円錐の 体積 = ⅓ × πr² × 高さ',
     explanation: [
       ...(rot ? [text(`できる 立体は 底面の 半径 ${r} cm、高さ ${h} cm の 円錐`)] : []),
@@ -205,7 +258,7 @@ function genPyramid(rng: Rng, d: Difficulty): Problem {
     ],
     tags: [rot ? 'cone_rotate' : 'cone_volume'],
     key: `pyr:${kind}:${r}:${h}`,
-    figure: rot ? undefined : { kind: 'solid', shape: 'cone', labels: { radius: `${r} cm`, height: `${h} cm` } },
+    figure: rot ? rotationDiagram('tri', h, r, `${h} cm`, `${r} cm`) : { kind: 'solid', shape: 'cone', labels: { radius: `${r} cm`, height: `${h} cm` } },
     mistakes: [
       mistakePi(rat(r * r * h), '円錐は 円柱の ⅓。3 で わろう'),
       mistakePi(third(rat(2 * r * h)), '2πr は 円周。底面積は πr²'),
@@ -232,7 +285,8 @@ function genSphere(rng: Rng, d: Difficulty): Problem {
   // 半分は「直径」で 出して、半径を 求める 一手間を 入れる(★1 から)
   const byD = kind !== 'hemiV' && kind !== 'hemiS' && rng.bool();
   const given = byD ? `直径 ${2 * r} cm` : `半径 ${r} cm`;
-  const figure: SolidSpec = { kind: 'solid', shape: 'sphere', labels: byD ? {} : { radius: `${r} cm` } };
+  // 直径で 出す ときも 半径を 書く(先生の 判定 2026-10-18「半径も 書いてください」)
+  const figure: SolidSpec = { kind: 'solid', shape: 'sphere', labels: byD ? { diameter: `${2 * r} cm`, radius: `${r} cm` } : { radius: `${r} cm` } };
   const radiusStep = byD ? [text(`半径は ${2 * r} ÷ 2 = ${r}`)] : [];
   const dMistake = (v: Rational): Mistake[] => (byD ? [mistakePi(v, '直径の 半分が 半径だよ')] : []);
   if (kind === 'area') {
@@ -240,6 +294,7 @@ function genSphere(rng: Rng, d: Difficulty): Problem {
     return piProblem(ID, d, {
       q: `${given} の 球の 表面積は?`,
       v,
+      unit: 'cm²',
       hint: byD ? 'まず 半径(直径の 半分)。球の 表面積は 4πr²' : '球の 表面積は 4πr²(「心配 ある事情」)',
       explanation: [...radiusStep, text('(球の 表面積)= 4πr²'), `4 \\times \\pi \\times ${r}^{2} = ${piTex(v)}`, `${text('答え: ')} ${piTex(v)} ${text('cm²')}`],
       tags: ['sphere_area'],
@@ -254,6 +309,7 @@ function genSphere(rng: Rng, d: Difficulty): Problem {
     return piProblem(ID, d, {
       q: `${given} の 球の 体積は?`,
       v,
+      unit: 'cm³',
       hint: byD ? 'まず 半径(直径の 半分)。球の 体積は ⁴⁄₃πr³' : '球の 体積は ⁴⁄₃πr³(「身の上に 心配 あるので 参上」)',
       explanation: [
         ...radiusStep,
@@ -279,6 +335,7 @@ function genSphere(rng: Rng, d: Difficulty): Problem {
     return piProblem(ID, d, {
       q: `半径 ${r} cm の 半球の 体積は?`,
       v,
+      unit: 'cm³',
       hint: '球の 体積 ⁴⁄₃πr³ の 半分',
       explanation: [`\\frac{4}{3} \\pi \\times ${r}^{3} \\div 2 = ${piTex(v)}`, `${text('答え: ')} ${piTex(v)} ${text('cm³')}`],
       tags: ['hemisphere_volume'],
@@ -292,6 +349,7 @@ function genSphere(rng: Rng, d: Difficulty): Problem {
   return piProblem(ID, d, {
     q: `半径 ${r} cm の 半球の 表面積は?(平らな 面も ふくむ)`,
     v,
+    unit: 'cm²',
     hint: '曲面は 球の 表面積の 半分(2πr²)。平らな 面は 円(πr²)',
     explanation: [`${text('曲面: ')} 4\\pi \\times ${r}^{2} \\div 2 = ${2 * r * r}\\pi`, `${text('平らな 面: ')} \\pi \\times ${r}^{2} = ${r * r}\\pi`, `${2 * r * r}\\pi + ${r * r}\\pi = ${piTex(v)}`, `${text('答え: ')} ${piTex(v)} ${text('cm²')}`],
     tags: ['hemisphere_area'],
@@ -316,6 +374,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: kind === 'cube' ? `1 辺 ${a} cm の 立方体の 表面積は?(cm²)` : `縦 ${a} cm、横 ${b} cm、高さ ${c} cm の 直方体の 表面積は?(cm²)`,
       v: s,
+      unit: 'cm²',
       hint: kind === 'cube' ? '合同な 正方形が 6 つ' : '向かい合う 面が 3 組。展開図を 思い出そう',
       explanation:
         kind === 'cube'
@@ -334,6 +393,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
     return piProblem(ID, d, {
       q: `底面の 半径が ${r} cm の 円柱の 展開図を かく。側面に なる 長方形の 横の 長さは 何 cm?`,
       v,
+      unit: 'cm',
       hint: '側面の 長方形の 横は、底面の 円周と 同じ 長さ',
       explanation: [text('側面の 長方形の 横の 長さ = 底面の 円周'), `2\\pi \\times ${r} = ${piTex(v)}`, `${text('答え: ')} ${piTex(v)} ${text('cm')}`],
       tags: ['cylinder_net'],
@@ -352,6 +412,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
     return piProblem(ID, d, {
       q: kind === 'cyl' ? `底面の 半径が ${r} cm、高さが ${h} cm の 円柱の 表面積は?` : `縦 ${h} cm、横 ${r} cm の 長方形を、縦の 辺を 軸として 1 回転させて できる 立体の 表面積は?`,
       v,
+      unit: 'cm²',
       hint: '展開図: 側面の 長方形(縦は 高さ、横は 底面の 円周)と 底面の 円 2 つ',
       explanation: [
         ...(kind === 'rectRot' ? [text(`できる 立体は 底面の 半径 ${r} cm、高さ ${h} cm の 円柱`)] : []),
@@ -362,7 +423,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
       ],
       tags: [kind === 'cyl' ? 'surface_cylinder' : 'surface_rotate'],
       key: `sur:${kind}:${r}:${h}`,
-      figure: kind === 'cyl' ? { kind: 'solid', shape: 'cylinder', labels: { radius: `${r} cm`, height: `${h} cm` } } : undefined,
+      figure: kind === 'cyl' ? { kind: 'solid', shape: 'cylinder', labels: { radius: `${r} cm`, height: `${h} cm` } } : rotationDiagram('rect', h, r, `${h} cm`, `${r} cm`),
       mistakes: [
         mistakePi(rat(side + base), '底面は 上と 下の 2 つ あるよ'),
         mistakePi(rat(side), '側面だけでなく、底面の 円 2 つも たそう'),
@@ -381,6 +442,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: `底面が 1 辺 ${a} cm の 正方形で、側面の 二等辺三角形の 高さが ${l} cm の 正四角錐の 表面積は?(cm²)`,
       v: s,
+      unit: 'cm²',
       hint: '展開図: 底面の 正方形 1 つと、合同な 三角形 4 つ',
       explanation: [`${text('側面積: ')} ${a} \\times ${l} \\div 2 \\times 4 = ${side}`, `${text('底面積: ')} ${a} \\times ${a} = ${a * a}`, `${side} + ${a * a} = ${s}`, `${text('答え: ')} ${s} ${text('cm²')}`],
       tags: ['surface_pyramid'],
@@ -404,6 +466,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: `底面が 3 辺 ${p} cm、${q} cm、${hyp} cm の 直角三角形(直角を はさむ 辺が ${p} cm と ${q} cm)で、高さが ${h} cm の 三角柱の 表面積は?(cm²)`,
       v: s,
+      unit: 'cm²',
       hint: '側面は 縦が 高さ、横が 底面の 周の 長さの 長方形。それに 底面 2 つ',
       explanation: [
         `${text('側面積: ')} ${h} \\times (${p} + ${q} + ${hyp}) = ${side}`,
@@ -441,6 +504,7 @@ function genSurface(rng: Rng, d: Difficulty): Problem {
   return piProblem(ID, d, {
     q: `底面の 半径が ${r} cm、母線が ${l} cm の 円錐の ${withBase ? '表面積' : '側面積'}は?`,
     v,
+    unit: 'cm²',
     hint: '展開図の 側面は おうぎ形(半径 = 母線、弧の長さ = 底面の 円周)。中心角を 先に 出そう',
     explanation: [
       `${text('中心角: ')} 360^\\circ \\times \\frac{2\\pi \\times ${r}}{2\\pi \\times ${l}} = ${toTex(angle)}^\\circ`,
@@ -479,23 +543,27 @@ interface Fact {
   a: string;
   w: Wrong[];
   tag: string;
+  /** 添える 図(展開図・回転させる 図形。先生の 判定 2026-10-18「展開図を 提示して ください」) */
+  fig?: () => FigureSpec;
 }
 
+const net = (k: NetKind, ask?: NetAsk) => () => netDiagram(k, ask);
+
 const NET_FACTS: Fact[] = [
-  { q: '長方形 3 枚と 三角形 2 枚の 展開図を 組み立てると?', a: '三角柱', w: [{ opt: '三角錐', say: '三角錐は 三角形 4 枚' }, { opt: '四角柱', say: '四角柱の 側面は 長方形 4 枚' }, { opt: '円柱' }], tag: 'net' },
-  { q: '長方形 1 枚と 円 2 枚の 展開図を 組み立てると?', a: '円柱', w: [{ opt: '円錐', say: '円錐の 側面は おうぎ形' }, { opt: '球' }, { opt: '四角柱' }], tag: 'net' },
-  { q: 'おうぎ形 1 枚と 円 1 枚の 展開図を 組み立てると?', a: '円錐', w: [{ opt: '円柱', say: '円柱の 側面は 長方形' }, { opt: '球' }, { opt: '三角錐' }], tag: 'net' },
-  { q: '合同な 正方形 6 枚の 展開図を 組み立てると?', a: '立方体', w: [{ opt: '四角錐', say: '四角錐の 側面は 三角形' }, { opt: '正八面体' }, { opt: '六角柱' }], tag: 'net' },
-  { q: '正方形 1 枚と 合同な 二等辺三角形 4 枚の 展開図を 組み立てると?', a: '正四角錐', w: [{ opt: '四角柱', say: '柱の 側面は 長方形' }, { opt: '三角錐' }, { opt: '正八面体' }], tag: 'net' },
-  { q: '円錐の 展開図で、側面に なる おうぎ形の 弧の 長さと 等しいのは?', a: '底面の 円周', w: [{ opt: '母線の 長さ', say: '母線は おうぎ形の 半径に なるよ' }, { opt: '底面の 半径' }, { opt: '円錐の 高さ' }], tag: 'net_cone' },
-  { q: '円錐の 展開図で、側面に なる おうぎ形の 半径と 等しいのは?', a: '円錐の 母線', w: [{ opt: '円錐の 高さ', say: '高さは 頂点から 底面への 垂線の 長さ。おうぎ形の 半径は 母線' }, { opt: '底面の 半径' }, { opt: '底面の 円周' }], tag: 'net_cone' },
-  { q: '円柱の 展開図で、側面に なる 長方形の 横の 長さと 等しいのは?', a: '底面の 円周', w: [{ opt: '底面の 直径', say: '側面を 1 周 巻くので、円周と 同じ' }, { opt: '底面の 面積' }, { opt: '円柱の 高さ', say: '縦の 長さが 高さ。横は …' }], tag: 'net' },
+  { q: '長方形 3 枚と 三角形 2 枚の 展開図を 組み立てると?', a: '三角柱', w: [{ opt: '三角錐', say: '三角錐は 三角形 4 枚' }, { opt: '四角柱', say: '四角柱の 側面は 長方形 4 枚' }, { opt: '円柱' }], tag: 'net', fig: net('triPrism') },
+  { q: '長方形 1 枚と 円 2 枚の 展開図を 組み立てると?', a: '円柱', w: [{ opt: '円錐', say: '円錐の 側面は おうぎ形' }, { opt: '球' }, { opt: '四角柱' }], tag: 'net', fig: net('cylinder') },
+  { q: 'おうぎ形 1 枚と 円 1 枚の 展開図を 組み立てると?', a: '円錐', w: [{ opt: '円柱', say: '円柱の 側面は 長方形' }, { opt: '球' }, { opt: '三角錐' }], tag: 'net', fig: net('cone') },
+  { q: '合同な 正方形 6 枚の 展開図を 組み立てると?', a: '立方体', w: [{ opt: '四角錐', say: '四角錐の 側面は 三角形' }, { opt: '正八面体' }, { opt: '六角柱' }], tag: 'net', fig: net('cube') },
+  { q: '正方形 1 枚と 合同な 二等辺三角形 4 枚の 展開図を 組み立てると?', a: '正四角錐', w: [{ opt: '四角柱', say: '柱の 側面は 長方形' }, { opt: '三角錐' }, { opt: '正八面体' }], tag: 'net', fig: net('squarePyramid') },
+  { q: '円錐の 展開図で、側面に なる おうぎ形の 弧の 長さと 等しいのは?', a: '底面の 円周', w: [{ opt: '母線の 長さ', say: '母線は おうぎ形の 半径に なるよ' }, { opt: '底面の 半径' }, { opt: '円錐の 高さ' }], tag: 'net_cone', fig: net('cone', 'arc') },
+  { q: '円錐の 展開図で、側面に なる おうぎ形の 半径と 等しいのは?', a: '円錐の 母線', w: [{ opt: '円錐の 高さ', say: '高さは 頂点から 底面への 垂線の 長さ。おうぎ形の 半径は 母線' }, { opt: '底面の 半径' }, { opt: '底面の 円周' }], tag: 'net_cone', fig: net('cone', 'radius') },
+  { q: '円柱の 展開図で、側面に なる 長方形の 横の 長さと 等しいのは?', a: '底面の 円周', w: [{ opt: '底面の 直径', say: '側面を 1 周 巻くので、円周と 同じ' }, { opt: '底面の 面積' }, { opt: '円柱の 高さ', say: '縦の 長さが 高さ。横は …' }], tag: 'net', fig: net('cylinder', 'sideWidth') },
 ];
 
 const ROTATION_FACTS: Fact[] = [
-  { q: '長方形を、1 つの 辺を 軸として 1 回転させると どんな 立体が できる?', a: '円柱', w: [{ opt: '円錐', say: '円錐は 直角三角形を 回すと できる' }, { opt: '球', say: '球は 半円を 回すと できる' }, { opt: '四角柱', say: '回して できる 立体の 底面は 円' }], tag: 'rotation' },
-  { q: '直角三角形を、直角を はさむ 1 つの 辺を 軸として 1 回転させると どんな 立体が できる?', a: '円錐', w: [{ opt: '円柱', say: '円柱は 長方形を 回すと できる' }, { opt: '三角錐', say: '回して できる 立体の 底面は 円' }, { opt: '球' }], tag: 'rotation' },
-  { q: '半円を、直径を 軸として 1 回転させると どんな 立体が できる?', a: '球', w: [{ opt: '円柱' }, { opt: '円錐' }, { opt: '半球', say: '半円を 1 回転させると、まるごと 球に なるよ' }], tag: 'rotation' },
+  { q: '長方形を、1 つの 辺を 軸として 1 回転させると どんな 立体が できる?', a: '円柱', w: [{ opt: '円錐', say: '円錐は 直角三角形を 回すと できる' }, { opt: '球', say: '球は 半円を 回すと できる' }, { opt: '四角柱', say: '回して できる 立体の 底面は 円' }], tag: 'rotation', fig: () => rotationDiagram('rect', 3, 2) },
+  { q: '直角三角形を、直角を はさむ 1 つの 辺を 軸として 1 回転させると どんな 立体が できる?', a: '円錐', w: [{ opt: '円柱', say: '円柱は 長方形を 回すと できる' }, { opt: '三角錐', say: '回して できる 立体の 底面は 円' }, { opt: '球' }], tag: 'rotation', fig: () => rotationDiagram('tri', 3, 2) },
+  { q: '半円を、直径を 軸として 1 回転させると どんな 立体が できる?', a: '球', w: [{ opt: '円柱' }, { opt: '円錐' }, { opt: '半球', say: '半円を 1 回転させると、まるごと 球に なるよ' }], tag: 'rotation', fig: () => rotationDiagram('semi', 3, 1.5) },
   { q: '円柱や 円錐の 側面を えがく 線分を 何という?', a: '母線', w: [{ opt: '高さ', say: '高さは 底面に 垂直な 長さ。側面を えがく 線は 母線' }, { opt: '半径' }, { opt: '交線' }], tag: 'rotation' },
   { q: '回転体を、回転の 軸を ふくむ 平面で 切ると、切り口は どんな 図形?', a: '回転の 軸を 対称の軸と する 線対称な 図形', w: [{ opt: 'いつも 円', say: '円に なるのは 軸に 垂直な 平面で 切った とき' }, { opt: 'いつも 長方形', say: '円錐なら 二等辺三角形に なるよ' }, { opt: '点対称な 図形' }], tag: 'rotation' },
   { q: '回転体を、回転の 軸に 垂直な 平面で 切ると、切り口は どんな 図形?', a: '円', w: [{ opt: '長方形', say: '長方形は 軸を ふくむ 平面で 円柱を 切った とき' }, { opt: '三角形' }, { opt: 'おうぎ形' }], tag: 'rotation' },
@@ -541,6 +609,7 @@ function genProjection(rng: Rng, d: Difficulty): Problem {
       explanation: [text(`答え: ${c.a}`)],
       tags: [c.tag],
       key: `prj:${c.q}`,
+      figure: c.fig?.(),
       mistakes,
       verify: String(answer.kind === 'choice' ? answer.correct : 0),
     };
@@ -551,6 +620,7 @@ function genProjection(rng: Rng, d: Difficulty): Problem {
     return piProblem(ID, d, {
       q: `底面の 半径が ${r} cm の 円錐の 展開図で、側面に なる おうぎ形の 弧の 長さは?`,
       v,
+      unit: 'cm',
       hint: 'おうぎ形の 弧の 長さは、底面の 円周と 等しい',
       explanation: [text('側面の おうぎ形の 弧の 長さ = 底面の 円周'), `2\\pi \\times ${r} = ${piTex(v)}`, `${text('答え: ')} ${piTex(v)} ${text('cm')}`],
       tags: ['net_cone_arc'],
@@ -582,8 +652,10 @@ function genProjection(rng: Rng, d: Difficulty): Problem {
   const [r, l] = rng.pick(pairs);
   const angle = rat(360 * r, l);
   return numProblem(ID, d, {
-    q: `底面の 半径が ${r} cm、母線が ${l} cm の 円錐の 展開図で、側面に なる おうぎ形の 中心角は 何度?(数だけ 答える)`,
+    // 「数だけ 答える」は 書かない(第5章の 判定と 同じ)。解答欄に ° を 出す
+    q: `底面の 半径が ${r} cm、母線が ${l} cm の 円錐の 展開図で、側面に なる おうぎ形の 中心角は 何度?`,
     v: angle,
+    unit: '°',
     hint: 'おうぎ形の 弧(底面の 円周 2π × 半径)は、半径が 母線の 円の 円周の 何分の いくつか',
     explanation: [
       text('おうぎ形の 弧の 長さ = 底面の 円周、おうぎ形の 半径 = 母線'),
@@ -818,8 +890,9 @@ const RELATION_TERMS: Fact[] = [
   { q: '五角柱は 何面体?', a: '七面体', w: [{ opt: '五面体', say: '側面 5 つと 底面 2 つ' }, { opt: '六面体', say: '柱の 底面は 2 つ あるよ' }, { opt: '十面体' }], tag: 'polyhedron_name' },
   { q: '六角錐は 何面体?', a: '七面体', w: [{ opt: '六面体', say: '側面 6 つと 底面 1 つ' }, { opt: '八面体', say: '錐の 底面は 1 つだけ' }, { opt: '十二面体' }], tag: 'polyhedron_name' },
   { q: '平面だけで 囲まれた 立体を 何という?', a: '多面体', w: [{ opt: '回転体', say: '回転体は 平面図形を 回して できる 立体(曲面が ある)' }, { opt: '角柱', say: '角柱は 多面体の 一つ。ほかに 角錐なども ある' }, { opt: '正多角形' }], tag: 'polyhedron_name' },
+  // 「正三角形の 六面体が 正多面体で ない 理由」は 授業で 出して いないので やめた(先生の 判定 2026-10-18)。かわりに 正多面体の 意味
+  { q: 'すべての 面が 合同な 正多角形で、どの 頂点にも 面が 同じ 数だけ 集まる、へこみの ない 多面体を 何という?', a: '正多面体', w: [{ opt: '多面体', say: '多面体は 平面だけで 囲まれた 立体 全部。面が 合同な 正多角形の ものを …' }, { opt: '正多角形', say: '正多角形は 平面の 図形。立体なら …' }, { opt: '回転体' }], tag: 'polyhedron_regular' },
   { q: '正多面体は 全部で 何種類?', a: '5 種類', w: [{ opt: '3 種類' }, { opt: '4 種類' }, { opt: 'かぎりなく ある', say: '正多角形は かぎりなく あるが、正多面体は 5 種類だけ' }], tag: 'polyhedron_regular' },
-  { q: 'すべての 面が 正三角形の 六面体が 正多面体で ない 理由は?', a: '頂点に 集まる 面の 数が 同じでは ないから', w: [{ opt: '面が 合同では ないから', say: '面は すべて 合同な 正三角形。もう 1 つの 条件は …' }, { opt: '面の 数が 6 だから', say: '正六面体(立方体)も ある。面の 数では 決まらない' }, { opt: 'へこみが あるから' }], tag: 'polyhedron_regular' },
 ];
 
 function genRelation(rng: Rng, d: Difficulty): Problem {
@@ -852,8 +925,10 @@ function genRelation(rng: Rng, d: Difficulty): Problem {
     const ofBase = rng.bool();
     const v = ofBase ? base : lateral;
     return numProblem(ID, d, {
-      q: `${name}で、${ofBase ? '底面の 1 つの 辺' : '側面の 1 つの 辺(底面に 垂直な 辺)'}と ねじれの位置に ある 辺は 何本?`,
+      // 問う 辺は 図で 赤く(先生の 判定 2026-10-18「指定の 辺は わかりやすく」)
+      q: `図の ${name}で、赤い 辺(${ofBase ? '底面の 辺' : '側面の 辺'})と ねじれの位置に ある 辺は 何本?`,
       v,
+      figure: prismAskFigure(n, ofBase),
       hint: '交わる 辺(同じ 頂点を 通る)と 平行な 辺を 先に 消そう',
       explanation: ofBase
         ? [text(`側面の 辺 ${n} 本の うち、両はしの 2 本は 交わる → ${n - 2} 本`), text(`もう 1 つの 底面の ${n} 本の うち、平行な ${n % 2 === 0 ? 2 : 1} 本を のぞく → ${n - (n % 2 === 0 ? 2 : 1)} 本`), `${text('答え: ')} ${v}`]
@@ -880,6 +955,7 @@ function genRelation(rng: Rng, d: Difficulty): Problem {
         prompt: text(ask === 'face' ? `${p.name}の 面は どんな 形?` : `${p.name}で、1 つの 頂点に 集まる 面の 数は?`),
         promptText: ask === 'face' ? `${p.name}の面はどんな形?` : `${p.name}で、1つの頂点に集まる面の数は?`,
         answer,
+        figure: regularFigure(p.name),
         hint: '正多面体の 表を 思い出そう',
         explanation: [text(`${p.name}: 面の 形 ${p.face}、1 つの 頂点に 集まる 面 ${p.meet} つ、面 ${p.F}・辺 ${p.E}・頂点 ${p.V}`)],
         tags: ['polyhedron_regular'],
@@ -893,6 +969,7 @@ function genRelation(rng: Rng, d: Difficulty): Problem {
     return numProblem(ID, d, {
       q: `${p.name}の ${label}の 数は?`,
       v,
+      figure: regularFigure(p.name),
       hint: ask === 'E' ? '面の 形の 辺の 数 × 面の 数 ÷ 2(1 本の 辺を 2 つの 面が 共有)' : ask === 'V' ? '面の 形の 頂点の 数 × 面の 数 ÷(1 つの 頂点に 集まる 面の 数)' : '名前の 数字が 面の 数',
       explanation: [text(`${p.name}: 面 ${p.F}、辺 ${p.E}、頂点 ${p.V}`), text(`(面の 数)−(辺の 数)+(頂点の 数)= ${p.F} − ${p.E} + ${p.V} = 2`), `${text('答え: ')} ${v}`],
       tags: ['polyhedron_count'],
@@ -903,19 +980,20 @@ function genRelation(rng: Rng, d: Difficulty): Problem {
   }
   // オイラーの 多面体定理(面 − 辺 + 頂点 = 2)を 使って 1 つを 求める
   const solids = [
-    { name: '三角柱', F: 5, E: 9, V: 6 },
-    { name: '四角錐', F: 5, E: 8, V: 5 },
-    { name: '五角柱', F: 7, E: 15, V: 10 },
-    { name: '六角柱', F: 8, E: 18, V: 12 },
-    { name: '五角錐', F: 6, E: 10, V: 6 },
-    { name: '六角錐', F: 7, E: 12, V: 7 },
-  ];
+    { name: '三角柱', F: 5, E: 9, V: 6, kind: 'prism', n: 3 },
+    { name: '四角錐', F: 5, E: 8, V: 5, kind: 'pyramid', n: 4 },
+    { name: '五角柱', F: 7, E: 15, V: 10, kind: 'prism', n: 5 },
+    { name: '六角柱', F: 8, E: 18, V: 12, kind: 'prism', n: 6 },
+    { name: '五角錐', F: 6, E: 10, V: 6, kind: 'pyramid', n: 5 },
+    { name: '六角錐', F: 7, E: 12, V: 7, kind: 'pyramid', n: 6 },
+  ] as const;
   const s = rng.pick(solids);
   const ask = rng.pick(['E', 'V'] as const);
   const v = s[ask];
   return numProblem(ID, d, {
     q: `${s.name}の ${ask === 'E' ? '辺' : '頂点'}の 数は?`,
     v,
+    figure: polyFigure(s.kind, s.n),
     hint: ask === 'E' ? '底面の 辺と、側面の 辺(柱なら 底面 2 つ分)を 数えよう' : '底面の 頂点(柱なら 2 つ分)と、錐なら てっぺんの 1 つ',
     explanation: [text(`${s.name}: 面 ${s.F}、辺 ${s.E}、頂点 ${s.V}`), text(`(面の 数)−(辺の 数)+(頂点の 数)= ${s.F} − ${s.E} + ${s.V} = 2`), `${text('答え: ')} ${v}`],
     tags: ['polyhedron_count'],
