@@ -1,12 +1,13 @@
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { popScene } from '@/engine/scenes';
-import { saveStore } from '@/engine/save';
+import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { playerStats, levelCap } from '@/engine/player';
 import { config, expToNext } from '@/data/config';
 import { getItem } from '@/data/grade1/items';
 import { perks } from '@/data/skills';
 import { grade1 } from '@/data/grade1/chapters';
-import { characters, playerSprite } from '@/data/characters';
+import { characters, playerSprite, PLAYER_NAME_MAX, playerNameOk } from '@/data/characters';
 import '@/data/grade1/problems';
 import { allTemplates, getTemplate } from '@/math/template';
 import { TROPHY_EMOJI, TROPHY_NAMES, unitTrophies, type TrophyTier } from '@/engine/trophy';
@@ -37,6 +38,72 @@ const TAG_LABEL: Record<string, string> = {
   numberline_sub: '左へ進む',
 };
 
+/**
+ * 主人公の 名前を あとから かえる(先生の希望 2026-10-19)。はじめに 決めた 名前が 気に入らなくても 遊び直さなくて よいように。
+ * セーブを 書きかえるだけなので、サーバーへは いつもの 同期で 送られる
+ */
+function NameEditor({ name }: { name: string }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const input = useRef<HTMLInputElement>(null);
+  // あとから 出る 欄には autoFocus が 効かないので、開いたときに 自分で フォーカスして 全部 選ぶ(すぐ 打ち直せるように)
+  useEffect(() => {
+    if (editing) input.current?.select();
+  }, [editing]);
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        class="linklike"
+        onClick={() => {
+          setDraft(name);
+          setEditing(true);
+        }}
+      >
+        名前を かえる
+      </button>
+    );
+  }
+  const ok = playerNameOk(draft);
+  return (
+    <form
+      class="stack name-editor"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!ok) return;
+        updateSave((s) => {
+          s.player.name = draft.trim();
+        });
+        setEditing(false);
+      }}
+    >
+      <label class="field">
+        <span>主人公の 新しい 名前(最大{PLAYER_NAME_MAX}文字)</span>
+        <input
+          type="text"
+          value={draft}
+          maxLength={PLAYER_NAME_MAX}
+          ref={input}
+          onInput={(e) => setDraft((e.target as HTMLInputElement).value)}
+          onKeyDown={(e) => {
+            // Esc は 画面を 戻らずに、名前の 変更だけ やめる
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              setEditing(false);
+            }
+          }}
+        />
+      </label>
+      <div class="row">
+        <Button primary type="submit" disabled={!ok}>
+          けってい
+        </Button>
+        <Button onClick={() => setEditing(false)}>やめる</Button>
+      </div>
+    </form>
+  );
+}
+
 /** ステータス・成績画面(要件 F80)。単元別の出題数・正答率・苦手タイプと、直した碑文。 */
 export function StatusScene() {
   const save = useStore(saveStore);
@@ -66,6 +133,7 @@ export function StatusScene() {
               <Bar value={p.hp} max={p.maxHp} label="HP" />
             </div>
           </div>
+          <NameEditor name={p.name} />
           <table class="table">
             <tbody>
               <tr>

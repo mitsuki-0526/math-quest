@@ -8,7 +8,7 @@ import { api, hasServer, describeError, isNetworkError, ApiFailure, type Account
 import { bootstrap, getIdentity, login, ownerKey, resumeOffline, scheduleSync, stampSchool } from '@/engine/sync';
 import { markEntered, sessionStore } from '@/engine/session';
 import { useStore } from '@/engine/store';
-import { DEFAULT_PLAYER_NAME, PLAYER_NAME_MAX, playerLooks } from '@/data/characters';
+import { DEFAULT_PLAYER_NAME, PLAYER_NAME_MAX, playerLooks, playerNameOk } from '@/data/characters';
 import type { PlayerLook } from '@/engine/save';
 
 /**
@@ -152,7 +152,7 @@ export function TitleScene() {
   }, []);
 
   const trimmedName = name.trim();
-  const nameOk = trimmedName.length > 0 && trimmedName.length <= PLAYER_NAME_MAX;
+  const nameOk = playerNameOk(name);
 
   function enterGame(save: SaveData) {
     markEntered();

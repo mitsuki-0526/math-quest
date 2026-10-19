@@ -53,3 +53,9 @@ export function playerSprite(look: keyof typeof playerLooks | undefined): string
 /** 主人公の既定名(名前入力の初期値) */
 export const DEFAULT_PLAYER_NAME: string = characters.player.name;
 export const PLAYER_NAME_MAX = 6;
+
+/** 主人公の名前として 使えるか(前後の 空白を 除いて 1〜PLAYER_NAME_MAX 文字)。はじめの 名前入力と 名前の 変更で 同じ 決まり */
+export function playerNameOk(name: string): boolean {
+  const t = name.trim();
+  return t.length > 0 && t.length <= PLAYER_NAME_MAX;
+}
