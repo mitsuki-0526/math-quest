@@ -58,17 +58,18 @@ function gas(grid: Cell[][], classes = '1-1,1-2') {
   const code = readFileSync(new URL('../gas/Code.gs', import.meta.url), 'utf8');
   const stub = `function logRow() {}
 function readConfig() { return { classes: __classes }; }
-return { rosterEntry: rosterEntry, ensureRosterGradeColumn: ensureRosterGradeColumn, ensureRosterApprovedColumn: ensureRosterApprovedColumn, ensureFilter: ensureFilter, applyRoster: applyRoster, importRoster: importRoster, fullClass: fullClass, numberColumn: numberColumn, numberCell: numberCell };`;
+return { rosterEntry: rosterEntry, ensureRosterGradeColumn: ensureRosterGradeColumn, ensureRosterApprovedColumn: ensureRosterApprovedColumn, ensureFilter: ensureFilter, applyRoster: applyRoster, importRoster: importRoster, fullClass: fullClass, numberColumn: numberColumn, numberCell: numberCell, classList: classList };`;
   const mod = new Function('SpreadsheetApp', '__classes', `${code}\n${stub}`)(app, classes) as {
     rosterEntry: (email: string) => Entry;
     ensureRosterGradeColumn: (sheet: unknown) => void;
     ensureRosterApprovedColumn: (sheet: unknown) => void;
     ensureFilter: (sheet: unknown) => void;
-    applyRoster: (email: string, cls: string, num: string) => { ok: boolean; error?: string; pending?: { class: string; number: string } };
+    applyRoster: (email: string, cls: string, num: string) => { ok: boolean; error?: string; approved?: boolean; pending?: { class: string; number: string } };
     importRoster: (grade: unknown, kumi: unknown, list: { email: string; name: string }[]) => { added: number; skipped: number; noEmail: number };
     fullClass: (grade: number, kumi: unknown) => string;
     numberColumn: (sheet: unknown, col: number) => void;
     numberCell: (num: unknown) => unknown;
+    classList: (cfg: { classes?: string }) => string[];
   };
   return { sh, ...mod };
 }
@@ -165,6 +166,47 @@ describe('学年と 組を 分けて 書く 名簿(先生の希望 2026-10-16)',
   });
 });
 
+describe('えらべる クラスの 一覧(先生の報告 2026-10-19)', () => {
+  it('config が 1年だけでも、名簿に 書いた 3年の クラスが 一覧に 入り、申請できる', () => {
+    const g = gas([HEADER], '1-1,1-2');
+    g.importRoster('3', '1', [{ email: 'a@s.jp', name: '山田 花子' }]);
+    g.importRoster('3', '10', [{ email: 'b@s.jp', name: '' }]);
+    g.importRoster('3', '2', [{ email: 'c@s.jp', name: '' }]);
+    expect(g.classList({ classes: '1-1,1-2' })).toEqual(['1-1', '1-2', '3-1', '3-2', '3-10']);
+    expect(g.applyRoster('a@s.jp', '3-1', '5')).toEqual({ ok: true, approved: true, pending: { class: '3-1', number: '5' } });
+    // 一覧にも 名簿にも ない クラスは 今までどおり 断る
+    expect(g.applyRoster('d@s.jp', '2-1', '1')).toEqual({ ok: false, error: 'bad_identity' });
+  });
+});
+
+describe('先生が 学年・組を 書いた 生徒は 承認なしで 入れる(先生の希望 2026-10-19)', () => {
+  it('同じ 学年・組で 番号を 入れると 承認ずみに なり、そのまま 入れる(承認の チェックが なかった 行でも)', () => {
+    const g = gas([HEADER, ['', 'a@s.jp', '', 3, '1', '', ''], [true, 'b@s.jp', '', 3, '2', '', '']], '1-1');
+    expect(g.applyRoster('a@s.jp', '3-1', '05')).toEqual({ ok: true, approved: true, pending: { class: '3-1', number: '5' } });
+    expect(g.rosterEntry('a@s.jp')).toEqual({ class: '3-1', number: '5', grade: 3 });
+    expect(g.applyRoster('b@s.jp', '3-2', '6')).toMatchObject({ ok: true, approved: true });
+    expect(g.rosterEntry('b@s.jp')).toEqual({ class: '3-2', number: '6', grade: 3 });
+    // 入ったあとは 申請し直せない(番号の 直しは 先生が 名簿で)
+    expect(g.applyRoster('a@s.jp', '3-1', '7')).toEqual({ ok: false, error: 'already_registered' });
+  });
+
+  it('ほかの 人の 番号は 今までどおり 断る', () => {
+    const g = gas([HEADER, ['', 'a@s.jp', '', 3, '1', '', ''], [true, 'b@s.jp', '', 3, '1', '5', '']], '');
+    expect(g.applyRoster('a@s.jp', '3-1', '5')).toEqual({ ok: false, error: 'number_taken' });
+    expect(g.rosterEntry('a@s.jp')).toEqual({ error: 'pending', pending: { class: '3-1', number: '' } });
+  });
+
+  it('ちがう 学年・組を えらんだとき・名簿に ない 生徒・自分で 申請した 行は 先生の 承認を 待つ', () => {
+    const g = gas([HEADER, [true, 'a@s.jp', '', 3, '1', '', ''], [true, 'x@s.jp', '', 3, '2', '9', ''], [true, 'y@s.jp', '', 3, '1', '1', '']], '');
+    expect(g.applyRoster('a@s.jp', '3-2', '5')).toEqual({ ok: true, pending: { class: '3-2', number: '5' } });
+    expect(g.rosterEntry('a@s.jp').error).toBe('pending');
+    expect(g.applyRoster('new@s.jp', '3-1', '8')).toEqual({ ok: true, pending: { class: '3-1', number: '8' } });
+    // 自分で 申請した 行(番号が 入っている)を 同じ クラスで 出し直しても 承認待ちの まま
+    expect(g.applyRoster('new@s.jp', '3-1', '9')).toEqual({ ok: true, pending: { class: '3-1', number: '9' } });
+    expect(g.rosterEntry('new@s.jp').error).toBe('pending');
+  });
+});
+
 describe('出席番号は 数(並べ替えが 1, 2, … 10 の 順に なるように。先生の指摘 2026-10-16)', () => {
   it('setup は 文字で 書かれた 番号を 数に 直す。数字で ない 値は そのまま', () => {
     const g = gas([HEADER, [true, 'a@s.jp', '', 1, '2', '10', ''], [true, 'b@s.jp', '', 1, '2', ' 2 ', ''], [true, 'c@s.jp', '', 1, '2', 3, ''], [true, 'd@s.jp', '', 1, '2', 't1a2b3', '']]);
@@ -193,10 +235,10 @@ describe('Classroom からの 取り込み', () => {
     expect(plain(g.sh.grid)[2]).toEqual([true, 'a@s.jp', '山田 花子', 1, '2', '', '']);
     // 番号が まだなので 入れない(申請の 欄に クラスが 入った 状態で 出る)
     expect(g.rosterEntry('a@s.jp')).toEqual({ error: 'pending', pending: { class: '1-2', number: '' } });
-    // 生徒が 番号を 申請 → 同じ 行に 入り、先生の 承認待ちに なる
-    expect(g.applyRoster('a@s.jp', '1-2', '9').ok).toBe(true);
+    // 生徒が 同じ クラスで 番号を 入れる → 同じ 行に 入り、そのまま 入れる(先生の希望 2026-10-19)
+    expect(g.applyRoster('a@s.jp', '1-2', '9')).toMatchObject({ ok: true, approved: true });
     expect(g.sh.grid).toHaveLength(3);
-    expect(plain(g.sh.grid)[2].slice(0, 6)).toEqual([false, 'a@s.jp', '山田 花子', 1, '2', 9]);
+    expect(plain(g.sh.grid)[2].slice(0, 6)).toEqual([true, 'a@s.jp', '山田 花子', 1, '2', 9]);
   });
 
   it('氏名の 列が ない 名簿には email の 右に 足す', () => {

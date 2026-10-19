@@ -271,8 +271,12 @@ export const api = {
     post<{ ok: true }>({ action: 'feedback', class: id.class, number: id.number, pass: id.pass, feedback }),
   /** 前の セーブで 続ける(pick = 候補の id)か、いまの セーブの まま('keep')か。学校アカウント方式だけ */
   carry: (pick: number | 'keep') => post<{ ok: true; save: SaveData | null }>({ action: 'carry', pick }),
-  /** 名簿に ない 生徒が クラス・番号を 申請する(学校アカウント方式だけ。先生が 承認すると 入れる) */
-  apply: (cls: string, number: string) => post<{ ok: true; pending: { class: string; number: string } }>({ action: 'apply', class: cls, number }),
+  /**
+   * 名簿に ない 生徒が クラス・番号を 申請する(学校アカウント方式だけ。先生が 承認すると 入れる)。
+   * 先生が 学年・組を 書いておいた 生徒は approved: true が 返り、そのまま 入れる
+   */
+  apply: (cls: string, number: string) =>
+    post<{ ok: true; pending: { class: string; number: string }; approved?: boolean }>({ action: 'apply', class: cls, number }),
   /** 宝の地図の 売れ具合を 聞く(buy=true なら 買う。売り切れなら 買えずに 状態だけ 返る) */
   treasure: (id: Identity, buy: boolean) =>
     post<TreasureResult>({ action: 'treasure', class: id.class, number: id.number, pass: id.pass, buy }),

@@ -235,8 +235,13 @@ export function TitleScene() {
     setError(null);
     try {
       const r = await api.apply(cls.trim(), number.trim());
-      setAccount((a) => (a ? { ...a, error: 'pending', pending: r.pending } : a));
       setApplying(false);
+      // 名簿の 学年・組と 同じなら 承認なしで 入れる。つなぎ直して「○年○組 ○番 として 入ります」を 出す
+      if (r.approved) {
+        await connect();
+        return;
+      }
+      setAccount((a) => (a ? { ...a, error: 'pending', pending: r.pending } : a));
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -330,7 +335,11 @@ export function TitleScene() {
               </>
             ) : account.error === 'not_in_roster' || account.error === 'pending' ? (
               <form class="stack" onSubmit={(e) => void onApply(e)}>
-                <p class="note">はじめまして! 自分の 学年・組と 出席番号を えらんで、先生に 申請してください</p>
+                <p class="note">
+                  {account.pending?.class && !account.pending.number
+                    ? 'はじめまして! 学年・組を 確かめて、自分の 出席番号を 入れてください'
+                    : 'はじめまして! 自分の 学年・組と 出席番号を えらんで、先生に 申請してください'}
+                </p>
                 <ClassPicker classes={classes} value={cls} onChange={setCls} />
                 <label class="field">
                   <span>出席番号</span>
@@ -338,9 +347,13 @@ export function TitleScene() {
                 </label>
                 {error && <p class="warn">{error}</p>}
                 <Button primary type="submit" disabled={busy}>
-                  {busy ? 'おくっています…' : '先生に 申請する'}
+                  {busy ? 'おくっています…' : account.pending?.class && !account.pending.number ? 'けってい' : '先生に 申請する'}
                 </Button>
-                <p class="muted">先生が 確かめてから 遊べるように なります</p>
+                <p class="muted">
+                  {account.pending?.class && !account.pending.number
+                    ? '番号を 入れると すぐに 遊べます(学年・組を かえたときは 先生が 確かめてから)'
+                    : '先生が 確かめてから 遊べるように なります'}
+                </p>
               </form>
             ) : (
               <>

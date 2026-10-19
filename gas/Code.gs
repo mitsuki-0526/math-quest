@@ -27,6 +27,7 @@
  *              列は 見出しで 探すので 並べ替えてもよい。grade = 学年(3)、class = 組(1)。ゲームの中の クラス名は「3-1」。
  *              前の版の 書き方(class に「1-2」、grade は 空でも可)も そのまま 読める。
  *              承認 = チェックの 入った 行だけが 有効。名簿に ない 生徒は ゲームから クラス・番号を 申請でき、承認なしの 行が 足される。
+ *              先生が email・grade・class だけ 書いた 行は、生徒が 同じ 学年・組で 番号を 入れると 承認ずみに なる。
  *              name は Classroom から 取り込んだ 氏名(先生が 番号を 確かめるため。プログラムは 読まない))
  *   unlock   : class | g1c1 | g1c2 | ... (TRUE で解放。class="*" の行は全クラスの既定値)
  *   config   : key | value
@@ -47,7 +48,7 @@
  *   { action:'load',  class, number, pass }        → { ok, save }
  *   { action:'feedback', class, number, pass, feedback:{ fun, difficulty, comment, level, chapter, answered, correct } } → { ok }
  *   { action:'review', class, number, pass, marks:[{ node, template, star, rating, comment, flagged }] } → { ok, count }(先生だけ。問題の見本帳の印)
- *   { action:'apply', class, number }              → { ok, pending:{ class, number } }(学校アカウント方式で 名簿に ない 生徒が クラス・番号を 申請する)
+ *   { action:'apply', class, number }              → { ok, pending:{ class, number }, approved? }(学校アカウント方式で 名簿に ない 生徒が クラス・番号を 申請する。approved = 承認なしで 入れる)
  *   login の 応答の carry: [{ id, name, level, updatedAt }] = 前の セーブらしい 行(学校アカウント方式)。ゲームが 生徒に どちらで 続けるか 聞く
  *   { action:'carry', pick: 行の id | 'keep' }       → { ok, save }(前の セーブで 続ける / いまの セーブの まま)
  *        感想(体験版の試遊)。feedback シートに 1 行足す
@@ -527,12 +528,7 @@ function bootstrap(cls) {
   return {
     ok: true,
     unlock: unlockFor(cls),
-    classes: String(cfg.classes || '')
-      .split(',')
-      .map(function (s) {
-        return s.trim();
-      })
-      .filter(Boolean),
+    classes: classList(cfg),
     config: gameConfigOverrides(cfg),
     serverTime: new Date().toISOString(),
     account: accountInfo(),
@@ -874,6 +870,37 @@ function rosterRows() {
   return out;
 }
 
+/**
+ * 申請・ログインで えらべる クラスの 一覧。config の classes に、名簿に 書いてある クラスを 足す
+ * (3年生を 名簿に 入れたのに config が 1年の ままで、3年が えらべなかった。先生の報告 2026-10-19)
+ */
+function classList(cfg) {
+  var seen = {};
+  var out = [];
+  var add = function (c) {
+    c = String(c == null ? '' : c).trim();
+    if (!c || seen[c]) return;
+    seen[c] = true;
+    out.push(c);
+  };
+  String((cfg && cfg.classes) || '')
+    .split(',')
+    .forEach(add);
+  rosterRows().forEach(function (r) {
+    add(r['class']);
+  });
+  // 「1-2」「1-10」「3-1」を 学年・組の 数の 順に(文字の 順だと 1-10 が 1-2 の 前に なる)
+  return out.sort(function (a, b) {
+    var x = splitClass(a);
+    var y = splitClass(b);
+    if (x.grade !== y.grade) return x.grade - y.grade;
+    var nx = Number(x.kumi);
+    var ny = Number(y.kumi);
+    if (!isNaN(nx) && !isNaN(ny) && nx !== ny) return nx - ny;
+    return x.kumi < y.kumi ? -1 : x.kumi > y.kumi ? 1 : 0;
+  });
+}
+
 function rosterEntry(email) {
   var rows = rosterRows();
   if (!rows.length) return { error: 'not_in_roster' };
@@ -910,25 +937,24 @@ function isChecked(v) {
 /**
  * 名簿に ない 生徒の 申請(学校アカウント方式)。メールアドレスは 本人の アカウントなので、先生は 打たなくてよい。
  * 承認なしの 行を 足し(すでに 自分の 行が あれば その行の クラス・番号を 書きかえ)、先生が 承認に チェックを 入れると 入れる。
- * 呼び出し側が ロックを 持っている
+ * ただし 先生が 学年・組を 書いた 行(番号だけ 空)で、同じ 学年・組を えらんだときは 承認なしで 入れる
+ * (授業で 一斉に 始めるとき 全員の 承認を 待たなくて よいように。先生の希望 2026-10-19)。
+ * 戻り値: { ok, pending } か、そのまま 入れるときは { ok, approved: true, pending }。呼び出し側が ロックを 持っている
  */
 function applyRoster(email, clsIn, numIn) {
   var cls = String(clsIn || '').trim();
   var num = String(numIn || '').trim();
   if (/^\d+$/.test(num)) num = String(Number(num));
   if (!cls || cls.length > 20 || !/^\d{1,2}$/.test(num) || Number(num) < 1) return { ok: false, error: 'bad_identity' };
-  var classes = String(readConfig().classes || '')
-    .split(',')
-    .map(function (x) {
-      return x.trim();
-    })
-    .filter(Boolean);
+  var classes = classList(readConfig());
   if (classes.length && classes.indexOf(cls) < 0) return { ok: false, error: 'bad_identity' };
   var sh = sheet('roster');
   var width = Math.max(sh.getLastColumn(), 3);
   var cols = rosterColumns(sh.getRange(1, 1, 1, width).getValues()[0]);
   var values = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues() : [];
   var own = 0;
+  var ownClass = '';
+  var ownNum = '';
   for (var i = 0; i < values.length; i++) {
     var e = cellText(values[i][cols.email - 1]).toLowerCase();
     var c = fullClass(cols.grade ? rosterGrade(values[i][cols.grade - 1]) : 0, values[i][cols['class'] - 1]);
@@ -937,13 +963,19 @@ function applyRoster(email, clsIn, numIn) {
     var approved = !cols.approved || isChecked(values[i][cols.approved - 1]);
     if (e === email) {
       if (approved && c && n) return { ok: false, error: 'already_registered' };
-      if (!own) own = i + 2;
+      if (!own) {
+        own = i + 2;
+        ownClass = c;
+        ownNum = n;
+      }
     } else if (e && approved && c === cls && n === num) {
       // ほかの 生徒の 番号を 選んだ(打ちまちがい)。先生が 気づく 前に 本人に 直してもらう
       return { ok: false, error: 'number_taken' };
     }
   }
   var row = own || sh.getLastRow() + 1;
+  // 先生が 書いた 学年・組と 同じなら 番号を 書くだけで 入れる(生徒が 自分で 申請した 行は 番号が 入っているので ここに 来ない)
+  var auto = !!(own && ownClass && !ownNum && ownClass === cls);
   // 学年の 列が あれば 学年と 組に 分けて 書く(「3-1」→ grade 3・class 1)
   var sc = splitClass(cls);
   var split = cols.grade && sc.grade;
@@ -953,7 +985,11 @@ function applyRoster(email, clsIn, numIn) {
   sh.getRange(row, cols.number).setValue(numberCell(num));
   if (cols.approved) {
     sh.getRange(row, cols.approved).insertCheckboxes();
-    sh.getRange(row, cols.approved).setValue(false);
+    sh.getRange(row, cols.approved).setValue(auto);
+  }
+  if (auto) {
+    logRow('apply', cls, num, '名簿の 番号を 生徒が 書いた(学年・組が 名簿と 同じなので 承認ずみ)');
+    return { ok: true, approved: true, pending: { class: cls, number: num } };
   }
   logRow('apply', cls, num, '名簿に 申請(承認待ち)');
   return { ok: true, pending: { class: cls, number: num } };

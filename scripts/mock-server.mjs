@@ -8,7 +8,7 @@
  * 学校アカウント方式の再現: MOCK_EMAIL=s1@school.example で起動すると、その人が開いている扱いになる
  * (リクエストに __email を付けると、その回だけ別の人になる。テスト用)。
  * 名簿は MOCK_ROSTER="s1@school.example=1-2/7,s2@school.example=1-1/3"、先生は MOCK_TEACHERS。
- * 名簿の 学年(本物は roster シートの grade 列)は「=1-2/7/1」のように 3 つ目に 書く。
+ * 名簿の 学年(本物は roster シートの grade 列)は「=1-2/7/1」のように 3 つ目に 書く。「=3-1」(番号なし)は 先生が 学年・組だけ 書いた 行。
  * 名簿に ない 人の 申請(本物は 承認なしの 行)は メモリに 置き、GET ?action=__admin&op=approve で まとめて 承認する。
  * 宝の地図を売るクラスは MOCK_TREASURE_GRADE(学年。既定 1)・MOCK_TREASURE_CLASS(組。既定 2)。本物は config の treasure_grade / treasure_class。
  *   売るかどうかは MOCK_TREASURE_OPEN(FALSE で 止める。本物は config の treasure_open)。
@@ -46,10 +46,19 @@ const ROSTER = new Map(
     .map((e) => {
       const [mail, cn] = e.split('=');
       const [c, n, g] = cn.split('/');
+      // 番号の ない 行(「=3-1」。先生が 学年・組だけ 書いた 行)は 番号待ち
+      if (!n) {
+        PENDING.set(mail.toLowerCase(), { class: c, number: '' });
+        return null;
+      }
       if (g) ROSTER_GRADE.set(`${c}|${Number(n)}`, Number(g));
       return [mail.toLowerCase(), `${c}|${Number(n)}`];
-    }),
+    })
+    .filter(Boolean),
 );
+// 名簿に 書いた クラスも えらべる(本物の classList と 同じ)
+for (const c of [...[...ROSTER.values()].map((k) => k.split('|')[0]), ...[...PENDING.values()].map((a) => a.class)])
+  if (!CLASSES.includes(c)) CLASSES.push(c);
 
 /** key → { passHash, salt, save, updatedAt } */
 const students = new Map();
@@ -234,6 +243,13 @@ function applyRoster(email, p) {
   const num = String(Number(String(p.number ?? '').trim()) || '');
   if (!CLASSES.includes(cls) || !/^\d{1,2}$/.test(num)) return { ok: false, error: 'bad_identity' };
   if ([...ROSTER.values()].includes(`${cls}|${num}`)) return { ok: false, error: 'number_taken' };
+  // 先生が 書いた 学年・組と 同じなら 承認なしで 入れる
+  const prepared = PENDING.get(email);
+  if (prepared && prepared.class === cls && !prepared.number) {
+    PENDING.delete(email);
+    ROSTER.set(email, `${cls}|${num}`);
+    return { ok: true, approved: true, pending: { class: cls, number: num } };
+  }
   PENDING.set(email, { class: cls, number: num });
   return { ok: true, pending: { class: cls, number: num } };
 }
