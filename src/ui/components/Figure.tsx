@@ -229,7 +229,7 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       const next = k + 1 < dirs.length ? dirs[k + 1] : dirs[0] + 360;
       if (next - d > best) [best, mid] = [next - d, (d + next) / 2];
     });
-    const r = Math.max(12, 12 / Math.sin(((Math.min(best, 180) / 2) * Math.PI) / 180));
+    const r = Math.max(14, 14 / Math.sin(((Math.min(best, 180) / 2) * Math.PI) / 180));
     return [c + r * Math.cos((mid * Math.PI) / 180), c - r * Math.sin((mid * Math.PI) / 180)] as [number, number];
   })();
   const tickLabel = (v: number) => (v < 0 ? `−${-v}` : String(v));
@@ -249,13 +249,13 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       {/* 軸 */}
       <line x1={px(-R) - 8} y1={c} x2={px(R) + 10} y2={c} stroke="currentColor" stroke-width="1.6" marker-end="url(#fig-arrow)" />
       <line x1={c} y1={py(-R) + 8} x2={c} y2={py(R) - 10} stroke="currentColor" stroke-width="1.6" marker-end="url(#fig-arrow)" />
-      <text x={px(R) + 6} y={c + 16} font-size="13" fill="currentColor">
+      <text x={px(R) + 6} y={c + 20} font-size="17" fill="currentColor">
         x
       </text>
-      <text x={c + 8} y={py(R) - 6} font-size="13" fill="currentColor">
+      <text x={c + 8} y={py(R) - 6} font-size="17" fill="currentColor">
         y
       </text>
-      <text x={oPos[0]} y={oPos[1] + 4} text-anchor="middle" font-size="12" fill="currentColor">
+      <text x={oPos[0]} y={oPos[1] + 5.5} text-anchor="middle" font-size="16" fill="currentColor">
         O
       </text>
       {/* 目盛りの数字は 5 の倍数だけ(±1・±6 まで 書くと 中途半端。先生の指摘 2026-10-16。間は 格子で 数える) */}
@@ -263,14 +263,14 @@ function Plane({ spec }: { spec: PlaneSpec }) {
         .filter((v) => Math.abs(v) % 5 === 0)
         .map((v) => {
           // 目盛りの 数は ふつう 軸の 下・左。グラフが 通るなら 上・右へ、どちらも だめなら 書かない(格子で 読める)
-          const w = tickLabel(v).length * 6.5;
+          const w = tickLabel(v).length * 8.5;
           const xp = firstFree(
             [
-              [px(v), c + 11],
-              [px(v), c - 11],
+              [px(v), c + 13],
+              [px(v), c - 13],
             ],
             w,
-            11,
+            14,
           );
           const yp = firstFree(
             [
@@ -278,17 +278,17 @@ function Plane({ spec }: { spec: PlaneSpec }) {
               [c + 6 + w / 2, py(v)],
             ],
             w,
-            11,
+            14,
           );
           return (
             <g key={`t${v}`}>
               {xp && (
-                <text x={xp[0]} y={xp[1] + 4} text-anchor="middle" font-size="12" fill="currentColor">
+                <text x={xp[0]} y={xp[1] + 5.5} text-anchor="middle" font-size="16" fill="currentColor">
                   {tickLabel(v)}
                 </text>
               )}
               {yp && (
-                <text x={yp[0]} y={yp[1] + 4} text-anchor="middle" font-size="12" fill="currentColor">
+                <text x={yp[0]} y={yp[1] + 5.5} text-anchor="middle" font-size="16" fill="currentColor">
                   {tickLabel(v)}
                 </text>
               )}
@@ -334,8 +334,8 @@ function Plane({ spec }: { spec: PlaneSpec }) {
       {/* 点 */}
       {spec.points?.map((p) => (
         <g key={p.label}>
-          <circle cx={px(p.x)} cy={py(p.y)} r="5" fill={PLANE_MARK} stroke="#fff" stroke-width="1.4" />
-          <text x={px(p.x) + 8} y={py(p.y) - 8} font-size="15" font-weight="bold" fill={PLANE_MARK}>
+          <circle cx={px(p.x)} cy={py(p.y)} r="6" fill={PLANE_MARK} stroke="#fff" stroke-width="1.4" />
+          <text x={px(p.x) + 9} y={py(p.y) - 9} font-size="20" font-weight="bold" fill={PLANE_MARK}>
             {p.label}
           </text>
         </g>

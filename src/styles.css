@@ -2587,6 +2587,68 @@ img.sprite {
   .rpg-battle .question-figure svg {
     max-height: 104px;
   }
+  /* 104px は 横長の 数直線に 合わせた 高さで、正方形の 座標平面・角の図は 縦横とも 104px に 縮み、生徒の 画面で 読めなかった
+   * (先生の報告 2026-10-22)。上下に 積むと キーパッドに 高さを 取られて 大きくできないので、正方形の 図は 左に 置き、
+   * 右に 問題文・入力欄を 並べる。キーパッドは 下に 窓の 幅いっぱい。図の 一辺は 窓の 高さから キーパッドなどを 引いた 残り */
+  .rpg-battle .question-window:has(> .question-figure .figure-square) {
+    --square-fig: min(52%, calc(100dvh - 300px));
+    display: grid;
+    grid-template-columns: var(--square-fig) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'meta meta'
+      'bar bar'
+      'fig text'
+      'fig hint'
+      'fig row'
+      'fig help'
+      'keys keys';
+    column-gap: 14px;
+    row-gap: 6px;
+    align-content: start;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .question-meta {
+    grid-area: meta;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .time-bar {
+    grid-area: bar;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .question-figure {
+    grid-area: fig;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    align-self: start;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .question-figure svg {
+    width: 100%;
+    max-width: 100% !important;
+    max-height: none;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .question-text {
+    grid-area: text;
+    margin: 0;
+    align-self: end;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .hint-line {
+    grid-area: hint;
+    margin: 0;
+  }
+  /* フォームの 中身(入力欄・説明・キーパッド)を 直接 グリッドに 並べる。送信(Enter)は フォームのまま 動く */
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .answer-form {
+    display: contents;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) .answer-form > .row {
+    grid-area: row;
+    flex-wrap: wrap;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) .answer-form > .answer-preview {
+    grid-area: help;
+  }
+  .rpg-battle .question-window:has(> .question-figure .figure-square) .answer-form > .keypad,
+  .rpg-battle .question-window:has(> .question-figure .figure-square) > .choice-grid {
+    grid-area: keys;
+  }
   .answer-form {
     gap: 5px;
   }
@@ -2645,6 +2707,10 @@ img.sprite {
   }
   .rpg-battle .question-figure svg {
     max-height: 140px;
+  }
+  /* キーパッドが 大きい ぶん、正方形の 図に 回せる 高さが 減る */
+  .rpg-battle .question-window:has(> .question-figure .figure-square) {
+    --square-fig: min(52%, calc(100dvh - 360px));
   }
   .answer-input {
     font-size: 1.45em;
