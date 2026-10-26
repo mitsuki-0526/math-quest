@@ -75,7 +75,9 @@ describe('1年版の章データ', () => {
       const town = Object.values(towns).find((t) => t.chapterId === c.id);
       expect(town, `${c.id} の拠点`).toBeDefined();
       expect(town!.villagers.length).toBeGreaterThanOrEqual(4);
-      for (const id of [...town!.shop.tools, ...town!.shop.gear]) expect(() => getItem(id), `${town!.id}: ${id}`).not.toThrow();
+      for (const v of town!.villagers) expect(assetManifest[v.sprite], `${town!.id}: ${v.name} の絵 ${v.sprite}`).toBeDefined();
+      // 値段の ない 品(章の ごほうび)を 並べると「G」だけ出て 買えない(先生の報告 2026-10-26)
+      for (const id of [...town!.shop.tools, ...town!.shop.gear]) expect(getItem(id).price, `${town!.id}: ${id} の値段`).toBeGreaterThan(0);
       if (town!.afterClearScript) expect(hasScene(town!.afterClearScript.scriptId)).toBe(true);
       expect(assetManifest[town!.bg]).toBeDefined();
     }

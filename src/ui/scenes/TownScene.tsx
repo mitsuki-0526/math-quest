@@ -13,7 +13,8 @@ import { isWeak, ensureDailyQuest } from '@/engine/adaptive';
 import { config } from '@/data/config';
 import '@/data/grade1/problems';
 import { getTemplate } from '@/math/template';
-import { describeError, type TreasureStatus } from '@/engine/api';
+import { describeError, hasServer, type TreasureStatus } from '@/engine/api';
+import { getIdentity, syncStore } from '@/engine/sync';
 import { grantTreasure, hasTreasure, requestTreasure, treasureShortfall } from '@/engine/treasure';
 import { TROPHY_EMOJI, TROPHY_NAMES, type TrophyTier } from '@/engine/trophy';
 import { Bar, Button } from '@/ui/components/Ui';
@@ -31,14 +32,25 @@ export function TownScene({ townId }: { townId: string }) {
   /** 宝の地図の 売れ具合(サーバーに 聞く)。null = 売っていない・まだ 分からない */
   const [treasure, setTreasure] = useState<TreasureStatus | null>(null);
   const [treasureBusy, setTreasureBusy] = useState(false);
+  /** 売れ具合を 聞けなかった わけ。先生にだけ 見せる(売っていないのか、聞けていないのかを 見分けるため。先生の報告 2026-10-26) */
+  const [treasureError, setTreasureError] = useState<string | null>(null);
+  const sync = useStore(syncStore);
 
   // 道具屋を 開くたびに 聞き直す(同じクラスの だれかが 先に 買ったかもしれない)
   useEffect(() => {
     if (tab !== 'tools') return;
     let alive = true;
     requestTreasure(false)
-      .then((t) => alive && setTreasure(t))
-      .catch(() => alive && setTreasure(null));
+      .then((t) => {
+        if (!alive) return;
+        setTreasure(t);
+        setTreasureError(t ? null : !hasServer() ? 'サーバーの ない 版なので 売らない' : !getIdentity() ? 'まだ サーバーに 入っていない' : null);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setTreasure(null);
+        setTreasureError(describeError(e));
+      });
     return () => {
       alive = false;
     };
@@ -181,6 +193,11 @@ export function TownScene({ townId }: { townId: string }) {
                 <span>{tab === 'tools' ? '道具屋' : '武具屋'}</span>
                 <span class="gold">{save.player.gold} G</span>
               </div>
+              {tab === 'tools' && sync.teacher && !treasure?.onSale && !treasure?.opensAt && (
+                <p class="muted">
+                  (先生だけに 表示){getItem(TREASURE_MAP_ID).name}: {treasureError ? `売れ具合を 聞けませんでした — ${treasureError}` : '売れ具合を 聞いています…'}
+                </p>
+              )}
               {/* 売る期間の 前: 発売日だけ 見せて、ためる 目あてにする */}
               {tab === 'tools' && treasure?.opensAt && (
                 <div class="shop-row shop-row-treasure">
@@ -288,7 +305,7 @@ export function TownScene({ townId }: { townId: string }) {
             <div class="villagers">
               {town.villagers.map((v, i) => (
                 <button type="button" key={v.name} class={`villager ${talkIndex === i ? 'on' : ''}`} onClick={() => setTalkIndex(i)}>
-                  <span class="villager-emoji">{v.emoji}</span>
+                  <Sprite id={v.sprite} class="villager-face" alt="" />
                   <span class="villager-name">{v.name}</span>
                 </button>
               ))}

@@ -37,7 +37,8 @@ describe('MathValidator(数学の 検査)', () => {
     }
     const bad = getGenerationLog().filter((e) => !e.accepted && e.reason !== 'DUPLICATE' && e.reason !== 'SAME_FORM');
     expect(bad.slice(0, 5).map((e) => `${e.templateId} ★${e.difficulty} ${e.reason}: ${e.detail}`)).toEqual([]);
-  });
+    // 全テンプレート × 900 問。ほかの テストと 同時に 走ると 5 秒を こえる ことが ある(2026-10-26)
+  }, 30000);
 
   it('壊れた 問題を 見つける', () => {
     expect(validateMath(good())).toBeNull();

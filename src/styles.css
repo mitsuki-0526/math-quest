@@ -1798,8 +1798,12 @@ img.sprite {
   border-color: var(--gold);
   box-shadow: var(--glow-gold);
 }
-.villager-emoji {
-  font-size: 30px;
+/* 立ち絵(縦横 2:3)が 小さくならないよう 縦長の 枠に 入れる。絵が ない 人は 絵文字 */
+.villager-face {
+  width: 48px;
+  height: 72px;
+  font-size: 34px;
+  object-fit: contain;
 }
 .villager-name {
   font-size: 0.85em;
