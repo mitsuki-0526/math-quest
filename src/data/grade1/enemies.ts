@@ -173,7 +173,7 @@ export const enemies: Record<string, EnemyDef> = {
     name: '仮面の書記官',
     template: 'g1.expr.subst',
     sprite: 'enemy_masked_scribe',
-    hp: 260,
+    hp: 640,
     attack: 11,
     exp: 150,
     gold: 100,
@@ -253,7 +253,7 @@ export const enemies: Record<string, EnemyDef> = {
     name: '未知なる影 X',
     template: 'g1.eq.linear',
     sprite: 'enemy_shadow_x',
-    hp: 300,
+    hp: 820,
     attack: 12,
     exp: 190,
     gold: 130,
@@ -295,7 +295,7 @@ export const enemies: Record<string, EnemyDef> = {
   },
   twin_dragons: {
     id: 'twin_dragons', name: '湖の双子竜', template: 'g1.func.prop', sprite: 'enemy_twin_dragons',
-    hp: 340, attack: 13, exp: 220, gold: 150, boss: true,
+    hp: 950, attack: 13, exp: 220, gold: 150, boss: true,
     phases: [
       { untilHpRatio: 1, templates: ['g1.func.prop'], line: 'ナラビ「まずは 我からだ。増えれば 増える! それが 湖の きまりだ!」' },
       { untilHpRatio: 0.66, templates: ['g1.func.invprop'], line: 'サカサ「次は 我だ。増えれば 減る! それが 水車の きまりだ!」' },
@@ -327,7 +327,7 @@ export const enemies: Record<string, EnemyDef> = {
   },
   ring_guardian: {
     id: 'ring_guardian', name: '円環の番人', template: 'g1.geo.angle', sprite: 'enemy_ring_guardian',
-    hp: 380, attack: 14, exp: 250, gold: 170, boss: true,
+    hp: 1050, attack: 14, exp: 250, gold: 170, boss: true,
     phases: [
       { untilHpRatio: 1, templates: ['g1.geo.angle'], line: '円環の番人「まず 角を 正せ。我の 輪の 中心の 角、いくつに 見える」' },
       { untilHpRatio: 0.66, templates: ['g1.geo.sector'], line: '円環の番人「次は 弧だ。我の 輪の 一部、その 長さと 広さを 測れ」' },
@@ -369,7 +369,7 @@ export const enemies: Record<string, EnemyDef> = {
   },
   king_poly: {
     id: 'king_poly', name: '立体王ポリ', template: 'g1.solid.prism', sprite: 'enemy_king_poly',
-    hp: 420, attack: 15, exp: 280, gold: 190, boss: true,
+    hp: 1150, attack: 15, exp: 280, gold: 190, boss: true,
     phases: [
       { untilHpRatio: 1, templates: ['g1.solid.prism', 'g1.solid.pyramid'], line: '立体王ポリ「まず 余の 体の 体積を 述べよ。柱と 錐、区別できるか」' },
       { untilHpRatio: 0.66, templates: ['g1.solid.surface', 'g1.solid.sphere'], line: '立体王ポリ「次は 表面だ。見えぬ 面まで 数えられるか」' },
@@ -402,7 +402,7 @@ export const enemies: Record<string, EnemyDef> = {
   },
   apostle: {
     id: 'apostle', name: '歪みの使徒', template: 'g1.data.mean', sprite: 'enemy_apostle',
-    hp: 520, attack: 16, exp: 400, gold: 300, boss: true,
+    hp: 1350, attack: 16, exp: 400, gold: 300, boss: true,
     phases: [
       { untilHpRatio: 1, templates: ['g1.data.mean', 'g1.data.median'], line: '歪みの使徒「まず この 塔の 理を。代表値を 述べよ」' },
       { untilHpRatio: 0.75, templates: ['g1.data.freq', 'g1.data.prob'], line: '歪みの使徒「柱の 形を 読め。数の 群れを、一つの 数に 押しこめずに」' },
@@ -417,7 +417,7 @@ export const enemies: Record<string, EnemyDef> = {
     name: '符号王ネガ',
     template: 'g1.sign.addsub_big',
     sprite: 'enemy_king_nega',
-    hp: 320, // 試遊前の調整: 240 では 6〜8 問で倒れ、ボスとして短かった(Lv5〜6 で 10 問前後に)
+    hp: 460,
     attack: 10,
     exp: 120,
     gold: 80,
