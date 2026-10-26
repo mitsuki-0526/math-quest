@@ -1,3 +1,5 @@
+import { config } from '@/data/config';
+
 /**
  * アイテムと装備(要件 F23 F31)。台本に登場する報酬・店の品はここで定義する。
  * 効果は種類(kind)で決まり、エンジンは kind と値だけを見る。
@@ -13,6 +15,8 @@ export interface ItemDef {
   /** 店での価格。undefined = 非売品 */
   price?: number;
   description: string;
+  /** 制限時間なしのときの説明(「考える時間」は 意味がないので 言いかえる) */
+  descriptionNoTime?: string;
   /** consumable: 使ったときの効果 */
   use?: { heal?: number; healFull?: boolean; hint?: number; time?: number };
   /** weapon/armor/accessory: 装備中の補正 */
@@ -46,7 +50,7 @@ export const items: Record<string, ItemDef> = {
   miner_helmet: { id: 'miner_helmet', name: '山師の兜', kind: 'armor', emoji: '⛑️', description: 'ぼうぎょ +6', stat: { defense: 6 } },
 
   // --- 装飾品 ---
-  travel_boots: { id: 'travel_boots', name: '旅人のブーツ', kind: 'accessory', emoji: '👢', description: '考える時間 +5秒(会心も 出やすくなる)', stat: { timeBonus: 5 } },
+  travel_boots: { id: 'travel_boots', name: '旅人のブーツ', kind: 'accessory', emoji: '👢', description: '考える時間 +5秒(会心も 出やすくなる)', descriptionNoTime: '会心が 出やすくなる', stat: { timeBonus: 5 } },
   guardian_bracelet: { id: 'guardian_bracelet', name: '番人の腕輪', kind: 'accessory', emoji: '📿', description: 'ヒントの回数 +1', stat: { hintBonus: 1 } },
   recorder_pen: { id: 'recorder_pen', name: '記録者のペン', kind: 'accessory', emoji: '🖋️', description: '経験値 +10%', stat: { expMul: 1.1 } },
 
@@ -68,6 +72,11 @@ export function getItem(id: string): ItemDef {
   const it = items[id];
   if (!it) throw new Error(`アイテムが未定義: ${id}`);
   return it;
+}
+
+/** 画面に出す説明。制限時間なしの設定では 時間の話をしない(config は あとから変わるので 毎回見る) */
+export function itemDescription(it: ItemDef): string {
+  return config.battle.timeLimitOn !== 1 && it.descriptionNoTime ? it.descriptionNoTime : it.description;
 }
 
 /** 第1章の村で売っている品 */

@@ -4,7 +4,7 @@ import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { addItem, equip, playerStats } from '@/engine/player';
 import { getTown } from '@/data/grade1/town';
-import { getItem, isEquipment, TREASURE_MAP_ID } from '@/data/grade1/items';
+import { getItem, itemDescription, isEquipment, TREASURE_MAP_ID } from '@/data/grade1/items';
 import { getAsset, assetUrl } from '@/assets/manifest';
 import { characters, playerSprite } from '@/data/characters';
 import { hasScene } from '@/engine/script';
@@ -232,7 +232,7 @@ export function TownScene({ townId }: { townId: string }) {
                 return (
                   <div key={id} class="shop-row">
                     <span class="shop-item">
-                      {it.emoji} {it.name} <small>{it.description}</small>
+                      {it.emoji} {it.name} <small>{itemDescription(it)}</small>
                     </span>
                     <span class="shop-price">{it.price} G</span>
                     <Button disabled={have > 0 && it.kind !== 'consumable'} onClick={() => buy(id)}>
@@ -249,7 +249,7 @@ export function TownScene({ townId }: { townId: string }) {
                   {owned.map((id) => (
                     <div key={id} class="shop-row">
                       <span class="shop-item">
-                        {getItem(id).emoji} {getItem(id).name} <small>{getItem(id).description}</small>
+                        {getItem(id).emoji} {getItem(id).name} <small>{itemDescription(getItem(id))}</small>
                       </span>
                       <span />
                       <Button disabled={equipped.has(id)} onClick={() => equipOwned(id)}>

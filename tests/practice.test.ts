@@ -5,6 +5,7 @@ import { ensureDailyQuest, recordAnswer } from '@/engine/adaptive';
 import { playerStats, gainExp, levelCap } from '@/engine/player';
 import { unlockedChapters } from '@/engine/progress';
 import { perksGainedBetween, nextPerk } from '@/data/skills';
+import { config } from '@/data/config';
 
 describe('今日のクエスト', () => {
   it('練習が少ない出題タイプを選び、同じ日は変わらない', () => {
@@ -27,19 +28,37 @@ describe('今日のクエスト', () => {
 });
 
 describe('レベルの力', () => {
-  it('レベルが上がるとヒント・時間・倍率が増える', () => {
-    const s = createNewSave();
-    const before = playerStats(s);
-    gainExp(s, 100000, Infinity);
-    const after = playerStats(s);
-    expect(after.hintBonus).toBeGreaterThan(before.hintBonus);
-    expect(after.timeBonus).toBeGreaterThan(before.timeBonus);
-    expect(after.expMul).toBeGreaterThan(1);
-    expect(after.goldMul).toBeGreaterThan(1);
+  it('レベルが上がるとヒント・時間・倍率が増える(制限時間あり)', () => {
+    config.battle.timeLimitOn = 1;
+    try {
+      const s = createNewSave();
+      const before = playerStats(s);
+      gainExp(s, 100000, Infinity);
+      const after = playerStats(s);
+      expect(after.hintBonus).toBeGreaterThan(before.hintBonus);
+      expect(after.timeBonus).toBeGreaterThan(before.timeBonus);
+      expect(after.expMul).toBeGreaterThan(1);
+      expect(after.goldMul).toBeGreaterThan(1);
+    } finally {
+      config.battle.timeLimitOn = 0;
+    }
   });
-  it('間のレベルで得た力を列挙できる', () => {
-    expect(perksGainedBetween(1, 3).map((p) => p.level)).toEqual([2, 3]);
-    expect(nextPerk(3)?.level).toBe(4);
+  it('制限時間なしでは「考える時間」の力が出ない', () => {
+    config.battle.timeLimitOn = 0;
+    const s = createNewSave();
+    gainExp(s, 100000, Infinity);
+    expect(playerStats(s).timeBonus).toBe(0);
+    expect(perksGainedBetween(1, 3).map((p) => p.level)).toEqual([2]);
+    expect(nextPerk(2)?.level).toBe(4);
+  });
+  it('間のレベルで得た力を列挙できる(制限時間あり)', () => {
+    config.battle.timeLimitOn = 1;
+    try {
+      expect(perksGainedBetween(1, 3).map((p) => p.level)).toEqual([2, 3]);
+      expect(nextPerk(3)?.level).toBe(4);
+    } finally {
+      config.battle.timeLimitOn = 0;
+    }
   });
 });
 

@@ -1,3 +1,5 @@
+import { config } from '@/data/config';
+
 /**
  * レベルアップで手に入る「学習に効く力」(要件 F30 F33)。
  * 攻撃力ではなく、ヒント・時間・報酬倍率など「問題に挑みやすくなる」方向の恩恵にする。
@@ -28,15 +30,24 @@ export const perks: Perk[] = [
   { level: 18, name: '碑守の心', description: '経験値 +20%', expMul: 1.2 },
 ];
 
+/**
+ * いま効く力の一覧。制限時間を使わない設定では「考える時間がのびる」は意味がないので出さない
+ * (レベルアップの知らせ・ステータスに 使えない力が並ぶと 生徒が とまどうため)。
+ * config はスプレッドシートで あとから変わるので、毎回ここで絞る
+ */
+export function activePerks(): Perk[] {
+  return config.battle.timeLimitOn === 1 ? perks : perks.filter((p) => !p.timeBonus);
+}
+
 export function perksUpTo(level: number): Perk[] {
-  return perks.filter((p) => p.level <= level);
+  return activePerks().filter((p) => p.level <= level);
 }
 
 export function nextPerk(level: number): Perk | undefined {
-  return perks.find((p) => p.level > level);
+  return activePerks().find((p) => p.level > level);
 }
 
 /** 指定レベルで新しく手に入った力 */
 export function perksGainedBetween(from: number, to: number): Perk[] {
-  return perks.filter((p) => p.level > from && p.level <= to);
+  return activePerks().filter((p) => p.level > from && p.level <= to);
 }

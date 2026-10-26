@@ -4,8 +4,8 @@ import { saveStore, updateSave } from '@/engine/save';
 import { useStore } from '@/engine/store';
 import { playerStats, levelCap } from '@/engine/player';
 import { config, expToNext } from '@/data/config';
-import { getItem } from '@/data/grade1/items';
-import { perks } from '@/data/skills';
+import { getItem, itemDescription } from '@/data/grade1/items';
+import { activePerks } from '@/data/skills';
 import { grade1 } from '@/data/grade1/chapters';
 import { characters, playerSprite, PLAYER_NAME_MAX, playerNameOk } from '@/data/characters';
 import '@/data/grade1/problems';
@@ -189,7 +189,7 @@ export function StatusScene() {
             レベルの力(経験値で 手に入る)
           </h3>
           <ul class="perk-list">
-            {perks.map((pk) => (
+            {activePerks().map((pk) => (
               <li key={pk.level} class={pk.level <= p.level ? 'got' : ''}>
                 <b>Lv{pk.level}</b> {pk.name} <small>— {pk.description}</small>
               </li>
@@ -225,7 +225,7 @@ export function StatusScene() {
             {Object.entries(save.inventory)
               .filter(([, n]) => n > 0)
               .map(([id, n]) => (
-                <span key={id} class="inv-item" title={getItem(id).description}>
+                <span key={id} class="inv-item" title={itemDescription(getItem(id))}>
                   {getItem(id).emoji} {getItem(id).name} ×{n}
                 </span>
               ))}
