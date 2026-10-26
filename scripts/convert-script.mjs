@@ -141,8 +141,15 @@ function parseFile(path) {
       for (const e of parseEffects(m[1])) cur.lines.push(e);
       continue;
     }
+    // 図: 「※ 図[ID]: 説明」の ID の図を 会話の上に出す(図は talkFigures.ts)。
+    // ID を付け忘れると 図の出ない 会話に なる(先生の報告 2026-10-26「図も なにも ないので 何を 考えたら いいのか」)ので 警告する
+    if ((m = /^※ 図\[([a-z0-9_]+)\]:\s*(.+)$/.exec(line.trim()))) {
+      cur.lines.push({ figure: m[1], note: m[2] });
+      continue;
+    }
     if ((m = /^※ (演出|図):\s*(.+)$/.exec(line.trim()))) {
       const note = m[2];
+      if (m[1] === '図') console.warn(`  [警告] ${basename(path)} ${cur.id}: 図に ID がありません(図が出ません): ${note}`);
       const bgm = /場面転換[、,]\s*(\S+)/.exec(note);
       cur.lines.push({ note, ...(bgm ? { bg: bgId(guessBg(bgm[1])) } : {}) });
       continue;

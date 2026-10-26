@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { TALK_FIGURES } from '@/data/grade1/talkFigures';
 import { ScriptRunner, getScene, hasScene, type ScriptEffect } from '@/engine/script';
 
 function run(id: string, choose: 'first' | 'last' = 'first', startLabel?: string) {
@@ -67,5 +69,24 @@ describe('会話スクリプト(台本から変換した JSON)', () => {
         if ('choice' in l) for (const o of l.choice) expect(labels.has(o.goto), `${id}: 選択肢 → ${o.goto}`).toBe(true);
       }
     }
+  });
+
+  // 先生の報告 2026-10-26「図も なにも ないので 何を 考えたら いいのか」: 台本の 図の 指示が 図に ならずに 抜けていた
+  it('台本の「※ 図」は すべて 図の ID を持ち、その 図が ある', () => {
+    for (const ch of ['04_waterwheel_lake', '05_circle_ruins', '06_solid_mountain', '07_record_tower']) {
+      const md = readFileSync(`docs/script/g1/${ch}.md`, 'utf8');
+      for (const line of md.split(/\r?\n/)) if (line.trim().startsWith('※') && line.includes('※ 図')) expect(line, ch).toMatch(/※ 図\[[a-z0-9_]+\]:/);
+    }
+    for (const id of ['C5-2', 'C5-3', 'C6-3', 'C7-5'])
+      for (const l of getScene(id).lines) if ('figure' in l) expect(TALK_FIGURES[l.figure], `${id}: ${l.figure}`).toBeDefined();
+  });
+
+  it('C5-3 壁画の間: 最初の 問いの 前に 図が 出る', () => {
+    const figs: unknown[] = [];
+    const runner = new ScriptRunner(getScene('C5-3'), { onEffect: () => {}, onFigure: (f) => figs.push(f) });
+    let step = runner.next();
+    while (step.type === 'say') step = runner.next();
+    expect(step.type).toBe('choice');
+    expect(figs.length).toBeGreaterThan(0);
   });
 });

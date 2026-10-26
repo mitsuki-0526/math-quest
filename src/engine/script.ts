@@ -1,4 +1,5 @@
 import type { FigureSpec } from '@/math/figure';
+import { TALK_FIGURES } from '@/data/grade1/talkFigures';
 import prologue from '@/data/grade1/scripts/00_prologue.json';
 import ch1 from '@/data/grade1/scripts/01_sign_forest.json';
 import ch2 from '@/data/grade1/scripts/02_nameless_plain.json';
@@ -31,7 +32,8 @@ export type ScriptLine =
   | { goto: string }
   | { note: string; bg?: string }
   | { bg: string }
-  | { figure: FigureSpec }
+  /** 台本の「※ 図[ID]」。ID の図は talkFigures.ts。次の 図まで 出たまま */
+  | { figure: string; note?: string }
   | ScriptEffect;
 
 export interface Scene {
@@ -76,7 +78,8 @@ export interface RunnerOptions {
   /** 効果に出会ったときに呼ぶ(セーブに反映する)。'startBattle' が来たら end と同時に開始する */
   onEffect(e: ScriptEffect): void;
   onBg?(bg: string): void;
-  onFigure?(f: FigureSpec): void;
+  /** 図を 出す(横に 並べる ことも ある) */
+  onFigure?(f: FigureSpec[]): void;
 }
 
 /**
@@ -123,13 +126,16 @@ export class ScriptRunner {
         this.pos++;
         continue;
       }
-      if ('note' in l) {
-        if (l.bg) this.opts.onBg?.(l.bg);
+      // 図は 説明(note)も 持つので note より 先に 見る
+      if ('figure' in l) {
+        const f = TALK_FIGURES[l.figure];
+        if (!f) throw new Error(`図が未定義: ${this.scene.id} / ${l.figure}`);
+        this.opts.onFigure?.(Array.isArray(f) ? f : [f]);
         this.pos++;
         continue;
       }
-      if ('figure' in l) {
-        this.opts.onFigure?.(l.figure);
+      if ('note' in l) {
+        if (l.bg) this.opts.onBg?.(l.bg);
         this.pos++;
         continue;
       }

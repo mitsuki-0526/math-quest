@@ -29,7 +29,7 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
     setStepRaw(next);
   };
   const [bg, setBg] = useState<string | undefined>(undefined);
-  const [figure, setFigure] = useState<FigureSpec | null>(null);
+  const [figure, setFigure] = useState<FigureSpec[] | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
   const startBattle = useRef(false);
@@ -221,8 +221,10 @@ export function TalkScene({ scriptIds, then, doneFlag }: { scriptIds: string[]; 
           </div>
         )}
         {figure && (
-          <div class="talk-figure" onClick={(e) => e.stopPropagation()}>
-            <Figure spec={figure} />
+          <div class="talk-figure">
+            {figure.map((f, i) => (
+              <Figure key={i} spec={f} />
+            ))}
           </div>
         )}
         {left && (
